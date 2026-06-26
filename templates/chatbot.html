@@ -695,21 +695,19 @@ async function reconstructFiles(data) {
   async function trySend(data) {
     try {
       const fd = new FormData();
-      const plain = { ...data };
       for (const key of ['foto', 'foto_2', 'foto_3']) {
-        if (plain[key] instanceof File) {
-          fd.append(key, plain[key]);
-          delete plain[key];
-        }
+        if (data[key] instanceof File) fd.append(key, data[key]);
       }
-      Object.entries(plain).forEach(([k, v]) => {
-        if (!k.startsWith('_') && v !== null && v !== undefined) fd.append(k, v);
+      fd.append('sin_documentos', data.sin_documentos ? 'true' : 'false');
+      Object.entries(data).forEach(([k, v]) => {
+        if (k.startsWith('_') || k === 'sin_documentos') return;
+        if (['foto', 'foto_2', 'foto_3'].includes(k)) return;
+        if (v === null || v === undefined || v instanceof File) return;
+        fd.append(k, String(v));
       });
       const res = await fetch('/api/reportes/', { method: 'POST', body: fd });
       return res.ok;
-    } catch {
-      return false;
-    }
+    } catch(e) { console.error('trySend error:', e); return false; }
   }
 
   async function registerSync() {
@@ -817,10 +815,17 @@ async function reconstructFiles(data) {
   // ── CAMBIO 5: bootChat + showDraftPrompt ──────────────────────
 
   async function bootChat() {
-    if (navigator.onLine) {
-      const pending = await getPendingReportes();
-      if (pending.length > 0) {
+    const pending = await getPendingReportes();
+    if (pending.length > 0) {
+      if (navigator.onLine) {
         await processPendingQueue(pending);
+        await new Promise(r => setTimeout(r, 500));
+      } else {
+        const n = pending.length;
+        const notice = document.createElement('div');
+        notice.className = 'cb-bot';
+        notice.textContent = `Tienes ${n} reporte${n > 1 ? 's' : ''} guardado${n > 1 ? 's' : ''} — se enviarán cuando haya señal`;
+        msgs.appendChild(notice);
       }
     }
 
@@ -885,6 +890,10 @@ async function reconstructFiles(data) {
       if (e.data?.type === 'SYNC_NOW') processPendingQueue();
     });
   }
+
+  window.resetChat = resetChat;
+  window.bootChat = bootChat;
+  window.installApp = installApp;
 
   bootChat();
 })();
