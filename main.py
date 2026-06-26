@@ -77,6 +77,7 @@ app.add_middleware(
 
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.mount("/widget", StaticFiles(directory="static"), name="widget")
+app.mount("/static", StaticFiles(directory="static"), name="static-files")
 
 app.include_router(reportes.router)
 app.include_router(reportes.check_router)

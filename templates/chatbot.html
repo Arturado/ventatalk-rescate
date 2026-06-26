@@ -893,7 +893,7 @@ async function reconstructFiles(data) {
 
   window.resetChat = resetChat;
   window.bootChat = bootChat;
-  window.installApp = installApp;
+  window.installApp = typeof installApp !== 'undefined' ? installApp : function(){};
 
   bootChat();
 })();
