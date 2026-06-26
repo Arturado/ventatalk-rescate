@@ -15,6 +15,7 @@ class PersonaResponse(BaseModel):
     quien_ayudo: Optional[str] = None
     contacto_quien_ayudo: Optional[str] = None
     estado: str = "desaparecido"
+    tipo_reporte: str = "desaparecido"
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -55,6 +55,13 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   color: white; border: none; border-radius: 6px; cursor: pointer;
 }
 .estado-form button:hover { background: #b91c1c; }
+.tipo-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 20px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  margin-top: 4px;
+}
+.tipo-desaparecido { background: #374151; color: #f9fafb; }
+.tipo-encontrado_vivo { background: #dcfce7; color: #15803d; }
 .export-btn { margin-left: auto; }
 @media (max-width: 640px) {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
@@ -100,6 +107,11 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
     <option value="encontrado">Encontrado</option>
     <option value="en_proceso">En proceso</option>
   </select>
+  <select id="filtrar-tipo">
+    <option value="">Todos los tipos</option>
+    <option value="desaparecido">Desaparecidos</option>
+    <option value="encontrado_vivo">Encontrados vivos</option>
+  </select>
 </div>
 
 <div class="table-wrap">
@@ -125,6 +137,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
         data-nombre="{{ p.nombres_apellidos | lower }}"
         data-cedula="{{ p.cedula or '' }}"
         data-estado="{{ p.estado }}"
+        data-tipo="{{ p.tipo_reporte }}"
         data-id="{{ p.id }}"
       >
         <td>{{ p.id }}</td>
@@ -140,7 +153,8 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
         <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ p.ultima_ubicacion }}">{{ p.ultima_ubicacion }}</td>
         <td>{{ p.numero_contacto }}</td>
         <td>
-          <span class="estado-badge estado-{{ p.estado }}">{{ p.estado.replace('_', ' ') }}</span>
+          <span class="estado-badge estado-{{ p.estado }}">{{ p.estado.replace('_', ' ') }}</span><br>
+          <span class="tipo-badge tipo-{{ p.tipo_reporte }}">{{ 'ENCONTRADO VIVO' if p.tipo_reporte == 'encontrado_vivo' else 'DESAPARECIDO' }}</span>
         </td>
         <td style="white-space:nowrap;">{{ p.created_at.strftime('%d/%m/%Y %H:%M') if p.created_at else '—' }}</td>
         <td>
@@ -177,6 +191,10 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
               <strong style="color:#374151;display:block;margin-bottom:4px;">Quién ayuda</strong>
               <span style="color:#6b7280;">{{ p.quien_ayudo or 'No registrado' }}</span>
               {% if p.contacto_quien_ayudo %} — Tel: <span style="color:#6b7280;">{{ p.contacto_quien_ayudo }}</span>{% endif %}
+            </div>
+            <div>
+              <strong style="color:#374151;display:block;margin-bottom:4px;">Tipo de reporte</strong>
+              <span style="color:#6b7280;">{{ 'Encontrado vivo' if p.tipo_reporte == 'encontrado_vivo' else 'Desaparecido' }}</span>
             </div>
             {% if p.foto_url_2 or p.foto_url_3 %}
             <div style="grid-column:1/-1;">
@@ -217,16 +235,19 @@ function eliminarPersona(id, btn) {
   const nombre = document.getElementById('buscar-nombre');
   const cedula = document.getElementById('buscar-cedula');
   const estado = document.getElementById('filtrar-estado');
+  const tipo = document.getElementById('filtrar-tipo');
   const filas = document.querySelectorAll('#tabla-personas tbody tr[data-nombre]');
 
   function filtrar() {
     const n = nombre.value.toLowerCase();
     const c = cedula.value.toLowerCase();
     const e = estado.value;
+    const t = tipo.value;
     filas.forEach(tr => {
       const ok = (!n || tr.dataset.nombre.includes(n))
                && (!c || tr.dataset.cedula.toLowerCase().includes(c))
-               && (!e || tr.dataset.estado === e);
+               && (!e || tr.dataset.estado === e)
+               && (!t || tr.dataset.tipo === t);
       tr.style.display = ok ? '' : 'none';
       const det = document.getElementById('detalle-' + tr.dataset.id);
       if (det && !ok) det.style.display = 'none';
@@ -236,6 +257,7 @@ function eliminarPersona(id, btn) {
   nombre.addEventListener('input', filtrar);
   cedula.addEventListener('input', filtrar);
   estado.addEventListener('change', filtrar);
+  tipo.addEventListener('change', filtrar);
 })();
 </script>
 {% endblock %}

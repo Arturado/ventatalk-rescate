@@ -16,6 +16,7 @@ class PersonaDesaparecida(Base):
     quien_ayudo = Column(String(200), nullable=True)
     contacto_quien_ayudo = Column(String(30), nullable=True)
     estado = Column(String(20), nullable=False, default="desaparecido")
+    tipo_reporte = Column(String(20), nullable=False, default="desaparecido")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class AdminUser(Base):

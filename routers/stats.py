@@ -27,6 +27,12 @@ def get_stats(db: Session = Depends(get_db), _: str = Depends(verify_api_key)):
         if p.estado in por_estado:
             por_estado[p.estado] += 1
 
+    por_tipo = {"desaparecido": 0, "encontrado_vivo": 0}
+    for p in todas:
+        t = getattr(p, "tipo_reporte", "desaparecido") or "desaparecido"
+        if t in por_tipo:
+            por_tipo[t] += 1
+
     ultimos_7 = []
     for i in range(6, -1, -1):
         dia = hoy - timedelta(days=i)
@@ -38,5 +44,6 @@ def get_stats(db: Session = Depends(get_db), _: str = Depends(verify_api_key)):
         "hoy": hoy_count,
         "con_foto": con_foto,
         "por_estado": por_estado,
+        "por_tipo": por_tipo,
         "ultimos_7_dias": ultimos_7,
     }

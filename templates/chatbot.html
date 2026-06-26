@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Reportar Desaparecido — Venezuela Rescate</title>
+  <title>Reportar — Venezuela Rescate</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
@@ -94,6 +94,27 @@
       border: 1.5px solid #e5e7eb;
     }
     .cb-btn-sec:hover { background: #f9fafb; }
+
+    /* TIPO SELECTOR BUTTONS */
+    .cb-btn-tipo-des {
+      width: 100%; padding: 16px;
+      background: #dc2626; color: white;
+      border: none; border-radius: 12px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      text-align: left; line-height: 1.4;
+      transition: background .15s;
+    }
+    .cb-btn-tipo-des:hover { background: #b91c1c; }
+    .cb-btn-tipo-enc {
+      width: 100%; padding: 16px;
+      background: #16a34a; color: white;
+      border: none; border-radius: 12px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      text-align: left; line-height: 1.4;
+      transition: background .15s;
+    }
+    .cb-btn-tipo-enc:hover { background: #15803d; }
+
     #cb-file-label {
       display: flex; align-items: center; justify-content: center; gap: 8px;
       width: 100%; padding: 12px;
@@ -129,7 +150,7 @@
   </svg>
   <div>
     <h1>Venezuela Rescate</h1>
-    <p>Reportar persona desaparecida</p>
+    <p>Sistema de reportes de personas</p>
   </div>
 </div>
 <div id="cb-progress"><div id="cb-bar"></div></div>
@@ -139,19 +160,31 @@
 
 <script>
 (function () {
-  const API_URL = "";  // mismo origen
-  const STEPS = [
-    { field: "nombres_apellidos", question: "👤 Nombre completo de la persona desaparecida:", type: "text", placeholder: "Ej: Maria Gonzalez Perez", required: true },
-    { field: "cedula", question: "📋 Número de cédula:", type: "text", placeholder: "Ej: V-12345678", required: false },
-    { field: "ultima_ubicacion", question: "📍 Última ubicación conocida:", type: "text", placeholder: "Ej: Calle 5, Urb. El Valle, Caracas", required: true },
+  const API_URL = "";
+
+  const STEPS_DESAPARECIDO = [
+    { field: "nombres_apellidos", question: "¿Cuál es el nombre completo de la persona desaparecida?", type: "text", placeholder: "Ej: Maria Gonzalez Perez", required: true },
+    { field: "cedula", question: "¿Conoces su número de cédula?", type: "text", placeholder: "Ej: V-12345678", required: false },
+    { field: "ultima_ubicacion", question: "¿Cuál fue su última ubicación conocida?", type: "text", placeholder: "Ej: Calle 5, Urb. El Valle, Caracas", required: true },
     { field: "foto", question: "📷 Foto reciente (opcional):", type: "file", required: false },
-    { field: "descripcion", question: "📝 Descripción adicional (ropa, señas, salud...):", type: "textarea", placeholder: "Cualquier detalle ayuda", required: false },
-    { field: "numero_contacto", question: "📱 Tu número de contacto:", type: "tel", placeholder: "Ej: +58 412 1234567", required: true },
-    { field: "quien_ayudo", question: "🤝 Nombre de quien la está ayudando o vio (opcional):", type: "text", placeholder: "Ej: Pedro Ramírez", required: false },
-    { field: "contacto_quien_ayudo", question: "📞 Contacto de esa persona (opcional):", type: "tel", placeholder: "Ej: +58 414 7654321", required: false },
+    { field: "descripcion", question: "Agrega cualquier descripción adicional (ropa, señas, condiciones de salud...)", type: "textarea", placeholder: "Cualquier detalle ayuda", required: false },
+    { field: "numero_contacto", question: "¿A qué número podemos contactarte a ti?", type: "tel", placeholder: "Ej: +58 412 1234567", required: true },
+    { field: "quien_ayudo", question: "¿Hay alguien que la esté ayudando o la haya visto? ¿Cuál es su nombre? (opcional)", type: "text", placeholder: "Ej: Pedro Ramírez", required: false },
+    { field: "contacto_quien_ayudo", question: "¿Cuál es el número de contacto de esa persona? (opcional)", type: "tel", placeholder: "Ej: +58 414 7654321", required: false },
   ];
 
-  let currentStep = 0, formData = {};
+  const STEPS_ENCONTRADO = [
+    { field: "nombres_apellidos", question: "¿Cuál es el nombre completo de la persona encontrada? (si no lo sabes escribe 'Desconocido')", type: "text", placeholder: "Ej: Maria Gonzalez o Desconocido", required: true },
+    { field: "cedula", question: "¿Conoces su número de cédula?", type: "text", placeholder: "Ej: V-12345678", required: false },
+    { field: "ultima_ubicacion", question: "¿Dónde está ahora mismo esta persona?", type: "text", placeholder: "Ej: Refugio El Valle, Av. Principal", required: true },
+    { field: "foto", question: "📷 Foto de la persona (opcional):", type: "file", required: false },
+    { field: "descripcion", question: "¿Cómo se encuentra? Describe su estado físico y cualquier detalle importante", type: "textarea", placeholder: "Ej: Estable, consciente, sin documentos...", required: false },
+    { field: "numero_contacto", question: "¿A qué número podemos contactarte a ti (quien la encontró)?", type: "tel", placeholder: "Ej: +58 412 1234567", required: true },
+    { field: "quien_ayudo", question: "¿Sabes si tiene familiares buscándola? ¿Nombre de algún familiar? (opcional)", type: "text", placeholder: "Ej: Juan Pérez", required: false },
+    { field: "contacto_quien_ayudo", question: "¿Cuál es el número de contacto de ese familiar? (opcional)", type: "tel", placeholder: "Ej: +58 414 7654321", required: false },
+  ];
+
+  let currentStep = 0, formData = {}, STEPS = [], tipoReporte = "";
   const msgs = document.getElementById("cb-messages");
   const inputArea = document.getElementById("cb-input-area");
   const bar = document.getElementById("cb-bar");
@@ -185,8 +218,39 @@
   function setProgress(s) { bar.style.width = ((s / STEPS.length) * 100).toFixed(0) + "%"; }
 
   async function startChat() {
-    await botMsg("Hola. Estoy aquí para ayudarte a reportar una persona desaparecida. Te haré unas preguntas rápidas. 🙏", 700);
-    setTimeout(askStep, 400);
+    await botMsg("Hola. ¿Qué deseas reportar?", 700);
+    renderTipoButtons();
+  }
+
+  function renderTipoButtons() {
+    inputArea.innerHTML = "";
+    const btnDes = document.createElement("button");
+    btnDes.className = "cb-btn-tipo-des";
+    btnDes.textContent = "🔴 Reportar desaparecido — No sé dónde está";
+    btnDes.addEventListener("click", () => seleccionarTipo("desaparecido"));
+
+    const btnEnc = document.createElement("button");
+    btnEnc.className = "cb-btn-tipo-enc";
+    btnEnc.textContent = "🟢 Reportar persona encontrada — Está vivo/a pero necesita ser ubicado/a";
+    btnEnc.addEventListener("click", () => seleccionarTipo("encontrado_vivo"));
+
+    inputArea.appendChild(btnDes);
+    inputArea.appendChild(btnEnc);
+    scroll();
+  }
+
+  async function seleccionarTipo(tipo) {
+    tipoReporte = tipo;
+    STEPS = tipo === "desaparecido" ? STEPS_DESAPARECIDO : STEPS_ENCONTRADO;
+    inputArea.innerHTML = "";
+    userMsg(tipo === "desaparecido"
+      ? "🔴 Reportar desaparecido"
+      : "🟢 Reportar persona encontrada");
+    const confirmMsg = tipo === "desaparecido"
+      ? "Entendido. Voy a ayudarte a registrar a la persona desaparecida. Te haré unas preguntas rápidas. 🙏"
+      : "Entendido. Gracias por reportar a esta persona. Te haré unas preguntas para que los equipos puedan ubicarla. 🙏";
+    await botMsg(confirmMsg, 600);
+    setTimeout(askStep, 300);
   }
 
   function askStep() {
@@ -351,6 +415,7 @@
       fd.append("numero_contacto", formData.numero_contacto || "");
       if (formData.quien_ayudo) fd.append("quien_ayudo", formData.quien_ayudo);
       if (formData.contacto_quien_ayudo) fd.append("contacto_quien_ayudo", formData.contacto_quien_ayudo);
+      fd.append("tipo_reporte", tipoReporte);
       if (formData.fotos) {
         if (formData.fotos[0]) fd.append("foto", formData.fotos[0]);
         if (formData.fotos[1]) fd.append("foto_2", formData.fotos[1]);
@@ -359,7 +424,10 @@
       const res = await fetch(API_URL + "/api/reportes/", { method: "POST", body: fd });
       if (!res.ok) throw new Error("Error " + res.status);
 
-      // Pantalla de éxito
+      const successMsg = tipoReporte === "encontrado_vivo"
+        ? "¡Reporte enviado! Gracias por reportar a esta persona. Los equipos la ubicarán con su familia."
+        : "¡Reporte enviado! Tu reporte está registrado y disponible para los equipos de rescate.";
+
       msgs.innerHTML = "";
       inputArea.innerHTML = "";
       bar.style.width = "100%";
@@ -368,11 +436,11 @@
       ok.innerHTML = `
         <div class="cb-success-icon">✅</div>
         <h2>¡Reporte enviado!</h2>
-        <p>Tu reporte está registrado y disponible para los equipos de rescate. Que Dios los guíe. 🙏🇻🇪</p>`;
+        <p>${successMsg} Que Dios los guíe. 🙏🇻🇪</p>`;
       msgs.appendChild(ok);
       inputArea.innerHTML = `<button class="cb-btn cb-btn-sec" id="cb-new">Hacer otro reporte</button>`;
       document.getElementById("cb-new").addEventListener("click", () => {
-        currentStep = 0; formData = {};
+        currentStep = 0; formData = {}; tipoReporte = ""; STEPS = [];
         msgs.innerHTML = ""; bar.style.width = "0%";
         startChat();
       });

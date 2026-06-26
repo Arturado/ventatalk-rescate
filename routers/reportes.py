@@ -61,6 +61,7 @@ async def crear_reporte(
     numero_contacto: str = Form(...),
     quien_ayudo: str = Form(None),
     contacto_quien_ayudo: str = Form(None),
+    tipo_reporte: str = Form("desaparecido"),
     website: str = Form(None),
     foto: UploadFile = File(None),
     foto_2: UploadFile = File(None),
@@ -70,6 +71,9 @@ async def crear_reporte(
     # Honeypot: campo oculto — si viene con valor es un bot
     if website:
         return JSONResponse(status_code=200, content={"id": 0, "mensaje": "ok"})
+
+    if tipo_reporte not in ("desaparecido", "encontrado_vivo"):
+        tipo_reporte = "desaparecido"
 
     foto_url = await save_photo(foto)
     foto_url_2 = await save_photo(foto_2)
@@ -81,7 +85,7 @@ async def crear_reporte(
         numero_contacto=numero_contacto, quien_ayudo=quien_ayudo,
         contacto_quien_ayudo=contacto_quien_ayudo, foto_url=foto_url,
         foto_url_2=foto_url_2, foto_url_3=foto_url_3,
-        estado="desaparecido",
+        estado="desaparecido", tipo_reporte=tipo_reporte,
     )
     db.add(persona)
     db.commit()

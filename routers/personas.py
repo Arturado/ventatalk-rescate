@@ -18,6 +18,7 @@ def listar_personas(
     nombre: Optional[str] = Query(None),
     cedula: Optional[str] = Query(None),
     estado: Optional[str] = Query(None),
+    tipo_reporte: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
@@ -30,6 +31,8 @@ def listar_personas(
         query = query.filter(models.PersonaDesaparecida.cedula == cedula)
     if estado:
         query = query.filter(models.PersonaDesaparecida.estado == estado)
+    if tipo_reporte:
+        query = query.filter(models.PersonaDesaparecida.tipo_reporte == tipo_reporte)
     return query.order_by(models.PersonaDesaparecida.created_at.desc()).offset(skip).limit(limit).all()
 
 @router.get("/{persona_id}", response_model=schemas.PersonaResponse)
