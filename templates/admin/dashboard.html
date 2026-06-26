@@ -63,16 +63,73 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 .tipo-desaparecido { background: #374151; color: #f9fafb; }
 .tipo-encontrado_vivo { background: #dcfce7; color: #15803d; }
 .export-btn { margin-left: auto; }
+
+/* Tipo reportante badges */
+.rep-badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
+.rep-familiar      { background:#dbeafe; color:#1d4ed8; border:1px solid #bfdbfe; }
+.rep-personal_salud{ background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
+.rep-rescatista    { background:#fed7aa; color:#c2410c; border:1px solid #fdba74; }
+.rep-testigo       { background:#f3f4f6; color:#374151; border:1px solid #e5e7eb; }
+
+/* Estado clínico badges */
+.clinico-badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
+.clinico-consciente_estable { background:#dcfce7; color:#15803d; }
+.clinico-consciente_herido  { background:#fefce8; color:#92400e; }
+.clinico-inconsciente       { background:#ffedd5; color:#c2410c; }
+.clinico-fallecido          { background:#111827; color:#f9fafb; }
+.clinico-desconocido        { background:#f3f4f6; color:#374151; }
+
+/* Matches panel */
+.matches-panel { display:none; background:white; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,.08); padding:24px; margin-bottom:24px; }
+.matches-panel.open { display:block; }
+.matches-loading { text-align:center; color:#6b7280; font-size:14px; padding:32px; }
+.match-pair { border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-bottom:16px; }
+.match-cards { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+.match-card { border-radius:10px; padding:12px; }
+.match-card-red   { background:#fef2f2; border:1px solid #fecaca; }
+.match-card-green { background:#f0fdf4; border:1px solid #bbf7d0; }
+.match-card-hdr { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px; }
+.match-card-red   .match-card-hdr { color:#dc2626; }
+.match-card-green .match-card-hdr { color:#16a34a; }
+.match-photo { width:100%; height:72px; border-radius:8px; object-fit:cover; display:block; margin-bottom:6px; background:#f3f4f6; }
+.match-initials { width:100%; height:72px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:800; margin-bottom:6px; }
+.match-card-red   .match-initials { background:#fef2f2; color:#dc2626; }
+.match-card-green .match-initials { background:#f0fdf4; color:#16a34a; }
+.match-name { font-size:13px; font-weight:700; color:#111; margin-bottom:3px; }
+.match-info { font-size:11.5px; color:#6b7280; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.match-footer { }
+.match-score { font-size:14px; font-weight:700; color:#111; margin-bottom:3px; }
+.match-criterios { font-size:13px; color:#6b7280; margin-bottom:10px; }
+.match-actions { display:flex; gap:8px; }
+.match-btn-confirm { flex:1; padding:10px; background:#16a34a; color:white; border:none; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; transition:background .15s; }
+.match-btn-confirm:hover { background:#15803d; }
+.match-btn-discard { flex:1; padding:10px; background:white; color:#9ca3af; border:1.5px solid #e5e7eb; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; }
+.match-btn-discard:hover { border-color:#9ca3af; color:#374151; }
+.match-toast { position:fixed; bottom:24px; right:24px; background:#16a34a; color:white; padding:12px 20px; border-radius:10px; font-size:14px; font-weight:600; z-index:9999; box-shadow:0 4px 16px rgba(0,0,0,.15); opacity:0; pointer-events:none; transition:opacity .3s; }
+.match-toast.show { opacity:1; }
 @media (max-width: 640px) {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .toolbar { flex-direction: column; align-items: stretch; }
   .toolbar input { min-width: unset; }
+  .match-cards { grid-template-columns: 1fr; }
 }
 {% endblock %}
 {% block content %}
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
   <h2 style="font-size:20px;font-weight:800;">Panel de Reportes</h2>
-  <a href="/admin/export/csv" class="btn btn-red">⬇ Exportar CSV</a>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <button id="btn-matches" onclick="toggleMatches()" style="padding:8px 16px;background:#2563eb;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">🔗 Posibles Matches (<span id="matches-count">…</span>)</button>
+    <a href="/admin/export/csv" class="btn btn-red">⬇ Exportar CSV</a>
+  </div>
+</div>
+
+<!-- MATCHES PANEL -->
+<div id="matches-panel" class="matches-panel">
+  <div style="margin-bottom:16px;">
+    <h3 style="font-size:16px;font-weight:800;margin-bottom:4px;">Posibles coincidencias — revisión manual</h3>
+    <p style="font-size:13px;color:#6b7280;">El sistema detectó estas personas que podrían ser la misma. Revisa y confirma.</p>
+  </div>
+  <div id="matches-content"><div class="matches-loading">Cargando matches…</div></div>
 </div>
 
 <div class="stats-grid">
@@ -112,6 +169,14 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
     <option value="desaparecido">Desaparecidos</option>
     <option value="encontrado_vivo">Encontrados vivos</option>
   </select>
+  <select id="filtrar-clinico">
+    <option value="">Estado clínico (todos)</option>
+    <option value="consciente_estable">Consciente · Estable</option>
+    <option value="consciente_herido">Consciente · Herido/a</option>
+    <option value="inconsciente">Inconsciente</option>
+    <option value="fallecido">Fallecido/a</option>
+    <option value="desconocido">Desconocido</option>
+  </select>
 </div>
 
 <div class="table-wrap">
@@ -138,6 +203,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
         data-cedula="{{ p.cedula or '' }}"
         data-estado="{{ p.estado }}"
         data-tipo="{{ p.tipo_reporte }}"
+        data-clinico="{{ p.estado_clinico or '' }}"
         data-id="{{ p.id }}"
       >
         <td>{{ p.id }}</td>
@@ -149,7 +215,10 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
           {% else %}—{% endif %}
         </td>
         <td><strong>{{ p.nombres_apellidos }}</strong></td>
-        <td>{{ p.cedula or '—' }}</td>
+        <td>
+          {{ p.cedula or '—' }}
+          {% if p.sin_documentos %}<br><span style="display:inline-block;padding:1px 6px;border-radius:20px;font-size:9px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;text-transform:uppercase;">Sin doc.</span>{% endif %}
+        </td>
         <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ p.ultima_ubicacion }}">{{ p.ultima_ubicacion }}</td>
         <td>{{ p.numero_contacto }}</td>
         <td>
@@ -183,19 +252,55 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
       <tr id="detalle-{{ p.id }}" class="detalle-row" style="display:none;">
         <td colspan="11" style="background:#fafafa;padding:12px 18px 16px;">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;font-size:13px;">
+
+            <!-- Tipo reportante -->
+            <div>
+              <strong style="color:#374151;display:block;margin-bottom:4px;">Tipo de reportante</strong>
+              {% if p.tipo_reportante %}
+              <span class="rep-badge rep-{{ p.tipo_reportante }}">{{ {'familiar':'Familiar/Conocido','personal_salud':'Personal de Salud','rescatista':'Rescatista','testigo':'Testigo'}.get(p.tipo_reportante, p.tipo_reportante) }}</span>
+              {% else %}<span style="color:#9ca3af;">No indicado</span>{% endif %}
+            </div>
+
+            <!-- Estado clínico -->
+            <div>
+              <strong style="color:#374151;display:block;margin-bottom:4px;">Estado clínico</strong>
+              {% if p.estado_clinico %}
+              <span class="clinico-badge clinico-{{ p.estado_clinico }}">{{ {'consciente_estable':'Consciente · Estable','consciente_herido':'Consciente · Herido/a','inconsciente':'Inconsciente','fallecido':'Fallecido/a','desconocido':'Desconocido'}.get(p.estado_clinico, p.estado_clinico) }}</span>
+              {% else %}<span style="color:#9ca3af;">No registrado</span>{% endif %}
+              {% if p.sin_documentos %}&nbsp;<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;text-transform:uppercase;">Sin documentos</span>{% endif %}
+            </div>
+
+            <!-- Señas físicas -->
+            <div style="grid-column:1/-1;">
+              <strong style="color:#374151;display:block;margin-bottom:6px;">Señas físicas</strong>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px 16px;">
+                <div><span style="color:#9ca3af;font-size:11px;">SEXO</span><br>{{ {'masculino':'Masculino','femenino':'Femenino','no_determinado':'No determinado'}.get(p.sexo, p.sexo or '—') }}</div>
+                <div><span style="color:#9ca3af;font-size:11px;">EDAD</span><br>{{ {'nino':'Niño 0-12','joven':'Joven 13-25','adulto':'Adulto 26-60','adulto_mayor':'Adulto mayor 60+','no_sabe':'No sé'}.get(p.edad_aproximada, p.edad_aproximada or '—') }}</div>
+                <div><span style="color:#9ca3af;font-size:11px;">CONTEXTURA</span><br>{{ {'delgada':'Delgada','media':'Media','robusta':'Robusta','no_sabe':'No sé'}.get(p.contextura, p.contextura or '—') }}</div>
+                <div><span style="color:#9ca3af;font-size:11px;">CABELLO</span><br>{{ {'corto':'Corto','largo':'Largo','calvo':'Calvo/a','canoso':'Canoso/a','no_sabe':'No sé'}.get(p.cabello, p.cabello or '—') }}</div>
+                <div style="grid-column:1/-1;"><span style="color:#9ca3af;font-size:11px;">ROPA</span><br>{{ p.ropa_aproximada or '—' }}</div>
+              </div>
+            </div>
+
+            <!-- Descripción -->
             <div>
               <strong style="color:#374151;display:block;margin-bottom:4px;">Descripción</strong>
               <span style="color:#6b7280;">{{ p.descripcion or 'Sin descripción' }}</span>
             </div>
+
+            <!-- Quién ayuda -->
             <div>
               <strong style="color:#374151;display:block;margin-bottom:4px;">Quién ayuda</strong>
               <span style="color:#6b7280;">{{ p.quien_ayudo or 'No registrado' }}</span>
               {% if p.contacto_quien_ayudo %} — Tel: <span style="color:#6b7280;">{{ p.contacto_quien_ayudo }}</span>{% endif %}
             </div>
+
+            <!-- Tipo de reporte -->
             <div>
               <strong style="color:#374151;display:block;margin-bottom:4px;">Tipo de reporte</strong>
               <span style="color:#6b7280;">{{ 'Encontrado vivo' if p.tipo_reporte == 'encontrado_vivo' else 'Desaparecido' }}</span>
             </div>
+
             {% if p.foto_url_2 or p.foto_url_3 %}
             <div style="grid-column:1/-1;">
               <strong style="color:#374151;display:block;margin-bottom:6px;">Fotos adicionales</strong>
@@ -215,6 +320,9 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   </table>
 </div>
 
+<!-- Toast -->
+<div id="match-toast" class="match-toast"></div>
+
 <script>
 function toggleDetalle(id, btn) {
   const det = document.getElementById('detalle-' + id);
@@ -232,22 +340,25 @@ function eliminarPersona(id, btn) {
 }
 
 (function () {
-  const nombre = document.getElementById('buscar-nombre');
-  const cedula = document.getElementById('buscar-cedula');
-  const estado = document.getElementById('filtrar-estado');
-  const tipo = document.getElementById('filtrar-tipo');
-  const filas = document.querySelectorAll('#tabla-personas tbody tr[data-nombre]');
+  const nombre  = document.getElementById('buscar-nombre');
+  const cedula  = document.getElementById('buscar-cedula');
+  const estado  = document.getElementById('filtrar-estado');
+  const tipo    = document.getElementById('filtrar-tipo');
+  const clinico = document.getElementById('filtrar-clinico');
+  const filas   = document.querySelectorAll('#tabla-personas tbody tr[data-nombre]');
 
   function filtrar() {
-    const n = nombre.value.toLowerCase();
-    const c = cedula.value.toLowerCase();
-    const e = estado.value;
-    const t = tipo.value;
+    const n  = nombre.value.toLowerCase();
+    const c  = cedula.value.toLowerCase();
+    const e  = estado.value;
+    const t  = tipo.value;
+    const cl = clinico.value;
     filas.forEach(tr => {
-      const ok = (!n || tr.dataset.nombre.includes(n))
-               && (!c || tr.dataset.cedula.toLowerCase().includes(c))
-               && (!e || tr.dataset.estado === e)
-               && (!t || tr.dataset.tipo === t);
+      const ok = (!n  || tr.dataset.nombre.includes(n))
+               && (!c  || tr.dataset.cedula.toLowerCase().includes(c))
+               && (!e  || tr.dataset.estado === e)
+               && (!t  || tr.dataset.tipo === t)
+               && (!cl || tr.dataset.clinico === cl);
       tr.style.display = ok ? '' : 'none';
       const det = document.getElementById('detalle-' + tr.dataset.id);
       if (det && !ok) det.style.display = 'none';
@@ -258,6 +369,163 @@ function eliminarPersona(id, btn) {
   cedula.addEventListener('input', filtrar);
   estado.addEventListener('change', filtrar);
   tipo.addEventListener('change', filtrar);
+  clinico.addEventListener('change', filtrar);
+})();
+
+/* ---- MATCHES ---- */
+var _matchesPanelOpen = false;
+var _matchesLoaded    = false;
+var _descartados      = JSON.parse(localStorage.getItem('vr_matches_desc') || '[]');
+
+function getApiKey() {
+  if (!sessionStorage.getItem('vr_api_key')) {
+    var key = prompt('API Key (requerida para ver los matches posibles):');
+    if (key) sessionStorage.setItem('vr_api_key', key.trim());
+  }
+  return sessionStorage.getItem('vr_api_key');
+}
+
+function toggleMatches() {
+  _matchesPanelOpen = !_matchesPanelOpen;
+  document.getElementById('matches-panel').classList.toggle('open', _matchesPanelOpen);
+  if (_matchesPanelOpen && !_matchesLoaded) loadMatches();
+}
+
+async function loadMatches() {
+  const key = getApiKey();
+  if (!key) return;
+  const content = document.getElementById('matches-content');
+  content.innerHTML = '<div class="matches-loading">Buscando posibles coincidencias…</div>';
+  try {
+    const res = await fetch('/api/matches/posibles', { headers: { 'X-Api-Key': key } });
+    if (res.status === 401) {
+      sessionStorage.removeItem('vr_api_key');
+      content.innerHTML = '<p style="color:#dc2626;padding:16px;">API Key inválida. Recarga la página e inténtalo de nuevo.</p>';
+      return;
+    }
+    const data = await res.json();
+    _matchesLoaded = true;
+    const visibles = data.filter(function(m) {
+      const pid = m.desaparecido.id + '-' + m.encontrado.id;
+      return !_descartados.includes(pid);
+    });
+    document.getElementById('matches-count').textContent = visibles.length;
+    if (!visibles.length) {
+      content.innerHTML = '<p style="color:#6b7280;padding:16px;text-align:center;">No se detectaron posibles coincidencias en este momento.</p>';
+      return;
+    }
+    content.innerHTML = '';
+    visibles.forEach(function(m) { content.appendChild(renderMatchPair(m)); });
+  } catch (e) {
+    content.innerHTML = '<p style="color:#dc2626;padding:16px;">Error al cargar. Intenta de nuevo.</p>';
+  }
+}
+
+function getInitials(name) {
+  if (!name) return '?';
+  var parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function scoreCircles(score) {
+  return '●'.repeat(score) + '○'.repeat(4 - score) + ' (' + score + '/4 criterios)';
+}
+
+function criterioLabel(c) {
+  return { zona: 'Zona', sexo: 'Sexo', edad: 'Edad', cedula: 'Cédula' }[c] || c;
+}
+
+function renderMatchPair(m) {
+  const pairId = m.desaparecido.id + '-' + m.encontrado.id;
+
+  function cardHtml(p, tipo) {
+    const isRed = tipo === 'desaparecido';
+    const cls   = isRed ? 'match-card-red' : 'match-card-green';
+    const hdr   = isRed ? '🔴 DESAPARECIDO' : '🟢 ENCONTRADO VIVO';
+    const photoEl = p.foto_url
+      ? '<img class="match-photo" src="' + p.foto_url + '" alt="foto" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+        '<div class="match-initials" style="display:none">' + getInitials(p.nombres_apellidos) + '</div>'
+      : '<div class="match-initials">' + getInitials(p.nombres_apellidos) + '</div>';
+    const senas = [p.sexo, p.edad_aproximada, p.contextura].filter(Boolean).join(' · ') || '—';
+    const cedula = p.sin_documentos ? 'Sin documentos' : (p.cedula || '—');
+    return '<div class="match-card ' + cls + '">' +
+      '<div class="match-card-hdr">' + hdr + '</div>' +
+      photoEl +
+      '<div class="match-name">' + (p.nombres_apellidos || '—') + '</div>' +
+      '<div class="match-info">🪪 ' + cedula + '</div>' +
+      '<div class="match-info">📍 ' + (p.ultima_ubicacion || '—') + '</div>' +
+      '<div class="match-info" style="color:#9ca3af;font-size:11px;">' + senas + '</div>' +
+    '</div>';
+  }
+
+  const el = document.createElement('div');
+  el.className = 'match-pair';
+  el.dataset.pairId = pairId;
+  el.innerHTML =
+    '<div class="match-cards">' +
+      cardHtml(m.desaparecido, 'desaparecido') +
+      cardHtml(m.encontrado, 'encontrado') +
+    '</div>' +
+    '<div class="match-footer">' +
+      '<div class="match-score">' + scoreCircles(m.score) + '</div>' +
+      '<div class="match-criterios">Coinciden en: ' + m.criterios_match.map(criterioLabel).join(' · ') + '</div>' +
+      '<div class="match-actions">' +
+        '<button class="match-btn-confirm" onclick="confirmarMatch(' + m.desaparecido.id + ',' + m.encontrado.id + ',\'' + pairId + '\',this)">✓ Confirmar match — marcar ambos como Encontrado</button>' +
+        '<button class="match-btn-discard" onclick="descartarMatch(\'' + pairId + '\',this)">✗ Descartar</button>' +
+      '</div>' +
+    '</div>';
+  return el;
+}
+
+async function confirmarMatch(desapId, encId, pairId, btn) {
+  btn.disabled = true; btn.textContent = 'Confirmando…';
+  const body = new URLSearchParams({ estado: 'encontrado' });
+  try {
+    await Promise.all([
+      fetch('/admin/personas/' + desapId + '/estado', { method: 'POST', body }),
+      fetch('/admin/personas/' + encId   + '/estado', { method: 'POST', body }),
+    ]);
+    document.querySelector('[data-pair-id="' + pairId + '"]').remove();
+    showToast('✓ Match confirmado — ambos registros marcados como encontrados');
+    actualizarContadorMatches();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = '✓ Confirmar match';
+    alert('Error al confirmar. Intenta de nuevo.');
+  }
+}
+
+function descartarMatch(pairId, btn) {
+  _descartados.push(pairId);
+  localStorage.setItem('vr_matches_desc', JSON.stringify(_descartados));
+  document.querySelector('[data-pair-id="' + pairId + '"]').remove();
+  actualizarContadorMatches();
+}
+
+function actualizarContadorMatches() {
+  const n = document.querySelectorAll('.match-pair').length;
+  document.getElementById('matches-count').textContent = n;
+}
+
+function showToast(msg) {
+  var t = document.getElementById('match-toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, 3500);
+}
+
+/* Carga el conteo de matches en el botón al iniciar */
+(async function initMatchCount() {
+  var key = sessionStorage.getItem('vr_api_key');
+  if (!key) { document.getElementById('matches-count').textContent = '?'; return; }
+  try {
+    var res = await fetch('/api/matches/posibles', { headers: { 'X-Api-Key': key } });
+    if (!res.ok) { document.getElementById('matches-count').textContent = '?'; return; }
+    var data = await res.json();
+    var visibles = data.filter(function(m) {
+      return !_descartados.includes(m.desaparecido.id + '-' + m.encontrado.id);
+    });
+    document.getElementById('matches-count').textContent = visibles.length;
+  } catch (e) { document.getElementById('matches-count').textContent = '?'; }
 })();
 </script>
 {% endblock %}
