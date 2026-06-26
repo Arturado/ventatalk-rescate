@@ -1,0 +1,6 @@
+.env
+rescate.db
+uploads/
+__pycache__/
+*.pyc
+.DS_Store
