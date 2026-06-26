@@ -12,6 +12,7 @@ class PersonaResponse(BaseModel):
     numero_contacto: str
     quien_ayudo: Optional[str] = None
     contacto_quien_ayudo: Optional[str] = None
+    estado: str = "desaparecido"
     created_at: datetime
 
     model_config = {"from_attributes": True}

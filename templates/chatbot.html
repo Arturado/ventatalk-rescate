@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Reportar Desaparecido — Venezuela Rescate</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      background: #f5f5f5;
+    }
+
+    /* HEADER */
+    #cb-header {
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      color: white;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    }
+    #cb-header svg { width: 28px; height: 28px; }
+    #cb-header h1 { font-size: 16px; font-weight: 700; }
+    #cb-header p { font-size: 11px; opacity: .85; }
+    #cb-progress { height: 3px; background: #fecaca; flex-shrink: 0; }
+    #cb-bar { height: 100%; background: white; transition: width .4s; width: 0%; }
+
+    /* MESSAGES */
+    #cb-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-width: 700px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .cb-bot, .cb-user {
+      max-width: 85%;
+      padding: 12px 16px;
+      border-radius: 16px;
+      font-size: 14.5px;
+      line-height: 1.55;
+    }
+    .cb-bot { background: white; color: #111; border-bottom-left-radius: 4px; align-self: flex-start; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .cb-user { background: #dc2626; color: white; border-bottom-right-radius: 4px; align-self: flex-end; }
+    .cb-typing { display: flex; gap: 5px; align-items: center; padding: 14px 16px; background: white; border-radius: 16px; border-bottom-left-radius: 4px; align-self: flex-start; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .cb-dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; animation: cb-bounce 1.2s ease-in-out infinite; }
+    .cb-dot:nth-child(2) { animation-delay: .2s; }
+    .cb-dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes cb-bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-8px)} }
+
+    /* INPUT AREA */
+    #cb-input-area {
+      flex-shrink: 0;
+      padding: 12px 16px 16px;
+      border-top: 1px solid #e5e7eb;
+      background: white;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 700px;
+      width: 100%;
+      margin: 0 auto;
+      padding-bottom: env(safe-area-inset-bottom, 16px);
+    }
+    #cb-input-area input, #cb-input-area textarea {
+      width: 100%; border: 1.5px solid #d1d5db;
+      border-radius: 10px; padding: 11px 14px; font-size: 15px;
+      outline: none; resize: none; color: #111; background: #fafafa;
+      transition: border-color .15s;
+    }
+    #cb-input-area input:focus, #cb-input-area textarea:focus { border-color: #dc2626; background: #fff; }
+    #cb-input-area textarea { height: 80px; }
+    .cb-btn {
+      width: 100%; padding: 12px 16px;
+      background: #dc2626; color: white;
+      border: none; border-radius: 10px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      transition: background .15s;
+    }
+    .cb-btn:hover { background: #b91c1c; }
+    .cb-btn-sec {
+      background: transparent; color: #6b7280;
+      border: 1.5px solid #e5e7eb;
+    }
+    .cb-btn-sec:hover { background: #f9fafb; }
+    #cb-file-label {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 12px;
+      border: 1.5px dashed #d1d5db; border-radius: 10px;
+      color: #374151; font-size: 14px; cursor: pointer;
+    }
+    #cb-file-label:hover { border-color: #dc2626; background: #fff5f5; }
+    #cb-file-preview { font-size: 13px; color: #16a34a; text-align: center; }
+
+    /* SUCCESS */
+    .cb-success {
+      text-align: center; padding: 40px 24px;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 14px;
+    }
+    .cb-success-icon { font-size: 64px; }
+    .cb-success h2 { font-size: 22px; color: #16a34a; font-weight: 800; }
+    .cb-success p { font-size: 15px; color: #6b7280; line-height: 1.65; max-width: 320px; }
+
+    @media (min-width: 700px) {
+      body { align-items: center; background: #f0f0f0; }
+      #cb-header { border-radius: 0; }
+      #cb-messages, #cb-input-area { max-width: 580px; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="cb-header">
+  <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    <path d="M12 8v4M12 16h.01"/>
+  </svg>
+  <div>
+    <h1>Venezuela Rescate</h1>
+    <p>Reportar persona desaparecida</p>
+  </div>
+</div>
+<div id="cb-progress"><div id="cb-bar"></div></div>
+
+<div id="cb-messages"></div>
+<div id="cb-input-area"></div>
+
+<script>
+(function () {
+  const API_URL = "";  // mismo origen
+  const STEPS = [
+    { field: "nombres_apellidos", question: "👤 Nombre completo de la persona desaparecida:", type: "text", placeholder: "Ej: Maria Gonzalez Perez", required: true },
+    { field: "cedula", question: "📋 Número de cédula (opcional):", type: "text", placeholder: "Ej: V-12345678", required: false },
+    { field: "ultima_ubicacion", question: "📍 Última ubicación conocida:", type: "text", placeholder: "Ej: Calle 5, Urb. El Valle, Caracas", required: true },
+    { field: "foto", question: "📷 Foto reciente (opcional):", type: "file", required: false },
+    { field: "descripcion", question: "📝 Descripción adicional (ropa, señas, salud...):", type: "textarea", placeholder: "Cualquier detalle ayuda", required: false },
+    { field: "numero_contacto", question: "📱 Tu número de contacto:", type: "tel", placeholder: "Ej: +58 412 1234567", required: true },
+    { field: "quien_ayudo", question: "🤝 Nombre de quien la está ayudando o vio (opcional):", type: "text", placeholder: "Ej: Pedro Ramírez", required: false },
+    { field: "contacto_quien_ayudo", question: "📞 Contacto de esa persona (opcional):", type: "tel", placeholder: "Ej: +58 414 7654321", required: false },
+  ];
+
+  let currentStep = 0, formData = {};
+  const msgs = document.getElementById("cb-messages");
+  const inputArea = document.getElementById("cb-input-area");
+  const bar = document.getElementById("cb-bar");
+
+  function typing(ms = 600) {
+    return new Promise(resolve => {
+      const el = document.createElement("div");
+      el.className = "cb-typing";
+      el.innerHTML = "<div class='cb-dot'></div><div class='cb-dot'></div><div class='cb-dot'></div>";
+      msgs.appendChild(el); scroll();
+      setTimeout(() => { msgs.removeChild(el); resolve(); }, ms);
+    });
+  }
+
+  async function botMsg(html, delay = 400) {
+    await typing(delay);
+    const el = document.createElement("div");
+    el.className = "cb-bot";
+    el.innerHTML = html;
+    msgs.appendChild(el); scroll();
+  }
+
+  function userMsg(text) {
+    const el = document.createElement("div");
+    el.className = "cb-user";
+    el.textContent = text;
+    msgs.appendChild(el); scroll();
+  }
+
+  function scroll() { setTimeout(() => msgs.scrollTop = msgs.scrollHeight, 60); }
+  function setProgress(s) { bar.style.width = ((s / STEPS.length) * 100).toFixed(0) + "%"; }
+
+  async function startChat() {
+    await botMsg("Hola. Estoy aquí para ayudarte a reportar una persona desaparecida. Te haré unas preguntas rápidas. 🙏", 700);
+    setTimeout(askStep, 400);
+  }
+
+  function askStep() {
+    if (currentStep >= STEPS.length) { submitForm(); return; }
+    const step = STEPS[currentStep];
+    setProgress(currentStep);
+    botMsg(step.question, 350).then(() => setTimeout(() => renderInput(step), 200));
+  }
+
+  function renderInput(step) {
+    inputArea.innerHTML = "";
+    if (step.type === "file") {
+      inputArea.innerHTML = `
+        <input type="file" id="cb-file" accept="image/*" capture="environment" style="display:none">
+        <label id="cb-file-label" for="cb-file">📷 Seleccionar foto</label>
+        <div id="cb-file-preview"></div>
+        <button class="cb-btn cb-btn-sec" id="cb-skip">Continuar sin foto</button>`;
+      document.getElementById("cb-file").addEventListener("change", e => {
+        const file = e.target.files[0]; if (!file) return;
+        formData["foto"] = file;
+        document.getElementById("cb-file-preview").textContent = "✅ " + file.name;
+        setTimeout(() => { userMsg("📷 " + file.name); currentStep++; askStep(); }, 400);
+      });
+      document.getElementById("cb-skip").addEventListener("click", skipStep);
+      return;
+    }
+    const tag = step.type === "textarea" ? "textarea" : "input";
+    const attrs = tag === "input" ? `type="${step.type}"` : "";
+    inputArea.innerHTML = `
+      <${tag} ${attrs} id="cb-input" placeholder="${step.placeholder || ""}">${tag === "textarea" ? "</textarea>" : ""}
+      <button class="cb-btn" id="cb-next">Continuar</button>
+      ${!step.required ? `<button class="cb-btn cb-btn-sec" id="cb-skip">Omitir</button>` : ""}`;
+    const inp = document.getElementById("cb-input");
+    document.getElementById("cb-next").addEventListener("click", () => processInput(step, inp));
+    const sk = document.getElementById("cb-skip");
+    if (sk) sk.addEventListener("click", skipStep);
+    if (step.type !== "textarea") {
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") processInput(step, inp); });
+    }
+    setTimeout(() => inp && inp.focus(), 100);
+  }
+
+  function processInput(step, inp) {
+    const value = inp ? inp.value.trim() : "";
+    if (step.required && !value) {
+      inp.style.borderColor = "#ef4444";
+      inp.placeholder = "⚠️ Campo obligatorio";
+      return;
+    }
+    if (value) { formData[step.field] = value; userMsg(value); }
+    currentStep++; askStep();
+  }
+
+  function skipStep() { currentStep++; askStep(); }
+
+  async function submitForm() {
+    setProgress(STEPS.length);
+    inputArea.innerHTML = "";
+    await botMsg("Enviando reporte... ⏳", 500);
+    try {
+      const fd = new FormData();
+      fd.append("nombres_apellidos", formData.nombres_apellidos || "");
+      if (formData.cedula) fd.append("cedula", formData.cedula);
+      fd.append("ultima_ubicacion", formData.ultima_ubicacion || "");
+      if (formData.descripcion) fd.append("descripcion", formData.descripcion);
+      fd.append("numero_contacto", formData.numero_contacto || "");
+      if (formData.quien_ayudo) fd.append("quien_ayudo", formData.quien_ayudo);
+      if (formData.contacto_quien_ayudo) fd.append("contacto_quien_ayudo", formData.contacto_quien_ayudo);
+      if (formData.foto) fd.append("foto", formData.foto);
+      const res = await fetch(API_URL + "/api/reportes/", { method: "POST", body: fd });
+      if (!res.ok) throw new Error("Error " + res.status);
+
+      // Pantalla de éxito
+      msgs.innerHTML = "";
+      inputArea.innerHTML = "";
+      bar.style.width = "100%";
+      const ok = document.createElement("div");
+      ok.className = "cb-success";
+      ok.innerHTML = `
+        <div class="cb-success-icon">✅</div>
+        <h2>¡Reporte enviado!</h2>
+        <p>Tu reporte está registrado y disponible para los equipos de rescate. Que Dios los guíe. 🙏🇻🇪</p>`;
+      msgs.appendChild(ok);
+      inputArea.innerHTML = `<button class="cb-btn cb-btn-sec" id="cb-new">Hacer otro reporte</button>`;
+      document.getElementById("cb-new").addEventListener("click", () => {
+        currentStep = 0; formData = {};
+        msgs.innerHTML = ""; bar.style.width = "0%";
+        startChat();
+      });
+    } catch (err) {
+      await botMsg("❌ Error al enviar. Intenta de nuevo.");
+      inputArea.innerHTML = `<button class="cb-btn" id="cb-retry">Reintentar</button>`;
+      document.getElementById("cb-retry").addEventListener("click", submitForm);
+    }
+  }
+
+  startChat();
+})();
+</script>
+</body>
+</html>

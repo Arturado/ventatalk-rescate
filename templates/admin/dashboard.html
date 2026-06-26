@@ -1,0 +1,185 @@
+{% extends "admin/base.html" %}
+{% block title %}Dashboard — Venezuela Rescate Admin{% endblock %}
+{% block extra_style %}
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px 18px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  border-left: 4px solid #dc2626;
+}
+.stat-card.green { border-left-color: #16a34a; }
+.stat-card.amber { border-left-color: #d97706; }
+.stat-card.blue  { border-left-color: #2563eb; }
+.stat-card .num { font-size: 32px; font-weight: 800; color: #111; }
+.stat-card .label { font-size: 12px; color: #6b7280; margin-top: 4px; text-transform: uppercase; letter-spacing: .04em; }
+.toolbar {
+  display: flex; align-items: center; gap: 10px;
+  flex-wrap: wrap; margin-bottom: 16px;
+}
+.toolbar input, .toolbar select {
+  padding: 8px 12px; border: 1.5px solid #d1d5db;
+  border-radius: 7px; font-size: 13px; outline: none;
+  transition: border-color .15s; color: #111;
+}
+.toolbar input:focus, .toolbar select:focus { border-color: #dc2626; }
+.toolbar input { flex: 1; min-width: 160px; }
+.table-wrap { background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead { background: #dc2626; color: white; }
+thead th { padding: 12px 14px; text-align: left; font-weight: 600; white-space: nowrap; }
+tbody tr { border-bottom: 1px solid #f0f0f0; }
+tbody tr:hover { background: #fef9f9; }
+tbody td { padding: 10px 14px; vertical-align: middle; }
+.foto-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+.estado-badge {
+  display: inline-block; padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+}
+.estado-desaparecido { background: #fef2f2; color: #b91c1c; }
+.estado-encontrado   { background: #f0fdf4; color: #15803d; }
+.estado-en_proceso   { background: #fffbeb; color: #b45309; }
+.estado-form { display: inline-flex; gap: 4px; align-items: center; }
+.estado-form select {
+  font-size: 12px; padding: 4px 8px; border: 1px solid #d1d5db;
+  border-radius: 6px; cursor: pointer;
+}
+.estado-form button {
+  font-size: 11px; padding: 4px 8px; background: #dc2626;
+  color: white; border: none; border-radius: 6px; cursor: pointer;
+}
+.estado-form button:hover { background: #b91c1c; }
+.export-btn { margin-left: auto; }
+@media (max-width: 640px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .toolbar { flex-direction: column; align-items: stretch; }
+  .toolbar input { min-width: unset; }
+}
+{% endblock %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+  <h2 style="font-size:20px;font-weight:800;">Panel de Reportes</h2>
+  <a href="/admin/export/csv" class="btn btn-red">⬇ Exportar CSV</a>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="num">{{ total }}</div>
+    <div class="label">Total reportes</div>
+  </div>
+  <div class="stat-card blue">
+    <div class="num">{{ hoy }}</div>
+    <div class="label">Hoy</div>
+  </div>
+  <div class="stat-card amber">
+    <div class="num">{{ con_foto }}</div>
+    <div class="label">Con foto</div>
+  </div>
+  <div class="stat-card green">
+    <div class="num">{{ encontrados }}</div>
+    <div class="label">Encontrados</div>
+  </div>
+  <div class="stat-card" style="border-left-color:#d97706;">
+    <div class="num">{{ en_proceso }}</div>
+    <div class="label">En proceso</div>
+  </div>
+</div>
+
+<div class="toolbar">
+  <input type="text" id="buscar-nombre" placeholder="Buscar por nombre...">
+  <input type="text" id="buscar-cedula" placeholder="Buscar por cédula...">
+  <select id="filtrar-estado">
+    <option value="">Todos los estados</option>
+    <option value="desaparecido">Desaparecido</option>
+    <option value="encontrado">Encontrado</option>
+    <option value="en_proceso">En proceso</option>
+  </select>
+</div>
+
+<div class="table-wrap">
+  <table id="tabla-personas">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Foto</th>
+        <th>Nombre</th>
+        <th>Cédula</th>
+        <th>Ubicación</th>
+        <th>Contacto</th>
+        <th>Estado</th>
+        <th>Fecha</th>
+        <th>Acción</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in personas %}
+      <tr
+        data-nombre="{{ p.nombres_apellidos | lower }}"
+        data-cedula="{{ p.cedula or '' }}"
+        data-estado="{{ p.estado }}"
+      >
+        <td>{{ p.id }}</td>
+        <td>
+          {% if p.foto_url %}
+          <a href="{{ p.foto_url }}" target="_blank">
+            <img src="{{ p.foto_url }}" class="foto-thumb" alt="foto">
+          </a>
+          {% else %}—{% endif %}
+        </td>
+        <td><strong>{{ p.nombres_apellidos }}</strong></td>
+        <td>{{ p.cedula or '—' }}</td>
+        <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ p.ultima_ubicacion }}">{{ p.ultima_ubicacion }}</td>
+        <td>{{ p.numero_contacto }}</td>
+        <td>
+          <span class="estado-badge estado-{{ p.estado }}">{{ p.estado.replace('_', ' ') }}</span>
+        </td>
+        <td style="white-space:nowrap;">{{ p.created_at.strftime('%d/%m/%Y %H:%M') if p.created_at else '—' }}</td>
+        <td>
+          <form class="estado-form" method="post" action="/admin/personas/{{ p.id }}/estado">
+            <select name="estado">
+              <option value="desaparecido" {% if p.estado == 'desaparecido' %}selected{% endif %}>Desaparecido</option>
+              <option value="encontrado"   {% if p.estado == 'encontrado' %}selected{% endif %}>Encontrado</option>
+              <option value="en_proceso"   {% if p.estado == 'en_proceso' %}selected{% endif %}>En proceso</option>
+            </select>
+            <button type="submit">✓</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" style="text-align:center;color:#6b7280;padding:32px;">Sin registros</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+(function () {
+  const nombre = document.getElementById('buscar-nombre');
+  const cedula = document.getElementById('buscar-cedula');
+  const estado = document.getElementById('filtrar-estado');
+  const filas = document.querySelectorAll('#tabla-personas tbody tr[data-nombre]');
+
+  function filtrar() {
+    const n = nombre.value.toLowerCase();
+    const c = cedula.value.toLowerCase();
+    const e = estado.value;
+    filas.forEach(tr => {
+      const ok = (!n || tr.dataset.nombre.includes(n))
+               && (!c || tr.dataset.cedula.toLowerCase().includes(c))
+               && (!e || tr.dataset.estado === e);
+      tr.style.display = ok ? '' : 'none';
+    });
+  }
+
+  nombre.addEventListener('input', filtrar);
+  cedula.addEventListener('input', filtrar);
+  estado.addEventListener('change', filtrar);
+})();
+</script>
+{% endblock %}

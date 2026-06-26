@@ -13,4 +13,12 @@ class PersonaDesaparecida(Base):
     numero_contacto = Column(String(30), nullable=False)
     quien_ayudo = Column(String(200), nullable=True)
     contacto_quien_ayudo = Column(String(30), nullable=True)
+    estado = Column(String(20), nullable=False, default="desaparecido")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class AdminUser(Base):
+    __tablename__ = "admin_users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(100), unique=True, nullable=False, index=True)
+    password_hash = Column(String(200), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

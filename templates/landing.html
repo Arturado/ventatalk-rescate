@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Venezuela Rescate — Busqueda de Desaparecidos</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #111; line-height: 1.6; }
+
+    /* HEADER */
+    header {
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      color: white;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    }
+    header .brand { display: flex; align-items: center; gap: 10px; }
+    header svg { width: 36px; height: 36px; }
+    header h1 { font-size: 20px; font-weight: 800; }
+    header p { font-size: 12px; opacity: .85; }
+
+    /* HERO */
+    .hero {
+      background: linear-gradient(160deg, #dc2626 0%, #7f1d1d 100%);
+      color: white;
+      padding: 72px 24px 80px;
+      text-align: center;
+    }
+    .hero .urgencia {
+      display: inline-block;
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.35);
+      border-radius: 20px;
+      padding: 4px 16px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    .hero h2 { font-size: clamp(28px, 6vw, 48px); font-weight: 900; line-height: 1.15; max-width: 760px; margin: 0 auto 16px; }
+    .hero p { font-size: clamp(15px, 2.5vw, 19px); opacity: .9; max-width: 580px; margin: 0 auto 36px; }
+    .cta-group { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+    .cta-primary {
+      background: white; color: #dc2626;
+      padding: 15px 32px; border-radius: 10px;
+      font-size: 15px; font-weight: 800;
+      text-decoration: none;
+      box-shadow: 0 4px 16px rgba(0,0,0,.2);
+      transition: transform .15s;
+    }
+    .cta-primary:hover { transform: translateY(-2px); }
+    .cta-secondary {
+      background: transparent;
+      color: white;
+      border: 2px solid rgba(255,255,255,.6);
+      padding: 13px 28px; border-radius: 10px;
+      font-size: 15px; font-weight: 700;
+      text-decoration: none;
+      transition: background .15s;
+    }
+    .cta-secondary:hover { background: rgba(255,255,255,.1); }
+
+    /* COMO FUNCIONA */
+    .steps {
+      padding: 64px 24px;
+      background: #fff;
+      text-align: center;
+    }
+    .steps h3 { font-size: 26px; font-weight: 800; margin-bottom: 10px; color: #111; }
+    .steps .sub { color: #6b7280; font-size: 15px; margin-bottom: 44px; }
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 28px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .step-card {
+      background: #fef2f2;
+      border-radius: 14px;
+      padding: 30px 22px;
+      border: 1px solid #fecaca;
+    }
+    .step-icon { font-size: 40px; margin-bottom: 14px; }
+    .step-card h4 { font-size: 16px; font-weight: 700; margin-bottom: 8px; color: #111; }
+    .step-card p { font-size: 13.5px; color: #6b7280; }
+
+    /* URGENCIA BANNER */
+    .urgencia-banner {
+      background: #dc2626;
+      color: white;
+      text-align: center;
+      padding: 28px 24px;
+    }
+    .urgencia-banner h3 { font-size: 20px; font-weight: 800; margin-bottom: 6px; }
+    .urgencia-banner p { font-size: 14px; opacity: .9; max-width: 500px; margin: 0 auto 20px; }
+    .urgencia-banner a {
+      background: white; color: #dc2626;
+      padding: 12px 28px; border-radius: 8px;
+      font-size: 14px; font-weight: 800;
+      text-decoration: none;
+    }
+
+    /* FOOTER */
+    footer {
+      background: #111;
+      color: #9ca3af;
+      text-align: center;
+      padding: 20px 24px;
+      font-size: 12px;
+    }
+    footer strong { color: #f3f4f6; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      <path d="M12 8v4M12 16h.01"/>
+    </svg>
+    <div>
+      <h1>Venezuela Rescate</h1>
+      <p>Sistema de búsqueda de desaparecidos post-sismo</p>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="urgencia">🔴 Emergencia activa</div>
+  <h2>Cada segundo cuenta.<br>Ayuda a encontrar a los tuyos.</h2>
+  <p>Sistema oficial de registro de personas desaparecidas tras el terremoto. Gratuito, rápido y disponible para todos.</p>
+  <div class="cta-group">
+    <a href="/chatbot" class="cta-primary">🆘 Reportar desaparecido</a>
+    <a href="#" class="cta-secondary">🔍 Buscar persona</a>
+  </div>
+</section>
+
+<section class="steps">
+  <h3>¿Cómo funciona?</h3>
+  <p class="sub">Tres pasos simples para registrar a un ser querido</p>
+  <div class="steps-grid">
+    <div class="step-card">
+      <div class="step-icon">📋</div>
+      <h4>1. Llena el formulario</h4>
+      <p>Nuestro chatbot te guía paso a paso. Solo necesitas nombre, ubicación y contacto.</p>
+    </div>
+    <div class="step-card">
+      <div class="step-icon">📸</div>
+      <h4>2. Agrega una foto</h4>
+      <p>Una imagen reciente ayuda enormemente a los equipos de rescate a identificar a la persona.</p>
+    </div>
+    <div class="step-card">
+      <div class="step-icon">🤝</div>
+      <h4>3. Los equipos actúan</h4>
+      <p>Tu reporte llega de inmediato a coordinadores de rescate que trabajan en la zona afectada.</p>
+    </div>
+  </div>
+</section>
+
+<section class="urgencia-banner">
+  <h3>¿Buscas a alguien?</h3>
+  <p>No pierdas tiempo. Registra el reporte ahora y deja que los equipos de rescate trabajen para ti.</p>
+  <a href="/chatbot">Iniciar reporte ahora</a>
+</section>
+
+<footer>
+  <strong>Venezuela Rescate</strong> &mdash; Sistema de emergencia post-sismo &mdash; Todos los datos son confidenciales.
+</footer>
+
+</body>
+</html>

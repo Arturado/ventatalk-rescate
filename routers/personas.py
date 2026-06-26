@@ -17,6 +17,7 @@ def verify_api_key(x_api_key: str = Header(...)):
 def listar_personas(
     nombre: Optional[str] = Query(None),
     cedula: Optional[str] = Query(None),
+    estado: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
@@ -27,6 +28,8 @@ def listar_personas(
         query = query.filter(models.PersonaDesaparecida.nombres_apellidos.ilike(f"%{nombre}%"))
     if cedula:
         query = query.filter(models.PersonaDesaparecida.cedula == cedula)
+    if estado:
+        query = query.filter(models.PersonaDesaparecida.estado == estado)
     return query.order_by(models.PersonaDesaparecida.created_at.desc()).offset(skip).limit(limit).all()
 
 @router.get("/{persona_id}", response_model=schemas.PersonaResponse)

@@ -1,10 +1,14 @@
 import io, os, uuid
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi.responses import JSONResponse
 from PIL import Image
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 import models, schemas
 from database import get_db
 
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/reportes", tags=["reportes"])
 UPLOAD_DIR = "uploads/fotos"
 MAX_SIZE_KB = 500
@@ -32,7 +36,9 @@ def compress_image(file_bytes: bytes) -> bytes:
     return output.getvalue()
 
 @router.post("/", response_model=schemas.PersonaResponse, status_code=201)
+@limiter.limit("10/hour")
 async def crear_reporte(
+    request: Request,
     nombres_apellidos: str = Form(...),
     cedula: str = Form(None),
     ultima_ubicacion: str = Form(...),
@@ -40,9 +46,14 @@ async def crear_reporte(
     numero_contacto: str = Form(...),
     quien_ayudo: str = Form(None),
     contacto_quien_ayudo: str = Form(None),
+    website: str = Form(None),
     foto: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
+    # Honeypot: campo oculto — si viene con valor es un bot
+    if website:
+        return JSONResponse(status_code=200, content={"id": 0, "mensaje": "ok"})
+
     foto_url = None
     if foto and foto.filename:
         file_bytes = await foto.read()
@@ -60,6 +71,7 @@ async def crear_reporte(
         ultima_ubicacion=ultima_ubicacion, descripcion=descripcion,
         numero_contacto=numero_contacto, quien_ayudo=quien_ayudo,
         contacto_quien_ayudo=contacto_quien_ayudo, foto_url=foto_url,
+        estado="desaparecido",
     )
     db.add(persona)
     db.commit()
