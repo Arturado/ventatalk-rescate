@@ -49,10 +49,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Venezuela Rescate",
-    docs_url=None,
-    redoc_url=None,
-    openapi_url=None,
+    title="Venezuela Rescate API",
+    description="API de emergencias post-sismo Venezuela 2026",
+    version="1.0.0",
 )
 
 app.state.limiter = limiter
