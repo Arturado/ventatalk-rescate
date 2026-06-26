@@ -34,6 +34,7 @@
   }
 
   const css = `
+    #rw-root button { all: unset; box-sizing: border-box; }
     #rw-root * { box-sizing:border-box; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; margin:0; padding:0; }
     #rw-fab { position:fixed; bottom:24px; right:24px; z-index:99998; width:64px; height:64px; border-radius:50%; background:#dc2626; border:none; cursor:pointer; box-shadow:0 4px 24px rgba(220,38,38,.5); display:flex; align-items:center; justify-content:center; font-size:28px; transition:transform .2s; }
     #rw-fab:hover { transform:scale(1.1); }
@@ -67,7 +68,7 @@
     .rw-btn-tipo-enc { width:100%; padding:12px; background:#16a34a; color:white; border:none; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; text-align:left; line-height:1.4; transition:background .15s; }
     .rw-btn-tipo-enc:hover { background:#15803d; }
     .rw-btn-grid { display:flex; gap:6px; flex-wrap:wrap; }
-    .rw-btn-opt { display:block; width:100%; padding:10px 14px; background:white; color:#dc2626; border:2px solid #dc2626; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; text-align:left; margin-bottom:6px; transition:background .15s, color .15s; }
+    .rw-btn-opt { display:inline-block; width:auto; padding:8px 12px; background:white; color:#dc2626; border:2px solid #dc2626; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; text-align:left; margin:0 4px 6px 0; transition:background .15s, color .15s; }
     .rw-btn-opt:hover { background:#dc2626; color:white; }
     .rw-btn-fallecido { width:100%; padding:8px 10px; margin-top:4px; background:transparent; color:#9ca3af; border:1.5px solid #e5e7eb; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; transition:all .15s; }
     .rw-btn-fallecido:hover { border-color:#9ca3af; color:#374151; }
@@ -147,7 +148,7 @@
       { label: "👁️ Testigo",        value: "testigo" },
     ].forEach(op => {
       const b = document.createElement("button");
-      b.className = "rw-btn"; b.style.textAlign = "left"; b.textContent = op.label;
+      b.className = "rw-btn-opt"; b.textContent = op.label;
       b.addEventListener("click", () => seleccionarTipoReportante(op.value, op.label));
       inputArea.appendChild(b);
     });
