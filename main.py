@@ -26,6 +26,7 @@ def seed_admin_users(db: Session):
     pairs = [
         (os.getenv("ADMIN_1_USER"), os.getenv("ADMIN_1_PASS")),
         (os.getenv("ADMIN_2_USER"), os.getenv("ADMIN_2_PASS")),
+        (os.getenv("ADMIN_3_USER"), os.getenv("ADMIN_3_PASS")),
     ]
     for username, password in pairs:
         if not username or not password:
