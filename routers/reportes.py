@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 import models, schemas
 from database import get_db
@@ -14,6 +15,19 @@ UPLOAD_DIR = "uploads/fotos"
 MAX_SIZE_KB = 500
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
+
+def normalize_cedula(value: str) -> str:
+    if not value:
+        return value
+    v = value.strip()
+    if len(v) >= 2 and v[1] == '-' and v[0].upper() in ('V', 'E'):
+        v = v[0].upper() + v[1:]
+    return v[:15]
+
+def normalize_contacto(value: str) -> str:
+    if not value:
+        return value
+    return value.strip()[:15]
 
 async def save_photo(foto: UploadFile):
     if not foto or not foto.filename:
@@ -75,6 +89,12 @@ async def crear_reporte(
     if tipo_reporte not in ("desaparecido", "encontrado_vivo"):
         tipo_reporte = "desaparecido"
 
+    if cedula:
+        cedula = normalize_cedula(cedula)
+    numero_contacto = normalize_contacto(numero_contacto)
+    if contacto_quien_ayudo:
+        contacto_quien_ayudo = normalize_contacto(contacto_quien_ayudo)
+
     foto_url = await save_photo(foto)
     foto_url_2 = await save_photo(foto_2)
     foto_url_3 = await save_photo(foto_3)
@@ -104,17 +124,23 @@ async def buscar_personas(
     db: Session = Depends(get_db),
 ):
     nombre = nombre.strip() if nombre else ""
-    cedula = cedula.strip() if cedula else ""
+    cedula = normalize_cedula(cedula) if cedula else ""
     if not nombre and not cedula:
         return JSONResponse(
             status_code=400,
             content={"detail": "Debe proporcionar al menos un parámetro: nombre o cedula"},
         )
     q = db.query(models.PersonaDesaparecida)
-    if nombre:
-        q = q.filter(models.PersonaDesaparecida.nombres_apellidos.ilike(f"%{nombre}%"))
     if cedula:
-        q = q.filter(models.PersonaDesaparecida.cedula == cedula)
+        if cedula.isdigit():
+            q = q.filter(or_(
+                models.PersonaDesaparecida.cedula == cedula,
+                models.PersonaDesaparecida.cedula == f"V-{cedula}",
+            ))
+        else:
+            q = q.filter(models.PersonaDesaparecida.cedula == cedula)
+    elif nombre:
+        q = q.filter(models.PersonaDesaparecida.nombres_apellidos.ilike(f"%{nombre}%"))
     personas = q.order_by(models.PersonaDesaparecida.created_at.desc()).limit(10).all()
     return [
         {

@@ -164,24 +164,24 @@
 
   const STEPS_DESAPARECIDO = [
     { field: "nombres_apellidos", question: "¿Cuál es el nombre completo de la persona desaparecida?", type: "text", placeholder: "Ej: Maria Gonzalez Perez", required: true },
-    { field: "cedula", question: "¿Conoces su número de cédula?", type: "text", placeholder: "Ej: V-12345678", required: false },
+    { field: "cedula", question: "¿Conoces su número de cédula?", type: "text", placeholder: "Ej: V-12345678 o 12345678", maxlength: 15, required: false },
     { field: "ultima_ubicacion", question: "¿Cuál fue su última ubicación conocida?", type: "text", placeholder: "Ej: Calle 5, Urb. El Valle, Caracas", required: true },
     { field: "foto", question: "📷 Foto reciente (opcional):", type: "file", required: false },
     { field: "descripcion", question: "Agrega cualquier descripción adicional (ropa, señas, condiciones de salud...)", type: "textarea", placeholder: "Cualquier detalle ayuda", required: false },
-    { field: "numero_contacto", question: "¿A qué número podemos contactarte a ti?", type: "tel", placeholder: "Ej: +58 412 1234567", required: true },
+    { field: "numero_contacto", question: "¿A qué número podemos contactarte a ti?", type: "tel", placeholder: "Ej: +58 412 1234567", maxlength: 15, required: true },
     { field: "quien_ayudo", question: "¿Hay alguien que la esté ayudando o la haya visto? ¿Cuál es su nombre? (opcional)", type: "text", placeholder: "Ej: Pedro Ramírez", required: false },
-    { field: "contacto_quien_ayudo", question: "¿Cuál es el número de contacto de esa persona? (opcional)", type: "tel", placeholder: "Ej: +58 414 7654321", required: false },
+    { field: "contacto_quien_ayudo", question: "¿Cuál es el número de contacto de esa persona? (opcional)", type: "tel", placeholder: "Ej: +58 414 7654321", maxlength: 15, required: false },
   ];
 
   const STEPS_ENCONTRADO = [
     { field: "nombres_apellidos", question: "¿Cuál es el nombre completo de la persona encontrada? (si no lo sabes escribe 'Desconocido')", type: "text", placeholder: "Ej: Maria Gonzalez o Desconocido", required: true },
-    { field: "cedula", question: "¿Conoces su número de cédula?", type: "text", placeholder: "Ej: V-12345678", required: false },
+    { field: "cedula", question: "¿Conoces su número de cédula?", type: "text", placeholder: "Ej: V-12345678 o 12345678", maxlength: 15, required: false },
     { field: "ultima_ubicacion", question: "¿Dónde está ahora mismo esta persona?", type: "text", placeholder: "Ej: Refugio El Valle, Av. Principal", required: true },
     { field: "foto", question: "📷 Foto de la persona (opcional):", type: "file", required: false },
     { field: "descripcion", question: "¿Cómo se encuentra? Describe su estado físico y cualquier detalle importante", type: "textarea", placeholder: "Ej: Estable, consciente, sin documentos...", required: false },
-    { field: "numero_contacto", question: "¿A qué número podemos contactarte a ti (quien la encontró)?", type: "tel", placeholder: "Ej: +58 412 1234567", required: true },
+    { field: "numero_contacto", question: "¿A qué número podemos contactarte a ti (quien la encontró)?", type: "tel", placeholder: "Ej: +58 412 1234567", maxlength: 15, required: true },
     { field: "quien_ayudo", question: "¿Sabes si tiene familiares buscándola? ¿Nombre de algún familiar? (opcional)", type: "text", placeholder: "Ej: Juan Pérez", required: false },
-    { field: "contacto_quien_ayudo", question: "¿Cuál es el número de contacto de ese familiar? (opcional)", type: "tel", placeholder: "Ej: +58 414 7654321", required: false },
+    { field: "contacto_quien_ayudo", question: "¿Cuál es el número de contacto de ese familiar? (opcional)", type: "tel", placeholder: "Ej: +58 414 7654321", maxlength: 15, required: false },
   ];
 
   let currentStep = 0, formData = {}, STEPS = [], tipoReporte = "";
@@ -351,7 +351,7 @@
       return;
     }
     const tag = step.type === "textarea" ? "textarea" : "input";
-    const attrs = tag === "input" ? `type="${step.type}"` : "";
+    const attrs = tag === "input" ? `type="${step.type}"${step.maxlength ? ` maxlength="${step.maxlength}"` : ""}` : "";
     inputArea.innerHTML = `
       <${tag} ${attrs} id="cb-input" placeholder="${step.placeholder || ""}">${tag === "textarea" ? "</textarea>" : ""}
       <button class="cb-btn" id="cb-next">Continuar</button>
