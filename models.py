@@ -9,6 +9,8 @@ class PersonaDesaparecida(Base):
     cedula = Column(String(30), nullable=True, index=True)
     ultima_ubicacion = Column(String(500), nullable=False)
     foto_url = Column(String(600), nullable=True)
+    foto_url_2 = Column(String(600), nullable=True)
+    foto_url_3 = Column(String(600), nullable=True)
     descripcion = Column(Text, nullable=True)
     numero_contacto = Column(String(30), nullable=False)
     quien_ayudo = Column(String(200), nullable=True)

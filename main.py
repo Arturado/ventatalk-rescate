@@ -69,6 +69,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.mount("/widget", StaticFiles(directory="static"), name="widget")
 
 app.include_router(reportes.router)
+app.include_router(reportes.check_router)
 app.include_router(personas.router)
 app.include_router(stats_router)
 app.include_router(admin_router)

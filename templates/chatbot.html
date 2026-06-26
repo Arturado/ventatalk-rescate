@@ -142,7 +142,7 @@
   const API_URL = "";  // mismo origen
   const STEPS = [
     { field: "nombres_apellidos", question: "👤 Nombre completo de la persona desaparecida:", type: "text", placeholder: "Ej: Maria Gonzalez Perez", required: true },
-    { field: "cedula", question: "📋 Número de cédula (opcional):", type: "text", placeholder: "Ej: V-12345678", required: false },
+    { field: "cedula", question: "📋 Número de cédula:", type: "text", placeholder: "Ej: V-12345678", required: false },
     { field: "ultima_ubicacion", question: "📍 Última ubicación conocida:", type: "text", placeholder: "Ej: Calle 5, Urb. El Valle, Caracas", required: true },
     { field: "foto", question: "📷 Foto reciente (opcional):", type: "file", required: false },
     { field: "descripcion", question: "📝 Descripción adicional (ropa, señas, salud...):", type: "textarea", placeholder: "Cualquier detalle ayuda", required: false },
@@ -199,22 +199,91 @@
   function renderInput(step) {
     inputArea.innerHTML = "";
     if (step.type === "file") {
-      inputArea.innerHTML = `
-        <input type="file" id="cb-file-cam" accept="image/*" capture="environment" style="display:none">
-        <input type="file" id="cb-file-gal" accept="image/*" style="display:none">
-        <label for="cb-file-cam" class="cb-btn" style="display:block;text-align:center;">📷 Tomar foto</label>
-        <label for="cb-file-gal" class="cb-btn cb-btn-sec" style="display:block;text-align:center;">🖼️ Adjuntar foto</label>
-        <div id="cb-file-preview"></div>
-        <button class="cb-btn cb-btn-sec" id="cb-skip">Continuar sin foto</button>`;
-      function handleFileSelect(e) {
-        const file = e.target.files[0]; if (!file) return;
-        formData["foto"] = file;
-        document.getElementById("cb-file-preview").textContent = "✅ " + file.name;
-        setTimeout(() => { userMsg("📷 " + file.name); currentStep++; askStep(); }, 400);
+      const fotosArr = [];
+      const MAX_FOTOS = 3;
+
+      function renderFotoPanel() {
+        inputArea.innerHTML = "";
+
+        if (fotosArr.length > 0) {
+          const wrap = document.createElement("div");
+          wrap.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;";
+          fotosArr.forEach(f => {
+            const img = document.createElement("img");
+            img.src = URL.createObjectURL(f);
+            img.style.cssText = "width:60px;height:60px;object-fit:cover;border-radius:8px;border:2px solid #dc2626;";
+            wrap.appendChild(img);
+          });
+          inputArea.appendChild(wrap);
+          const cnt = document.createElement("div");
+          cnt.style.cssText = "font-size:13px;color:#16a34a;";
+          cnt.textContent = `✅ ${fotosArr.length}/${MAX_FOTOS} fotos seleccionadas`;
+          inputArea.appendChild(cnt);
+        }
+
+        if (fotosArr.length < MAX_FOTOS) {
+          const camId = "cb-fc-" + fotosArr.length;
+          const galId = "cb-fg-" + fotosArr.length;
+          const small = fotosArr.length > 0;
+
+          const camIn = document.createElement("input");
+          camIn.type = "file"; camIn.accept = "image/*"; camIn.capture = "environment";
+          camIn.id = camId; camIn.style.display = "none";
+          inputArea.appendChild(camIn);
+
+          const galIn = document.createElement("input");
+          galIn.type = "file"; galIn.accept = "image/*";
+          galIn.id = galId; galIn.style.display = "none";
+          inputArea.appendChild(galIn);
+
+          const camLbl = document.createElement("label");
+          camLbl.htmlFor = camId; camLbl.className = "cb-btn";
+          camLbl.style.cssText = small ? "flex:1;display:block;text-align:center;font-size:13px;padding:10px 8px;" : "display:block;text-align:center;";
+          camLbl.textContent = small ? "+ 📷 Cámara" : "📷 Tomar foto";
+
+          const galLbl = document.createElement("label");
+          galLbl.htmlFor = galId; galLbl.className = "cb-btn cb-btn-sec";
+          galLbl.style.cssText = small ? "flex:1;display:block;text-align:center;font-size:13px;padding:10px 8px;" : "display:block;text-align:center;";
+          galLbl.textContent = small ? "+ 🖼️ Galería" : "🖼️ Adjuntar foto";
+
+          if (small) {
+            const row = document.createElement("div");
+            row.style.cssText = "display:flex;gap:8px;";
+            row.appendChild(camLbl); row.appendChild(galLbl);
+            inputArea.appendChild(row);
+          } else {
+            inputArea.appendChild(camLbl); inputArea.appendChild(galLbl);
+          }
+
+          [camIn, galIn].forEach(inp => {
+            inp.addEventListener("change", e => {
+              const f = e.target.files[0]; if (!f) return;
+              fotosArr.push(f); renderFotoPanel();
+            });
+          });
+        }
+
+        if (fotosArr.length > 0) {
+          const listoBtn = document.createElement("button");
+          listoBtn.className = "cb-btn";
+          listoBtn.textContent = "Listo con las fotos";
+          listoBtn.addEventListener("click", () => {
+            formData.fotos = fotosArr.slice();
+            const n = fotosArr.length;
+            userMsg("📷 " + n + " foto" + (n > 1 ? "s" : "") + " seleccionada" + (n > 1 ? "s" : ""));
+            currentStep++; askStep();
+          });
+          inputArea.appendChild(listoBtn);
+        } else {
+          const skipBtn = document.createElement("button");
+          skipBtn.className = "cb-btn cb-btn-sec";
+          skipBtn.textContent = "Continuar sin foto";
+          skipBtn.addEventListener("click", skipStep);
+          inputArea.appendChild(skipBtn);
+        }
       }
-      document.getElementById("cb-file-cam").addEventListener("change", handleFileSelect);
-      document.getElementById("cb-file-gal").addEventListener("change", handleFileSelect);
-      document.getElementById("cb-skip").addEventListener("click", skipStep);
+
+      renderFotoPanel();
       return;
     }
     const tag = step.type === "textarea" ? "textarea" : "input";
@@ -224,13 +293,36 @@
       <button class="cb-btn" id="cb-next">Continuar</button>
       ${!step.required ? `<button class="cb-btn cb-btn-sec" id="cb-skip">Omitir</button>` : ""}`;
     const inp = document.getElementById("cb-input");
-    document.getElementById("cb-next").addEventListener("click", () => processInput(step, inp));
+    const dispatch = () => step.field === "cedula" ? cedulaCheck(step, inp) : processInput(step, inp);
+    document.getElementById("cb-next").addEventListener("click", dispatch);
     const sk = document.getElementById("cb-skip");
     if (sk) sk.addEventListener("click", skipStep);
     if (step.type !== "textarea") {
-      inp.addEventListener("keydown", e => { if (e.key === "Enter") processInput(step, inp); });
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") dispatch(); });
     }
     setTimeout(() => inp && inp.focus(), 100);
+  }
+
+  async function cedulaCheck(step, inp) {
+    const value = inp ? inp.value.trim() : "";
+    if (!value) { skipStep(); return; }
+    try {
+      const res = await fetch(`/api/check-cedula?cedula=${encodeURIComponent(value)}`);
+      const data = await res.json();
+      if (data.existe) {
+        userMsg(value);
+        formData[step.field] = value;
+        inputArea.innerHTML = "";
+        await botMsg("⚠️ Ya tenemos un registro con esa cédula.<br><br>Puedes continuar de todas formas — se creará un nuevo reporte independiente, lo cual puede ser útil si vienes de parte de un familiar distinto.", 400);
+        inputArea.innerHTML = `
+          <button class="cb-btn" id="cb-ced-ok">Continuar de todas formas</button>
+          <button class="cb-btn cb-btn-sec" id="cb-ced-no">Cancelar</button>`;
+        document.getElementById("cb-ced-ok").addEventListener("click", () => { currentStep++; askStep(); });
+        document.getElementById("cb-ced-no").addEventListener("click", () => { delete formData[step.field]; renderInput(step); });
+        return;
+      }
+    } catch (e) { /* continúa normalmente si el fetch falla */ }
+    processInput(step, inp);
   }
 
   function processInput(step, inp) {
@@ -259,7 +351,11 @@
       fd.append("numero_contacto", formData.numero_contacto || "");
       if (formData.quien_ayudo) fd.append("quien_ayudo", formData.quien_ayudo);
       if (formData.contacto_quien_ayudo) fd.append("contacto_quien_ayudo", formData.contacto_quien_ayudo);
-      if (formData.foto) fd.append("foto", formData.foto);
+      if (formData.fotos) {
+        if (formData.fotos[0]) fd.append("foto", formData.fotos[0]);
+        if (formData.fotos[1]) fd.append("foto_2", formData.fotos[1]);
+        if (formData.fotos[2]) fd.append("foto_3", formData.fotos[2]);
+      }
       const res = await fetch(API_URL + "/api/reportes/", { method: "POST", body: fd });
       if (!res.ok) throw new Error("Error " + res.status);
 

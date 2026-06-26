@@ -15,6 +15,21 @@ MAX_SIZE_KB = 500
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
 
+async def save_photo(foto: UploadFile):
+    if not foto or not foto.filename:
+        return None
+    file_bytes = await foto.read()
+    try:
+        compressed = compress_image(file_bytes)
+    except Exception:
+        return None
+    if not compressed:
+        return None
+    filename = f"{uuid.uuid4()}.jpg"
+    with open(os.path.join(UPLOAD_DIR, filename), "wb") as f:
+        f.write(compressed)
+    return f"{BASE_URL}/uploads/fotos/{filename}"
+
 def compress_image(file_bytes: bytes) -> bytes:
     img = Image.open(io.BytesIO(file_bytes))
     if img.mode in ("RGBA", "P", "LA"):
@@ -48,32 +63,46 @@ async def crear_reporte(
     contacto_quien_ayudo: str = Form(None),
     website: str = Form(None),
     foto: UploadFile = File(None),
+    foto_2: UploadFile = File(None),
+    foto_3: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
     # Honeypot: campo oculto — si viene con valor es un bot
     if website:
         return JSONResponse(status_code=200, content={"id": 0, "mensaje": "ok"})
 
-    foto_url = None
-    if foto and foto.filename:
-        file_bytes = await foto.read()
-        try:
-            compressed = compress_image(file_bytes)
-        except Exception:
-            compressed = None
-        if compressed:
-            filename = f"{uuid.uuid4()}.jpg"
-            with open(os.path.join(UPLOAD_DIR, filename), "wb") as f:
-                f.write(compressed)
-            foto_url = f"{BASE_URL}/uploads/fotos/{filename}"
+    foto_url = await save_photo(foto)
+    foto_url_2 = await save_photo(foto_2)
+    foto_url_3 = await save_photo(foto_3)
+
     persona = models.PersonaDesaparecida(
         nombres_apellidos=nombres_apellidos, cedula=cedula,
         ultima_ubicacion=ultima_ubicacion, descripcion=descripcion,
         numero_contacto=numero_contacto, quien_ayudo=quien_ayudo,
         contacto_quien_ayudo=contacto_quien_ayudo, foto_url=foto_url,
+        foto_url_2=foto_url_2, foto_url_3=foto_url_3,
         estado="desaparecido",
     )
     db.add(persona)
     db.commit()
     db.refresh(persona)
     return persona
+
+
+check_router = APIRouter(prefix="/api", tags=["utils"])
+
+@check_router.get("/check-cedula")
+@limiter.limit("20/hour")
+async def check_cedula(
+    request: Request,
+    cedula: str,
+    db: Session = Depends(get_db),
+):
+    if not cedula or not cedula.strip():
+        return {"existe": False}
+    persona = db.query(models.PersonaDesaparecida).filter(
+        models.PersonaDesaparecida.cedula == cedula
+    ).first()
+    if persona:
+        return {"existe": True, "id": persona.id}
+    return {"existe": False}

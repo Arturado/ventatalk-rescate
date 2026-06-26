@@ -116,6 +116,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
         <th>Fecha</th>
         <th>Acción</th>
         <th>Eliminar</th>
+        <th>Detalle</th>
       </tr>
     </thead>
     <tbody>
@@ -124,6 +125,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
         data-nombre="{{ p.nombres_apellidos | lower }}"
         data-cedula="{{ p.cedula or '' }}"
         data-estado="{{ p.estado }}"
+        data-id="{{ p.id }}"
       >
         <td>{{ p.id }}</td>
         <td>
@@ -157,15 +159,52 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
             Eliminar
           </button>
         </td>
+        <td>
+          <button onclick="toggleDetalle({{ p.id }}, this)"
+                  style="font-size:11px;padding:4px 10px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
+            Ver más
+          </button>
+        </td>
+      </tr>
+      <tr id="detalle-{{ p.id }}" class="detalle-row" style="display:none;">
+        <td colspan="11" style="background:#fafafa;padding:12px 18px 16px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;font-size:13px;">
+            <div>
+              <strong style="color:#374151;display:block;margin-bottom:4px;">Descripción</strong>
+              <span style="color:#6b7280;">{{ p.descripcion or 'Sin descripción' }}</span>
+            </div>
+            <div>
+              <strong style="color:#374151;display:block;margin-bottom:4px;">Quién ayuda</strong>
+              <span style="color:#6b7280;">{{ p.quien_ayudo or 'No registrado' }}</span>
+              {% if p.contacto_quien_ayudo %} — Tel: <span style="color:#6b7280;">{{ p.contacto_quien_ayudo }}</span>{% endif %}
+            </div>
+            {% if p.foto_url_2 or p.foto_url_3 %}
+            <div style="grid-column:1/-1;">
+              <strong style="color:#374151;display:block;margin-bottom:6px;">Fotos adicionales</strong>
+              <div style="display:flex;gap:8px;">
+                {% if p.foto_url_2 %}<a href="{{ p.foto_url_2 }}" target="_blank"><img src="{{ p.foto_url_2 }}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;" alt="foto 2"></a>{% endif %}
+                {% if p.foto_url_3 %}<a href="{{ p.foto_url_3 }}" target="_blank"><img src="{{ p.foto_url_3 }}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;" alt="foto 3"></a>{% endif %}
+              </div>
+            </div>
+            {% endif %}
+          </div>
+        </td>
       </tr>
       {% else %}
-      <tr><td colspan="10" style="text-align:center;color:#6b7280;padding:32px;">Sin registros</td></tr>
+      <tr><td colspan="11" style="text-align:center;color:#6b7280;padding:32px;">Sin registros</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
 
 <script>
+function toggleDetalle(id, btn) {
+  const det = document.getElementById('detalle-' + id);
+  const vis = det.style.display !== 'none';
+  det.style.display = vis ? 'none' : '';
+  btn.textContent = vis ? 'Ver más' : 'Ocultar';
+}
+
 function eliminarPersona(id, btn) {
   if (!confirm('¿Eliminar este registro? Esta acción no se puede deshacer.')) return;
   fetch('/admin/personas/' + id, { method: 'DELETE' })
@@ -189,6 +228,8 @@ function eliminarPersona(id, btn) {
                && (!c || tr.dataset.cedula.toLowerCase().includes(c))
                && (!e || tr.dataset.estado === e);
       tr.style.display = ok ? '' : 'none';
+      const det = document.getElementById('detalle-' + tr.dataset.id);
+      if (det && !ok) det.style.display = 'none';
     });
   }
 
