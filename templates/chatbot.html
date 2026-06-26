@@ -200,16 +200,20 @@
     inputArea.innerHTML = "";
     if (step.type === "file") {
       inputArea.innerHTML = `
-        <input type="file" id="cb-file" accept="image/*" capture="environment" style="display:none">
-        <label id="cb-file-label" for="cb-file">📷 Seleccionar foto</label>
+        <input type="file" id="cb-file-cam" accept="image/*" capture="environment" style="display:none">
+        <input type="file" id="cb-file-gal" accept="image/*" style="display:none">
+        <label for="cb-file-cam" class="cb-btn" style="display:block;text-align:center;">📷 Tomar foto</label>
+        <label for="cb-file-gal" class="cb-btn cb-btn-sec" style="display:block;text-align:center;">🖼️ Adjuntar foto</label>
         <div id="cb-file-preview"></div>
         <button class="cb-btn cb-btn-sec" id="cb-skip">Continuar sin foto</button>`;
-      document.getElementById("cb-file").addEventListener("change", e => {
+      function handleFileSelect(e) {
         const file = e.target.files[0]; if (!file) return;
         formData["foto"] = file;
         document.getElementById("cb-file-preview").textContent = "✅ " + file.name;
         setTimeout(() => { userMsg("📷 " + file.name); currentStep++; askStep(); }, 400);
-      });
+      }
+      document.getElementById("cb-file-cam").addEventListener("change", handleFileSelect);
+      document.getElementById("cb-file-gal").addEventListener("change", handleFileSelect);
       document.getElementById("cb-skip").addEventListener("click", skipStep);
       return;
     }

@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone
 
 import bcrypt
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -136,6 +136,27 @@ async def cambiar_estado(
         persona.estado = estado
         db.commit()
     return RedirectResponse(url="/admin/dashboard", status_code=303)
+
+# --- Eliminar persona ---
+
+@router.delete("/personas/{persona_id}")
+async def eliminar_persona(
+    persona_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+
+    persona = db.query(models.PersonaDesaparecida).filter(
+        models.PersonaDesaparecida.id == persona_id
+    ).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="No encontrado")
+    db.delete(persona)
+    db.commit()
+    return {"ok": True}
 
 # --- Export CSV ---
 

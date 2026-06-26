@@ -115,6 +115,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
         <th>Estado</th>
         <th>Fecha</th>
         <th>Acción</th>
+        <th>Eliminar</th>
       </tr>
     </thead>
     <tbody>
@@ -150,15 +151,29 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
             <button type="submit">✓</button>
           </form>
         </td>
+        <td>
+          <button onclick="eliminarPersona({{ p.id }}, this)"
+                  style="font-size:11px;padding:4px 10px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
+            Eliminar
+          </button>
+        </td>
       </tr>
       {% else %}
-      <tr><td colspan="9" style="text-align:center;color:#6b7280;padding:32px;">Sin registros</td></tr>
+      <tr><td colspan="10" style="text-align:center;color:#6b7280;padding:32px;">Sin registros</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
 
 <script>
+function eliminarPersona(id, btn) {
+  if (!confirm('¿Eliminar este registro? Esta acción no se puede deshacer.')) return;
+  fetch('/admin/personas/' + id, { method: 'DELETE' })
+    .then(r => r.json())
+    .then(data => { if (data.ok) btn.closest('tr').remove(); })
+    .catch(() => alert('Error al eliminar. Intenta de nuevo.'));
+}
+
 (function () {
   const nombre = document.getElementById('buscar-nombre');
   const cedula = document.getElementById('buscar-cedula');
