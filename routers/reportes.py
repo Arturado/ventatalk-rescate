@@ -95,6 +95,42 @@ async def crear_reporte(
 
 check_router = APIRouter(prefix="/api", tags=["utils"])
 
+@check_router.get("/buscar")
+@limiter.limit("20/hour")
+async def buscar_personas(
+    request: Request,
+    nombre: str = None,
+    cedula: str = None,
+    db: Session = Depends(get_db),
+):
+    nombre = nombre.strip() if nombre else ""
+    cedula = cedula.strip() if cedula else ""
+    if not nombre and not cedula:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "Debe proporcionar al menos un parámetro: nombre o cedula"},
+        )
+    q = db.query(models.PersonaDesaparecida)
+    if nombre:
+        q = q.filter(models.PersonaDesaparecida.nombres_apellidos.ilike(f"%{nombre}%"))
+    if cedula:
+        q = q.filter(models.PersonaDesaparecida.cedula == cedula)
+    personas = q.order_by(models.PersonaDesaparecida.created_at.desc()).limit(10).all()
+    return [
+        {
+            "id": p.id,
+            "nombres_apellidos": p.nombres_apellidos,
+            "cedula": p.cedula,
+            "ultima_ubicacion": p.ultima_ubicacion,
+            "estado": p.estado,
+            "tipo_reporte": p.tipo_reporte,
+            "foto_url": p.foto_url,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        }
+        for p in personas
+    ]
+
+
 @check_router.get("/check-cedula")
 @limiter.limit("20/hour")
 async def check_cedula(
