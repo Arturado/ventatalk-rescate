@@ -67,8 +67,8 @@
     .rw-btn-tipo-enc { width:100%; padding:12px; background:#16a34a; color:white; border:none; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; text-align:left; line-height:1.4; transition:background .15s; }
     .rw-btn-tipo-enc:hover { background:#15803d; }
     .rw-btn-grid { display:flex; gap:6px; flex-wrap:wrap; }
-    .rw-btn-opt { flex:1 1 auto; min-width:0; padding:8px 10px; background:white; color:#374151; border:1.5px solid #d1d5db; border-radius:8px; font-size:12.5px; font-weight:600; cursor:pointer; transition:all .15s; text-align:center; }
-    .rw-btn-opt:hover { border-color:#dc2626; background:#fef2f2; color:#dc2626; }
+    .rw-btn-opt { display:block; width:100%; padding:10px 14px; background:white; color:#dc2626; border:2px solid #dc2626; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; text-align:left; margin-bottom:6px; transition:background .15s, color .15s; }
+    .rw-btn-opt:hover { background:#dc2626; color:white; }
     .rw-btn-fallecido { width:100%; padding:8px 10px; margin-top:4px; background:transparent; color:#9ca3af; border:1.5px solid #e5e7eb; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; transition:all .15s; }
     .rw-btn-fallecido:hover { border-color:#9ca3af; color:#374151; }
     .rw-success { text-align:center; padding:28px 20px; display:flex; flex-direction:column; align-items:center; gap:10px; }
