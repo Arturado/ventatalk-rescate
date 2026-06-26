@@ -1,0 +1,12 @@
+{
+  "name": "Venezuela Rescate — Reportar",
+  "short_name": "VE Rescate",
+  "description": "Reporta personas desaparecidas o encontradas post-sismo",
+  "start_url": "/chatbot",
+  "scope": "/chatbot",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#dc2626",
+  "icons": []
+}

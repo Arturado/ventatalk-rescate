@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Reportar — Venezuela Rescate</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#dc2626">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="VE Rescate">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
@@ -132,6 +138,7 @@
     }
     .cb-success-icon { font-size: 64px; }
     .cb-success h2 { font-size: 22px; color: #16a34a; font-weight: 800; }
+    .cb-success h4 { font-size: 20px; color: #16a34a; font-weight: 800; }
     .cb-success p { font-size: 15px; color: #6b7280; line-height: 1.65; max-width: 320px; }
 
     @media (min-width: 700px) {
@@ -175,6 +182,145 @@
 
 <div id="cb-messages"></div>
 <div id="cb-input-area"></div>
+
+<!-- CAMBIO 3: IndexedDB — dos stores (draft + queue) -->
+<script>
+const DB_NAME = 'vrescate-queue';
+const DB_VERSION = 2;
+const STORE_PENDING = 'reportes_pendientes';
+const STORE_DRAFT = 'reporte_draft';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_PENDING))
+        db.createObjectStore(STORE_PENDING, { keyPath: 'id', autoIncrement: true });
+      if (!db.objectStoreNames.contains(STORE_DRAFT))
+        db.createObjectStore(STORE_DRAFT, { keyPath: 'key' });
+    };
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// ── Draft (progreso paso a paso) ──────────────────────────────
+
+async function saveDraft(stepIndex, formDataObj) {
+  const db = await openDB();
+  const serializable = { ...formDataObj };
+  for (const key of ['foto', 'foto_2', 'foto_3']) {
+    if (serializable[key] instanceof File) {
+      serializable[key + '_b64'] = await fileToBase64(serializable[key]);
+      serializable[key + '_name'] = serializable[key].name;
+      delete serializable[key];
+    }
+  }
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_DRAFT, 'readwrite');
+    tx.objectStore(STORE_DRAFT).put({
+      key: 'current',
+      stepIndex,
+      formData: serializable,
+      savedAt: new Date().toISOString()
+    });
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getDraft() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_DRAFT, 'readonly');
+    const req = tx.objectStore(STORE_DRAFT).get('current');
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function clearDraft() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_DRAFT, 'readwrite');
+    tx.objectStore(STORE_DRAFT).delete('current');
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ── Queue (reportes completos pendientes de envío) ────────────
+
+async function saveToQueue(formDataObj) {
+  const db = await openDB();
+  const serializable = { ...formDataObj };
+  for (const key of ['foto', 'foto_2', 'foto_3']) {
+    if (serializable[key] instanceof File) {
+      serializable[key + '_b64'] = await fileToBase64(serializable[key]);
+      serializable[key + '_name'] = serializable[key].name;
+      delete serializable[key];
+    }
+  }
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_PENDING, 'readwrite');
+    tx.objectStore(STORE_PENDING).add({
+      ...serializable,
+      savedAt: new Date().toISOString()
+    });
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getPendingReportes() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_PENDING, 'readonly');
+    const req = tx.objectStore(STORE_PENDING).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function deleteFromQueue(id) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_PENDING, 'readwrite');
+    tx.objectStore(STORE_PENDING).delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ── Utils ─────────────────────────────────────────────────────
+
+async function fileToBase64(file) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function base64ToFile(base64, filename) {
+  const res = await fetch(base64);
+  const blob = await res.blob();
+  return new File([blob], filename, { type: blob.type });
+}
+
+async function reconstructFiles(data) {
+  const out = { ...data };
+  for (const key of ['foto', 'foto_2', 'foto_3']) {
+    if (out[key + '_b64']) {
+      out[key] = await base64ToFile(out[key + '_b64'], out[key + '_name'] || key + '.jpg');
+      delete out[key + '_b64'];
+      delete out[key + '_name'];
+    }
+  }
+  return out;
+}
+</script>
 
 <script>
 (function () {
@@ -286,6 +432,7 @@
 
   async function seleccionarTipo(tipo) {
     tipoReporte = tipo;
+    formData._tipo_reporte = tipo;
     inputArea.innerHTML = "";
     userMsg(tipo === "desaparecido" ? "🔴 Reportar desaparecido" : "🟢 Reportar persona encontrada");
     await botMsg(tipo === "desaparecido"
@@ -321,7 +468,9 @@
       b.addEventListener("click", () => {
         formData[step.field] = opt.value;
         userMsg(opt.label);
-        currentStep++; askStep();
+        currentStep++;
+        saveDraft(currentStep, formData).catch(() => {});
+        askStep();
       });
       grid.appendChild(b);
     });
@@ -337,7 +486,9 @@
     btnNo.addEventListener("click", () => {
       userMsg("No tiene documentos / No la sé");
       formData.sin_documentos = true;
-      currentStep++; askStep();
+      currentStep++;
+      saveDraft(currentStep, formData).catch(() => {});
+      askStep();
     });
     inputArea.appendChild(btnSi);
     inputArea.appendChild(btnNo);
@@ -354,7 +505,7 @@
     const inp = document.getElementById("cb-input");
     const dispatch = () => cedulaCheck({ field: "cedula" }, inp);
     document.getElementById("cb-next").addEventListener("click", dispatch);
-    document.getElementById("cb-skip").addEventListener("click", () => { currentStep++; askStep(); });
+    document.getElementById("cb-skip").addEventListener("click", () => { currentStep++; saveDraft(currentStep, formData).catch(() => {}); askStep(); });
     inp.addEventListener("keydown", e => { if (e.key === "Enter") dispatch(); });
     setTimeout(() => inp && inp.focus(), 100);
   }
@@ -372,7 +523,10 @@
       b.className = "cb-btn-opt"; b.textContent = opt.label;
       b.addEventListener("click", () => {
         formData.estado_clinico = opt.value;
-        userMsg(opt.label); currentStep++; askStep();
+        userMsg(opt.label);
+        currentStep++;
+        saveDraft(currentStep, formData).catch(() => {});
+        askStep();
       });
       grid.appendChild(b);
     });
@@ -382,7 +536,10 @@
     fallBtn.addEventListener("click", () => {
       if (confirm("¿Confirmas que la persona ha fallecido? Esta información es sensible.")) {
         formData.estado_clinico = "fallecido";
-        userMsg("Fallecido/a"); currentStep++; askStep();
+        userMsg("Fallecido/a");
+        currentStep++;
+        saveDraft(currentStep, formData).catch(() => {});
+        askStep();
       }
     });
     inputArea.appendChild(fallBtn);
@@ -460,10 +617,14 @@
         const listoBtn = document.createElement("button");
         listoBtn.className = "cb-btn"; listoBtn.textContent = "Listo con las fotos";
         listoBtn.addEventListener("click", () => {
-          formData.fotos = fotosArr.slice();
+          if (fotosArr[0]) formData.foto   = fotosArr[0];
+          if (fotosArr[1]) formData.foto_2 = fotosArr[1];
+          if (fotosArr[2]) formData.foto_3 = fotosArr[2];
           const n = fotosArr.length;
           userMsg("📷 " + n + " foto" + (n > 1 ? "s" : "") + " seleccionada" + (n > 1 ? "s" : ""));
-          currentStep++; askStep();
+          currentStep++;
+          saveDraft(currentStep, formData).catch(() => {});
+          askStep();
         });
         inputArea.appendChild(listoBtn);
       } else {
@@ -478,7 +639,7 @@
 
   async function cedulaCheck(step, inp) {
     const value = inp ? inp.value.trim() : "";
-    if (!value) { currentStep++; askStep(); return; }
+    if (!value) { currentStep++; saveDraft(currentStep, formData).catch(() => {}); askStep(); return; }
     try {
       const res = await fetch(`/api/check-cedula?cedula=${encodeURIComponent(value)}`);
       const data = await res.json();
@@ -490,7 +651,7 @@
         inputArea.innerHTML = `
           <button class="cb-btn" id="cb-ced-ok">Continuar de todas formas</button>
           <button class="cb-btn cb-btn-sec" id="cb-ced-no">Cancelar</button>`;
-        document.getElementById("cb-ced-ok").addEventListener("click", () => { currentStep++; askStep(); });
+        document.getElementById("cb-ced-ok").addEventListener("click", () => { currentStep++; saveDraft(currentStep, formData).catch(() => {}); askStep(); });
         document.getElementById("cb-ced-no").addEventListener("click", () => { delete formData[step.field]; handleDocSi(); });
         return;
       }
@@ -506,65 +667,268 @@
       return;
     }
     if (value) { formData[step.field] = value; userMsg(value); }
-    currentStep++; askStep();
+    currentStep++;
+    saveDraft(currentStep, formData).catch(() => {});
+    askStep();
   }
 
-  function skipStep() { currentStep++; askStep(); }
+  function skipStep() { currentStep++; saveDraft(currentStep, formData).catch(() => {}); askStep(); }
+
+  // ── CAMBIO 6: submitForm con soporte offline ──────────────────
 
   async function submitForm() {
     setProgress(STEPS.length);
     inputArea.innerHTML = "";
-    await botMsg("Enviando reporte... ⏳", 500);
+    await clearDraft();
+
+    if (navigator.onLine) {
+      await botMsg('Enviando tu reporte... ⏳', 500);
+      const sent = await trySend(formData);
+      if (sent) { showSuccess(); return; }
+    }
+
+    await saveToQueue(formData);
+    await registerSync();
+    showOfflineSuccess();
+  }
+
+  async function trySend(data) {
     try {
       const fd = new FormData();
-      fd.append("nombres_apellidos", formData.nombres_apellidos || "");
-      if (formData.cedula) fd.append("cedula", formData.cedula);
-      fd.append("ultima_ubicacion", formData.ultima_ubicacion || "");
-      if (formData.descripcion) fd.append("descripcion", formData.descripcion);
-      fd.append("numero_contacto", formData.numero_contacto || "");
-      if (formData.quien_ayudo) fd.append("quien_ayudo", formData.quien_ayudo);
-      if (formData.contacto_quien_ayudo) fd.append("contacto_quien_ayudo", formData.contacto_quien_ayudo);
-      fd.append("tipo_reporte", tipoReporte);
-      if (formData.tipo_reportante) fd.append("tipo_reportante", formData.tipo_reportante);
-      if (formData.sexo) fd.append("sexo", formData.sexo);
-      if (formData.edad_aproximada) fd.append("edad_aproximada", formData.edad_aproximada);
-      if (formData.contextura) fd.append("contextura", formData.contextura);
-      if (formData.cabello) fd.append("cabello", formData.cabello);
-      if (formData.ropa_aproximada) fd.append("ropa_aproximada", formData.ropa_aproximada);
-      if (formData.estado_clinico) fd.append("estado_clinico", formData.estado_clinico);
-      fd.append("sin_documentos", formData.sin_documentos ? "true" : "false");
-      if (formData.fotos) {
-        if (formData.fotos[0]) fd.append("foto", formData.fotos[0]);
-        if (formData.fotos[1]) fd.append("foto_2", formData.fotos[1]);
-        if (formData.fotos[2]) fd.append("foto_3", formData.fotos[2]);
+      const plain = { ...data };
+      for (const key of ['foto', 'foto_2', 'foto_3']) {
+        if (plain[key] instanceof File) {
+          fd.append(key, plain[key]);
+          delete plain[key];
+        }
       }
-      const res = await fetch(API_URL + "/api/reportes/", { method: "POST", body: fd });
-      if (!res.ok) throw new Error("Error " + res.status);
-      msgs.innerHTML = ""; inputArea.innerHTML = ""; bar.style.width = "100%";
-      const ok = document.createElement("div");
-      ok.className = "cb-success";
-      ok.innerHTML = `
-        <div class="cb-success-icon">✅</div>
-        <h2>¡Reporte enviado!</h2>
-        <p>${tipoReporte === "encontrado_vivo"
-          ? "¡Gracias por reportar a esta persona! Los equipos la ubicarán con su familia."
-          : "Tu reporte está registrado y disponible para los equipos de rescate."} Que Dios los guíe. 🙏🇻🇪</p>`;
-      msgs.appendChild(ok);
-      inputArea.innerHTML = `<button class="cb-btn cb-btn-sec" id="cb-new">Hacer otro reporte</button>`;
-      document.getElementById("cb-new").addEventListener("click", () => {
-        currentStep = 0; formData = {}; tipoReporte = ""; STEPS = [];
-        msgs.innerHTML = ""; bar.style.width = "0%";
-        startChat();
+      Object.entries(plain).forEach(([k, v]) => {
+        if (!k.startsWith('_') && v !== null && v !== undefined) fd.append(k, v);
       });
-    } catch (err) {
-      await botMsg("❌ Error al enviar. Intenta de nuevo.");
-      inputArea.innerHTML = `<button class="cb-btn" id="cb-retry">Reintentar</button>`;
-      document.getElementById("cb-retry").addEventListener("click", submitForm);
+      const res = await fetch('/api/reportes/', { method: 'POST', body: fd });
+      return res.ok;
+    } catch {
+      return false;
     }
   }
 
-  startChat();
+  async function registerSync() {
+    if ('serviceWorker' in navigator && 'SyncManager' in window) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        await reg.sync.register('sync-reportes');
+      } catch {}
+    }
+  }
+
+  function showSuccess() {
+    msgs.innerHTML = '';
+    bar.style.width = '100%';
+    const el = document.createElement('div');
+    el.className = 'cb-success';
+    el.innerHTML = `
+      <div class="cb-success-icon">✅</div>
+      <h4>¡Reporte enviado!</h4>
+      <p>Tu reporte está registrado y disponible para los equipos de rescate. Que Dios los guíe. 🙏🇻🇪</p>
+    `;
+    msgs.appendChild(el);
+    inputArea.innerHTML = `<button class="cb-btn" onclick="resetChat()">Reportar otra persona</button>`;
+  }
+
+  function showOfflineSuccess() {
+    msgs.innerHTML = '';
+    bar.style.width = '100%';
+    const el = document.createElement('div');
+    el.className = 'cb-success';
+    el.innerHTML = `
+      <div class="cb-success-icon">📡</div>
+      <h4>Reporte guardado en tu dispositivo</h4>
+      <p>Se enviará automáticamente cuando vuelvas a abrir esta página con conexión. <strong>No necesitas hacer nada más.</strong></p>
+      <p style="font-size:12px;color:#6b7280;margin-top:8px">
+        Puedes cerrar el navegador con tranquilidad. La próxima vez que abras esta página con señal, tu reporte llegará a nuestro equipo.
+      </p>
+    `;
+    msgs.appendChild(el);
+    inputArea.innerHTML = `<button class="cb-btn" onclick="resetChat()">Reportar otra persona</button>`;
+  }
+
+  function resetChat() {
+    currentStep = 0;
+    formData = {};
+    tipoReporte = "";
+    STEPS = [];
+    msgs.innerHTML = '';
+    bar.style.width = '0%';
+    bootChat();
+  }
+
+  // ── CAMBIO 7: processPendingQueue + toasts ────────────────────
+
+  async function processPendingQueue(pending) {
+    if (!pending) pending = await getPendingReportes();
+    if (!pending.length) return;
+
+    showSyncToast(pending.length);
+    let enviados = 0;
+
+    for (const reporte of pending) {
+      try {
+        const data = await reconstructFiles({ ...reporte });
+        delete data.id;
+        delete data.savedAt;
+        const sent = await trySend(data);
+        if (sent) { await deleteFromQueue(reporte.id); enviados++; }
+      } catch {}
+    }
+
+    hideSyncToast();
+    if (enviados > 0) showSentToast(enviados);
+  }
+
+  function showSyncToast(n) {
+    let t = document.getElementById('sync-toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'sync-toast';
+      t.style.cssText = `position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+        background:#1e293b;color:white;padding:10px 20px;border-radius:99px;
+        font-size:13px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.3);`;
+      document.body.appendChild(t);
+    }
+    t.textContent = `📡 Enviando ${n} reporte${n>1?'s':''} guardado${n>1?'s':''}...`;
+    t.style.display = 'block';
+  }
+
+  function hideSyncToast() {
+    const t = document.getElementById('sync-toast');
+    if (t) t.style.display = 'none';
+  }
+
+  function showSentToast(n) {
+    const t = document.createElement('div');
+    t.style.cssText = `position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+      background:#16a34a;color:white;padding:10px 20px;border-radius:99px;
+      font-size:13px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.3);`;
+    t.textContent = `✅ ${n} reporte${n>1?'s':''} enviado${n>1?'s':''}`;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  }
+
+  // ── CAMBIO 5: bootChat + showDraftPrompt ──────────────────────
+
+  async function bootChat() {
+    if (navigator.onLine) {
+      const pending = await getPendingReportes();
+      if (pending.length > 0) {
+        await processPendingQueue(pending);
+      }
+    }
+
+    const draft = await getDraft();
+    if (draft) {
+      showDraftPrompt(draft);
+    } else {
+      startChat();
+    }
+  }
+
+  function showDraftPrompt(draft) {
+    msgs.innerHTML = '';
+    const minutesAgo = Math.round((Date.now() - new Date(draft.savedAt)) / 60000);
+    const timeStr = minutesAgo < 60
+      ? `hace ${minutesAgo} minuto${minutesAgo !== 1 ? 's' : ''}`
+      : `hace ${Math.round(minutesAgo/60)} hora${Math.round(minutesAgo/60) !== 1 ? 's' : ''}`;
+
+    const el = document.createElement('div');
+    el.className = 'cb-bot';
+    el.innerHTML = `
+      📋 <strong>Tienes un reporte incompleto</strong> guardado ${timeStr}.<br>
+      ¿Deseas continuarlo o empezar uno nuevo?
+    `;
+    msgs.appendChild(el);
+
+    inputArea.innerHTML = `
+      <button class="cb-btn" id="btn-continuar-draft">Continuar reporte guardado</button>
+      <button class="cb-btn cb-btn-sec" id="btn-nuevo">Empezar reporte nuevo</button>
+    `;
+
+    document.getElementById('btn-continuar-draft').addEventListener('click', async () => {
+      formData = await reconstructFiles(draft.formData);
+      tipoReporte = formData._tipo_reporte || 'desaparecido';
+      STEPS = buildSteps();
+      currentStep = draft.stepIndex;
+      inputArea.innerHTML = '';
+      const botEl = document.createElement('div');
+      botEl.className = 'cb-bot';
+      botEl.textContent = 'Continuando tu reporte...';
+      msgs.appendChild(botEl);
+      setTimeout(() => askStep(), 400);
+    });
+
+    document.getElementById('btn-nuevo').addEventListener('click', async () => {
+      await clearDraft();
+      formData = {};
+      tipoReporte = "";
+      STEPS = [];
+      currentStep = 0;
+      msgs.innerHTML = '';
+      startChat();
+    });
+  }
+
+  // ── CAMBIO 8: listeners de conexión y SW ──────────────────────
+
+  window.addEventListener('online', () => processPendingQueue());
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', e => {
+      if (e.data?.type === 'SYNC_NOW') processPendingQueue();
+    });
+  }
+
+  bootChat();
 })();
+</script>
+
+<!-- CAMBIO 9: Banner instalar PWA -->
+<script>
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const banner = document.createElement('div');
+  banner.id = 'install-banner';
+  banner.style.cssText = `position:fixed;top:0;left:0;right:0;background:#1e293b;
+    color:white;padding:10px 16px;display:flex;align-items:center;
+    justify-content:space-between;font-size:13px;z-index:9999;`;
+  banner.innerHTML = `
+    <span>📲 Instala esta app para usarla sin internet</span>
+    <div style="display:flex;gap:8px">
+      <button onclick="installApp()" style="background:#dc2626;color:white;border:none;
+        padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px">Instalar</button>
+      <button onclick="this.closest('#install-banner').remove()"
+        style="background:transparent;color:#94a3b8;border:none;cursor:pointer;font-size:18px">×</button>
+    </div>
+  `;
+  document.body.prepend(banner);
+});
+
+async function installApp() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  document.getElementById('install-banner')?.remove();
+}
+</script>
+
+<!-- CAMBIO 10: Registro del Service Worker -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
