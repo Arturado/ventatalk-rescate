@@ -34,7 +34,12 @@
   }
 
   const css = `
-    #rw-root button { all: unset; box-sizing: border-box; }
+    #rw-root .rw-btn,
+    #rw-root .rw-btn-sec,
+    #rw-root .rw-btn-opt,
+    #rw-root .rw-btn-tipo-des,
+    #rw-root .rw-btn-tipo-enc,
+    #rw-root .rw-btn-fallecido { all: unset; box-sizing: border-box; cursor: pointer; }
     #rw-root * { box-sizing:border-box; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; margin:0; padding:0; }
     #rw-fab { position:fixed; bottom:24px; right:24px; z-index:99998; width:64px; height:64px; border-radius:50%; background:#dc2626; border:none; cursor:pointer; box-shadow:0 4px 24px rgba(220,38,38,.5); display:flex; align-items:center; justify-content:center; font-size:28px; transition:transform .2s; }
     #rw-fab:hover { transform:scale(1.1); }
