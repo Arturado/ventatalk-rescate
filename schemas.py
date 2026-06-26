@@ -17,5 +17,13 @@ class PersonaResponse(BaseModel):
     estado: str = "desaparecido"
     tipo_reporte: str = "desaparecido"
     created_at: datetime
+    tipo_reportante: Optional[str] = None
+    sexo: Optional[str] = None
+    edad_aproximada: Optional[str] = None
+    contextura: Optional[str] = None
+    cabello: Optional[str] = None
+    ropa_aproximada: Optional[str] = None
+    estado_clinico: Optional[str] = None
+    sin_documentos: bool = False
 
     model_config = {"from_attributes": True}

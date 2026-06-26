@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text
+from sqlalchemy import Boolean, Column, Integer, String, DateTime, Text
 from sqlalchemy.sql import func
 from database import Base
 
@@ -18,6 +18,14 @@ class PersonaDesaparecida(Base):
     estado = Column(String(20), nullable=False, default="desaparecido")
     tipo_reporte = Column(String(20), nullable=False, default="desaparecido")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    tipo_reportante = Column(String(30), nullable=True)
+    sexo = Column(String(20), nullable=True)
+    edad_aproximada = Column(String(20), nullable=True)
+    contextura = Column(String(20), nullable=True)
+    cabello = Column(String(20), nullable=True)
+    ropa_aproximada = Column(String(200), nullable=True)
+    estado_clinico = Column(String(30), nullable=True)
+    sin_documentos = Column(Boolean, nullable=False, default=False)
 
 class AdminUser(Base):
     __tablename__ = "admin_users"

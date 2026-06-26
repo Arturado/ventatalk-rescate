@@ -1,11 +1,15 @@
 import os
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 import models, schemas
 from database import get_db
 
 router = APIRouter(prefix="/api/personas", tags=["personas"])
+matches_router = APIRouter(prefix="/api/matches", tags=["matches"])
+limiter = Limiter(key_func=get_remote_address)
 
 def verify_api_key(x_api_key: str = Header(...)):
     expected = os.getenv("API_KEY")
@@ -19,6 +23,11 @@ def listar_personas(
     cedula: Optional[str] = Query(None),
     estado: Optional[str] = Query(None),
     tipo_reporte: Optional[str] = Query(None),
+    tipo_reportante: Optional[str] = Query(None),
+    sin_documentos: Optional[bool] = Query(None),
+    estado_clinico: Optional[str] = Query(None),
+    sexo: Optional[str] = Query(None),
+    edad_aproximada: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
@@ -33,6 +42,16 @@ def listar_personas(
         query = query.filter(models.PersonaDesaparecida.estado == estado)
     if tipo_reporte:
         query = query.filter(models.PersonaDesaparecida.tipo_reporte == tipo_reporte)
+    if tipo_reportante:
+        query = query.filter(models.PersonaDesaparecida.tipo_reportante == tipo_reportante)
+    if sin_documentos is not None:
+        query = query.filter(models.PersonaDesaparecida.sin_documentos == sin_documentos)
+    if estado_clinico:
+        query = query.filter(models.PersonaDesaparecida.estado_clinico == estado_clinico)
+    if sexo:
+        query = query.filter(models.PersonaDesaparecida.sexo == sexo)
+    if edad_aproximada:
+        query = query.filter(models.PersonaDesaparecida.edad_aproximada == edad_aproximada)
     return query.order_by(models.PersonaDesaparecida.created_at.desc()).offset(skip).limit(limit).all()
 
 @router.get("/{persona_id}", response_model=schemas.PersonaResponse)
@@ -41,3 +60,59 @@ def obtener_persona(persona_id: int, db: Session = Depends(get_db), _: str = Dep
     if not persona:
         raise HTTPException(status_code=404, detail="No encontrado")
     return persona
+
+
+@matches_router.get("/posibles")
+@limiter.limit("30/hour")
+def posibles_matches(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    desaparecidos = db.query(models.PersonaDesaparecida).filter(
+        models.PersonaDesaparecida.tipo_reporte == "desaparecido",
+        models.PersonaDesaparecida.estado == "desaparecido",
+    ).all()
+
+    encontrados = db.query(models.PersonaDesaparecida).filter(
+        models.PersonaDesaparecida.tipo_reporte == "encontrado_vivo",
+        models.PersonaDesaparecida.estado != "encontrado",
+    ).all()
+
+    results = []
+    for d in desaparecidos:
+        for e in encontrados:
+            score = 0
+            criterios = []
+
+            if d.ultima_ubicacion and e.ultima_ubicacion:
+                d_words = {w.lower() for w in d.ultima_ubicacion.split() if len(w) > 3}
+                e_words = {w.lower() for w in e.ultima_ubicacion.split() if len(w) > 3}
+                if d_words & e_words:
+                    score += 1
+                    criterios.append("zona")
+
+            if d.sexo and e.sexo and d.sexo == e.sexo:
+                score += 1
+                criterios.append("sexo")
+
+            if d.edad_aproximada and e.edad_aproximada and d.edad_aproximada == e.edad_aproximada:
+                score += 1
+                criterios.append("edad")
+
+            if (d.cedula and e.cedula
+                    and not d.sin_documentos and not e.sin_documentos
+                    and d.cedula == e.cedula):
+                score += 1
+                criterios.append("cedula")
+
+            if score >= 2:
+                results.append({
+                    "score": score,
+                    "desaparecido": schemas.PersonaResponse.model_validate(d),
+                    "encontrado": schemas.PersonaResponse.model_validate(e),
+                    "criterios_match": criterios,
+                })
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return results[:20]

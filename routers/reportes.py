@@ -76,6 +76,14 @@ async def crear_reporte(
     quien_ayudo: str = Form(None),
     contacto_quien_ayudo: str = Form(None),
     tipo_reporte: str = Form("desaparecido"),
+    tipo_reportante: str = Form(None),
+    sexo: str = Form(None),
+    edad_aproximada: str = Form(None),
+    contextura: str = Form(None),
+    cabello: str = Form(None),
+    ropa_aproximada: str = Form(None),
+    estado_clinico: str = Form(None),
+    sin_documentos: bool = Form(False),
     website: str = Form(None),
     foto: UploadFile = File(None),
     foto_2: UploadFile = File(None),
@@ -106,6 +114,10 @@ async def crear_reporte(
         contacto_quien_ayudo=contacto_quien_ayudo, foto_url=foto_url,
         foto_url_2=foto_url_2, foto_url_3=foto_url_3,
         estado="desaparecido", tipo_reporte=tipo_reporte,
+        tipo_reportante=tipo_reportante, sexo=sexo,
+        edad_aproximada=edad_aproximada, contextura=contextura,
+        cabello=cabello, ropa_aproximada=ropa_aproximada,
+        estado_clinico=estado_clinico, sin_documentos=sin_documentos,
     )
     db.add(persona)
     db.commit()
@@ -184,6 +196,10 @@ async def feed_publico(
     db: Session = Depends(get_db),
 ):
     q = db.query(models.PersonaDesaparecida)
+    q = q.filter(or_(
+        models.PersonaDesaparecida.estado_clinico != "fallecido",
+        models.PersonaDesaparecida.estado_clinico == None,
+    ))
     if estado:
         q = q.filter(models.PersonaDesaparecida.estado == estado)
     if tipo_reporte:
@@ -201,6 +217,14 @@ async def feed_publico(
             "estado": p.estado,
             "tipo_reporte": p.tipo_reporte,
             "created_at": p.created_at.isoformat() if p.created_at else None,
+            "tipo_reportante": p.tipo_reportante,
+            "sexo": p.sexo,
+            "edad_aproximada": p.edad_aproximada,
+            "contextura": p.contextura,
+            "cabello": p.cabello,
+            "ropa_aproximada": p.ropa_aproximada,
+            "estado_clinico": p.estado_clinico,
+            "sin_documentos": p.sin_documentos,
         }
         for p in personas
     ]

@@ -398,6 +398,7 @@
       text-transform: uppercase;
       letter-spacing: .04em;
       z-index: 2;
+      transition: background-color 0.5s, color 0.5s, border-color 0.5s;
     }
     .feed-badge-red   { background: rgba(254,242,242,.95); color: #dc2626; border: 1px solid #fecaca; }
     .feed-badge-green { background: rgba(240,253,244,.95); color: #16a34a; border: 1px solid #bbf7d0; }
@@ -950,6 +951,7 @@
 
   /* ---- FEED ---- */
   var _feedAll    = [];
+  var _feedById   = {};
   var _feedFilter = 'todos';
   var _feedSkip   = 0;
   var _lbMap      = {};
@@ -963,7 +965,14 @@
       var res = await fetch('/api/feed?skip=' + skip);
       if (!res.ok) throw new Error('err');
       var data = await res.json();
-      _feedAll  = skip === 0 ? data : _feedAll.concat(data);
+      if (skip === 0) {
+        _feedAll = data;
+        _feedById = {};
+        data.forEach(function(p) { _feedById[p.id] = p; });
+      } else {
+        _feedAll = _feedAll.concat(data);
+        data.forEach(function(p) { _feedById[p.id] = p; });
+      }
       _feedSkip = skip + data.length;
       renderFeedGrid();
       var loadEl = document.getElementById('feed-loading');
@@ -1037,7 +1046,7 @@
         phoneSVG() + escHtml(p.numero_contacto) + '</a>'
       : '';
 
-    return '<div class="feed-card" style="cursor:pointer" onclick="openLightbox(_lbMap[' + idx + '])">' +
+    return '<div class="feed-card" data-feed-id="' + p.id + '" style="cursor:pointer" onclick="openLightbox(_lbMap[' + idx + '])">' +
       '<div class="feed-card-photo-wrap">' + badge + photoHtml + '</div>' +
       '<div class="feed-card-body">' +
         '<div class="feed-card-name">' + escHtml(p.nombres_apellidos) + '</div>' +
@@ -1057,6 +1066,57 @@
   }
 
   fetchFeed(0);
+  startFeedPolling();
+
+  /* ---- FEED POLLING ---- */
+  var _pollTimer = null;
+
+  function startFeedPolling() {
+    if (_pollTimer) return;
+    _pollTimer = setInterval(pollFeed, 30000);
+  }
+
+  function stopFeedPolling() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  }
+
+  async function pollFeed() {
+    try {
+      var res = await fetch('/api/feed?skip=0');
+      if (!res.ok) return;
+      var fresh = await res.json();
+      var anyChanged = false;
+      fresh.forEach(function(p) {
+        var old = _feedById[p.id];
+        if (!old) return;
+        if (old.estado !== p.estado) {
+          anyChanged = true;
+          _feedById[p.id] = p;
+          var idx = _feedAll.findIndex(function(x) { return x.id === p.id; });
+          if (idx !== -1) _feedAll[idx] = p;
+          var card = document.querySelector('[data-feed-id="' + p.id + '"]');
+          if (card) {
+            var badgeEl = card.querySelector('.feed-badge');
+            if (badgeEl) {
+              var isLoc = p.estado === 'encontrado' || p.tipo_reporte === 'encontrado_vivo';
+              if (isLoc) {
+                badgeEl.className = 'feed-badge feed-badge-green';
+                badgeEl.textContent = 'Localizado';
+              } else if (p.estado === 'desaparecido') {
+                badgeEl.className = 'feed-badge feed-badge-red';
+                badgeEl.textContent = 'Sin contacto';
+              }
+            }
+          }
+        }
+      });
+      if (anyChanged) fetchStats();
+    } catch (e) {}
+  }
+
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) { stopFeedPolling(); } else { startFeedPolling(); }
+  });
 
   /* ---- LIGHTBOX ---- */
   function openLightbox(p) {
