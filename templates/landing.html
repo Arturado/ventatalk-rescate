@@ -441,6 +441,133 @@
       margin-right: 8px;
     }
 
+    /* CARD TEL LINK */
+    .card-tel {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #dc2626;
+      font-weight: 500;
+      font-size: 13px;
+      text-decoration: none;
+      margin-top: 6px;
+    }
+    .card-tel:hover { opacity: .8; }
+
+    /* LIGHTBOX */
+    .lb-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.85);
+      z-index: 9990;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .lb-overlay.active { display: flex; }
+    .lb-panel {
+      background: #fff;
+      border-radius: 16px;
+      max-width: 480px;
+      width: 100%;
+      position: relative;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .lb-close {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(0,0,0,.55);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+    .lb-close:hover { background: rgba(0,0,0,.8); }
+    .lb-photo-wrap img {
+      width: 100%;
+      max-height: 320px;
+      object-fit: contain;
+      display: block;
+      background: #f3f4f6;
+    }
+    .lb-photo-initials {
+      width: 100%;
+      height: 200px;
+      background: #fef9c3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 64px;
+      font-weight: 800;
+      color: #92400e;
+    }
+    .lb-info { padding: 20px 20px 24px; }
+    .lb-badge {
+      display: inline-block;
+      padding: 3px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: 12px;
+    }
+    .lb-badge-red   { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .lb-badge-green { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .lb-name {
+      font-size: 18px;
+      font-weight: 600;
+      color: #111;
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+    .lb-meta {
+      font-size: 14px;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+    .lb-desc {
+      font-size: 14px;
+      color: #6b7280;
+      margin: 8px 0;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .lb-tel-btn {
+      display: block;
+      width: 100%;
+      margin-top: 16px;
+      background: #dc2626;
+      color: white;
+      text-decoration: none;
+      border-radius: 10px;
+      padding: 14px 20px;
+      font-size: 15px;
+      font-weight: 700;
+      text-align: center;
+    }
+    .lb-tel-btn:hover { background: #b91c1c; }
+    .lb-tel-hint {
+      font-size: 11px;
+      color: #9ca3af;
+      text-align: center;
+      margin-top: 6px;
+    }
+    @media (max-width: 540px) {
+      .lb-overlay { align-items: flex-end; padding: 0; }
+      .lb-panel { border-radius: 16px 16px 0 0; max-height: 92vh; }
+    }
+
     /* COMO FUNCIONA */
     .steps {
       padding: 64px 24px;
@@ -745,6 +872,10 @@
     return '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
   }
 
+  function phoneSVG() {
+    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.09 6.09l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
+  }
+
   function escHtml(str) {
     return String(str)
       .replace(/&/g, '&amp;')
@@ -821,6 +952,7 @@
   var _feedAll    = [];
   var _feedFilter = 'todos';
   var _feedSkip   = 0;
+  var _lbMap      = {};
 
   async function fetchFeed(skip) {
     if (skip === 0) {
@@ -873,10 +1005,11 @@
       grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#6b7280;padding:40px 20px">No hay registros en esta categoría.</div>';
       return;
     }
-    grid.innerHTML = filtered.map(renderFeedCard).join('');
+    _lbMap = {};
+    grid.innerHTML = filtered.map(function(p, i) { _lbMap[i] = p; return renderFeedCard(p, i); }).join('');
   }
 
-  function renderFeedCard(p) {
+  function renderFeedCard(p, idx) {
     var isDesap = p.estado === 'desaparecido';
     var isLoc   = p.estado === 'encontrado' || p.tipo_reporte === 'encontrado_vivo';
     var badge   = isDesap
@@ -899,14 +1032,19 @@
     var fecha     = p.created_at
       ? new Date(p.created_at).toLocaleDateString('es-VE', { day: 'numeric', month: 'short', year: 'numeric' })
       : '—';
+    var telHtml = p.numero_contacto
+      ? '<a href="tel:' + escHtml(p.numero_contacto) + '" class="card-tel" onclick="event.stopPropagation()">' +
+        phoneSVG() + escHtml(p.numero_contacto) + '</a>'
+      : '';
 
-    return '<div class="feed-card">' +
+    return '<div class="feed-card" style="cursor:pointer" onclick="openLightbox(_lbMap[' + idx + '])">' +
       '<div class="feed-card-photo-wrap">' + badge + photoHtml + '</div>' +
       '<div class="feed-card-body">' +
         '<div class="feed-card-name">' + escHtml(p.nombres_apellidos) + '</div>' +
         '<div class="feed-card-meta">🪪 ' + cedula + '</div>' +
         '<div class="feed-card-meta feed-meta-loc">📍 ' + ubicacion + '</div>' +
         '<div class="feed-card-meta">📅 ' + fecha + '</div>' +
+        telHtml +
       '</div>' +
     '</div>';
   }
@@ -919,8 +1057,79 @@
   }
 
   fetchFeed(0);
+
+  /* ---- LIGHTBOX ---- */
+  function openLightbox(p) {
+    if (!p) return;
+    var isDesap = p.estado === 'desaparecido';
+    var isLoc   = p.estado === 'encontrado' || p.tipo_reporte === 'encontrado_vivo';
+    var badge   = isDesap
+      ? '<span class="lb-badge lb-badge-red">Desaparecido</span>'
+      : isLoc ? '<span class="lb-badge lb-badge-green">Localizado</span>' : '';
+
+    var initials  = getInitials(p.nombres_apellidos);
+    var photoWrap = document.getElementById('lb-photo-wrap');
+    if (p.foto_url) {
+      photoWrap.innerHTML = '<img src="' + escHtml(p.foto_url) + '" alt="Foto">';
+      photoWrap.querySelector('img').onerror = function() {
+        photoWrap.innerHTML = '<div class="lb-photo-initials">' + escHtml(initials) + '</div>';
+      };
+    } else {
+      photoWrap.innerHTML = '<div class="lb-photo-initials">' + escHtml(initials) + '</div>';
+    }
+
+    var cedula    = p.cedula ? escHtml(p.cedula) : 'Sin cédula';
+    var ubicacion = p.ultima_ubicacion ? escHtml(p.ultima_ubicacion) : '—';
+    var descHtml  = p.descripcion ? '<p class="lb-desc">' + escHtml(p.descripcion) + '</p>' : '';
+    var fecha     = p.created_at
+      ? new Date(p.created_at).toLocaleDateString('es-VE', { day: 'numeric', month: 'short', year: 'numeric' })
+      : '—';
+    var telHtml = p.numero_contacto
+      ? '<a href="tel:' + escHtml(p.numero_contacto) + '" class="lb-tel-btn">📞 Llamar a contacto: ' +
+        escHtml(p.numero_contacto) + '</a>' +
+        '<p class="lb-tel-hint">Si el número no conecta, agrega el prefijo de tu operadora</p>'
+      : '';
+
+    document.getElementById('lb-info').innerHTML =
+      badge +
+      '<div class="lb-name">' + escHtml(p.nombres_apellidos) + '</div>' +
+      '<div class="lb-meta">🪪 ' + cedula + '</div>' +
+      '<div class="lb-meta">📍 ' + ubicacion + '</div>' +
+      descHtml +
+      '<div class="lb-meta">📅 ' + fecha + '</div>' +
+      telHtml;
+
+    document.getElementById('lb-overlay').classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeLightbox() {
+    document.getElementById('lb-overlay').classList.remove('active');
+    document.body.style.overflow = '';
+  }
+
+  function lbOverlayClick(e) {
+    if (e.target === document.getElementById('lb-overlay')) closeLightbox();
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeLightbox();
+  });
 </script>
 
 <script src="/widget/rescate-widget.js"></script>
+
+<!-- LIGHTBOX -->
+<div id="lb-overlay" class="lb-overlay" onclick="lbOverlayClick(event)">
+  <div class="lb-panel" id="lb-panel">
+    <button class="lb-close" onclick="closeLightbox()" aria-label="Cerrar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+    <div id="lb-photo-wrap" class="lb-photo-wrap"></div>
+    <div id="lb-info" class="lb-info"></div>
+  </div>
+</div>
 </body>
 </html>

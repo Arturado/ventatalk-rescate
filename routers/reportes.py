@@ -195,6 +195,8 @@ async def feed_publico(
             "nombres_apellidos": p.nombres_apellidos,
             "cedula": p.cedula,
             "ultima_ubicacion": p.ultima_ubicacion,
+            "descripcion": p.descripcion,
+            "numero_contacto": p.numero_contacto,
             "foto_url": p.foto_url,
             "estado": p.estado,
             "tipo_reporte": p.tipo_reporte,
