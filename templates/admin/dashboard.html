@@ -73,11 +73,11 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 
 /* Estado clínico badges */
 .clinico-badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
-.clinico-consciente_estable { background:#dcfce7; color:#15803d; }
-.clinico-consciente_herido  { background:#fefce8; color:#92400e; }
-.clinico-inconsciente       { background:#ffedd5; color:#c2410c; }
-.clinico-fallecido          { background:#111827; color:#f9fafb; }
-.clinico-desconocido        { background:#f3f4f6; color:#374151; }
+.clinico-atrapado       { background:#fed7aa; color:#c2410c; }
+.clinico-herido         { background:#fefce8; color:#92400e; }
+.clinico-inconsciente   { background:#fee2e2; color:#991b1b; }
+.clinico-fallecido      { background:#111827; color:#f9fafb; }
+.clinico-sin_informacion { background:#f3f4f6; color:#374151; }
 
 /* Matches panel */
 .matches-panel { display:none; background:white; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,.08); padding:24px; margin-bottom:24px; }
@@ -171,11 +171,11 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   </select>
   <select id="filtrar-clinico">
     <option value="">Estado clínico (todos)</option>
-    <option value="consciente_estable">Consciente · Estable</option>
-    <option value="consciente_herido">Consciente · Herido/a</option>
+    <option value="atrapado">Atrapado/a</option>
+    <option value="herido">Herido/a</option>
     <option value="inconsciente">Inconsciente</option>
     <option value="fallecido">Fallecido/a</option>
-    <option value="desconocido">Desconocido</option>
+    <option value="sin_informacion">Sin información</option>
   </select>
 </div>
 
@@ -265,7 +265,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
             <div>
               <strong style="color:#374151;display:block;margin-bottom:4px;">Estado clínico</strong>
               {% if p.estado_clinico %}
-              <span class="clinico-badge clinico-{{ p.estado_clinico }}">{{ {'consciente_estable':'Consciente · Estable','consciente_herido':'Consciente · Herido/a','inconsciente':'Inconsciente','fallecido':'Fallecido/a','desconocido':'Desconocido'}.get(p.estado_clinico, p.estado_clinico) }}</span>
+              <span class="clinico-badge clinico-{{ p.estado_clinico }}">{{ {'atrapado':'Atrapado/a','herido':'Herido/a','inconsciente':'Inconsciente','fallecido':'Fallecido/a','sin_informacion':'Sin información'}.get(p.estado_clinico, p.estado_clinico) }}</span>
               {% else %}<span style="color:#9ca3af;">No registrado</span>{% endif %}
               {% if p.sin_documentos %}&nbsp;<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;text-transform:uppercase;">Sin documentos</span>{% endif %}
             </div>

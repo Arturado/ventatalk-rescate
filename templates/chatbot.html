@@ -514,10 +514,10 @@ async function reconstructFiles(data) {
     const grid = document.createElement("div");
     grid.className = "cb-btn-grid";
     [
-      { label: "Consciente y estable",  value: "consciente_estable" },
-      { label: "Consciente y herido/a", value: "consciente_herido" },
-      { label: "Inconsciente",          value: "inconsciente" },
-      { label: "Desconocido",           value: "desconocido" },
+      { label: "Atrapado/a",      value: "atrapado" },
+      { label: "Herido/a",        value: "herido" },
+      { label: "Inconsciente",    value: "inconsciente" },
+      { label: "Sin información", value: "sin_informacion" },
     ].forEach(opt => {
       const b = document.createElement("button");
       b.className = "cb-btn-opt"; b.textContent = opt.label;

@@ -261,10 +261,10 @@
     const grid = document.createElement("div");
     grid.className = "rw-btn-grid";
     [
-      { label: "Consciente · Estable",  value: "consciente_estable" },
-      { label: "Consciente · Herido/a", value: "consciente_herido" },
-      { label: "Inconsciente",               value: "inconsciente" },
-      { label: "Desconocido",                value: "desconocido" },
+      { label: "Atrapado/a",     value: "atrapado" },
+      { label: "Herido/a",       value: "herido" },
+      { label: "Inconsciente",   value: "inconsciente" },
+      { label: "Sin información", value: "sin_informacion" },
     ].forEach(opt => {
       const b = document.createElement("button");
       b.className = "rw-btn-opt"; b.textContent = opt.label;
