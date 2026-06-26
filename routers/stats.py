@@ -1,11 +1,15 @@
 import os
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 import models
 from database import get_db
 
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/stats", tags=["stats"])
+public_router = APIRouter(prefix="/api/stats", tags=["stats"])
 
 def verify_api_key(x_api_key: str = Header(...)):
     expected = os.getenv("API_KEY")
@@ -46,4 +50,22 @@ def get_stats(db: Session = Depends(get_db), _: str = Depends(verify_api_key)):
         "por_estado": por_estado,
         "por_tipo": por_tipo,
         "ultimos_7_dias": ultimos_7,
+    }
+
+
+@public_router.get("/publico")
+@limiter.limit("30/hour")
+def get_stats_publico(request: Request, db: Session = Depends(get_db)):
+    todas = db.query(models.PersonaDesaparecida).all()
+    total = len(todas)
+    desaparecidos = sum(1 for p in todas if p.estado == "desaparecido")
+    encontrados = sum(1 for p in todas if p.estado == "encontrado")
+    encontrados_vivos = sum(
+        1 for p in todas if getattr(p, "tipo_reporte", None) == "encontrado_vivo"
+    )
+    return {
+        "total": total,
+        "desaparecidos": desaparecidos,
+        "encontrados": encontrados,
+        "encontrados_vivos": encontrados_vivos,
     }

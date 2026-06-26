@@ -172,7 +172,7 @@
       font-weight: 600;
     }
 
-    /* RESULT CARDS */
+    /* RESULT CARDS (buscador) */
     .result-card {
       border: 1px solid #e5e7eb;
       border-radius: 12px;
@@ -216,6 +216,230 @@
     .badge-gris    { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
     .result-date { font-size: 12px; color: #9ca3af; margin-top: 6px; }
     .sp-hint { font-size: 12px; color: #9ca3af; text-align: center; margin-top: 10px; }
+
+    /* STATS SECTION */
+    .stats-section {
+      padding: 48px 24px;
+      background: #fff;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    .stat-card {
+      border-radius: 16px;
+      padding: 28px 20px;
+      text-align: center;
+      border: 1px solid #e5e7eb;
+    }
+    .stat-card-white { background: #fff; }
+    .stat-card-rose  { background: #fff1f2; border-color: #fecdd3; }
+    .stat-card-green { background: #f0fdf4; border-color: #bbf7d0; }
+    .stat-number {
+      font-size: clamp(22px, 4vw, 40px);
+      font-weight: 900;
+      line-height: 1.1;
+      margin-bottom: 10px;
+    }
+    .stat-card-white .stat-number { color: #111; }
+    .stat-card-rose  .stat-number { color: #dc2626; }
+    .stat-card-green .stat-number { color: #16a34a; }
+    .stat-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+
+    /* EMERGENCY SECTION */
+    .emergency-section {
+      padding: 40px 24px;
+      background: #fef9f9;
+      border-bottom: 1px solid #fecaca;
+      text-align: center;
+    }
+    .emergency-section h3 {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      color: #9ca3af;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    .emergency-chips {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .chip {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 16px 24px;
+      background: #fff;
+      min-width: 110px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.05);
+    }
+    .chip-num {
+      font-size: 28px;
+      font-weight: 900;
+      color: #dc2626;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .chip-op {
+      font-size: 11px;
+      color: #9ca3af;
+      font-weight: 500;
+      text-align: center;
+    }
+
+    /* FEED SECTION */
+    .feed-section {
+      padding: 56px 24px 64px;
+      background: #f9fafb;
+    }
+    .feed-section > h3 {
+      font-size: 24px;
+      font-weight: 800;
+      color: #111;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .feed-subtitle {
+      text-align: center;
+      color: #6b7280;
+      font-size: 14px;
+      margin-bottom: 28px;
+    }
+    .feed-filters {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+    }
+    .feed-pill {
+      padding: 8px 22px;
+      border-radius: 999px;
+      border: 1.5px solid #e5e7eb;
+      background: #fff;
+      color: #374151;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .feed-pill.active, .feed-pill:hover {
+      background: #dc2626;
+      border-color: #dc2626;
+      color: #fff;
+    }
+    .feed-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .feed-card {
+      background: #fff;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,.07);
+      border: 1px solid #e5e7eb;
+      transition: transform .15s, box-shadow .15s;
+    }
+    .feed-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(0,0,0,.12);
+    }
+    .feed-card-photo-wrap {
+      position: relative;
+      width: 100%;
+      height: 180px;
+      overflow: hidden;
+    }
+    .feed-card-photo {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      display: block;
+    }
+    .feed-card-initials {
+      width: 100%;
+      height: 180px;
+      background: #fef9c3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      font-weight: 800;
+      color: #92400e;
+      letter-spacing: 2px;
+    }
+    .feed-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      z-index: 2;
+    }
+    .feed-badge-red   { background: rgba(254,242,242,.95); color: #dc2626; border: 1px solid #fecaca; }
+    .feed-badge-green { background: rgba(240,253,244,.95); color: #16a34a; border: 1px solid #bbf7d0; }
+    .feed-card-body {
+      padding: 12px 14px 14px;
+    }
+    .feed-card-name {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #1e3a5f;
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+    .feed-card-meta {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 2px;
+      line-height: 1.4;
+    }
+    .feed-meta-loc {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .feed-loading {
+      text-align: center;
+      color: #6b7280;
+      font-size: 14px;
+      padding: 40px 20px;
+    }
+    .feed-loading::before {
+      content: '';
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #fecaca;
+      border-top-color: #dc2626;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
 
     /* COMO FUNCIONA */
     .steps {
@@ -268,7 +492,14 @@
     }
     footer strong { color: #f3f4f6; }
 
-    /* MOBILE */
+    /* RESPONSIVE */
+    @media (max-width: 1024px) {
+      .feed-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 720px) {
+      .feed-grid { grid-template-columns: repeat(2, 1fr); }
+      .stat-card { padding: 18px 10px; }
+    }
     @media (max-width: 540px) {
       .sp-fields { flex-direction: column; }
       .sp-fields input, .sp-btn { width: 100%; }
@@ -316,6 +547,63 @@
   </div>
 </div>
 
+<!-- SECCIÓN 1: Contador de estadísticas -->
+<section class="stats-section" id="stats-section">
+  <div class="stats-grid">
+    <div class="stat-card stat-card-white">
+      <div class="stat-number" id="stat-total">—</div>
+      <div class="stat-label">PERSONAS<br>REPORTADAS</div>
+    </div>
+    <div class="stat-card stat-card-rose">
+      <div class="stat-number" id="stat-desaparecidos">—</div>
+      <div class="stat-label">AÚN SIN<br>CONTACTO</div>
+    </div>
+    <div class="stat-card stat-card-green">
+      <div class="stat-number" id="stat-localizados">—</div>
+      <div class="stat-label">LOCALIZADOS</div>
+    </div>
+  </div>
+</section>
+
+<!-- SECCIÓN 2: Teléfonos de emergencia -->
+<section class="emergency-section">
+  <h3>TELÉFONOS DE EMERGENCIA · VENEZUELA</h3>
+  <div class="emergency-chips">
+    <div class="chip">
+      <span class="chip-num">171</span>
+      <span class="chip-op">Teléfono fijo CANTV</span>
+    </div>
+    <div class="chip">
+      <span class="chip-num">*1</span>
+      <span class="chip-op">Movilnet</span>
+    </div>
+    <div class="chip">
+      <span class="chip-num">112</span>
+      <span class="chip-op">Digitel</span>
+    </div>
+    <div class="chip">
+      <span class="chip-num">911</span>
+      <span class="chip-op">Movistar</span>
+    </div>
+  </div>
+</section>
+
+<!-- SECCIÓN 3: Feed de personas -->
+<section class="feed-section">
+  <h3>Personas reportadas</h3>
+  <p class="feed-subtitle">Actualizado en tiempo real — ayúdanos a encontrarlas</p>
+  <div class="feed-filters">
+    <button class="feed-pill active" onclick="setFeedFilter('todos', this)">Todos</button>
+    <button class="feed-pill" onclick="setFeedFilter('desaparecidos', this)">Desaparecidos</button>
+    <button class="feed-pill" onclick="setFeedFilter('localizados', this)">Localizados</button>
+  </div>
+  <div class="feed-grid" id="feed-grid"></div>
+  <div id="feed-loading" class="feed-loading">Cargando...</div>
+  <div id="feed-more-wrap" style="display:none;text-align:center;margin-top:24px">
+    <button class="sp-btn" id="feed-more-btn" onclick="loadMoreFeed()">Ver más</button>
+  </div>
+</section>
+
 <section class="steps">
   <h3>¿Cómo funciona?</h3>
   <p class="sub">Tres pasos simples para registrar a un ser querido</p>
@@ -349,6 +637,7 @@
 </footer>
 
 <script>
+  /* ---- BUSCADOR (sin modificar) ---- */
   function toggleBuscador(e) {
     e.preventDefault();
     const panel = document.getElementById('search-panel');
@@ -463,6 +752,173 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
   }
+
+  /* ---- STATS COUNTER ---- */
+  var _statsData = null;
+  var _counterAnimated = false;
+
+  async function fetchStats() {
+    try {
+      var res = await fetch('/api/stats/publico');
+      if (!res.ok) return;
+      _statsData = await res.json();
+      var el = document.getElementById('stats-section');
+      var inView = el && (function() {
+        var r = el.getBoundingClientRect();
+        return r.top < window.innerHeight && r.bottom > 0;
+      })();
+      if (inView && !_counterAnimated) {
+        _counterAnimated = true;
+        setStatValues(_statsData, true);
+      } else {
+        setStatValues(_statsData, false);
+      }
+    } catch (e) {}
+  }
+
+  function setStatValues(data, animate) {
+    var total = data.total || 0;
+    var desap  = data.desaparecidos || 0;
+    var loc    = (data.encontrados || 0) + (data.encontrados_vivos || 0);
+    if (animate) {
+      animateCounter(document.getElementById('stat-total'), total);
+      animateCounter(document.getElementById('stat-desaparecidos'), desap);
+      animateCounter(document.getElementById('stat-localizados'), loc);
+    } else {
+      document.getElementById('stat-total').textContent         = total.toLocaleString('es');
+      document.getElementById('stat-desaparecidos').textContent = desap.toLocaleString('es');
+      document.getElementById('stat-localizados').textContent   = loc.toLocaleString('es');
+    }
+  }
+
+  function animateCounter(el, target) {
+    if (!el) return;
+    var t0 = Date.now();
+    var dur = 1500;
+    (function tick() {
+      var p = Math.min((Date.now() - t0) / dur, 1);
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.floor(eased * target).toLocaleString('es');
+      if (p < 1) requestAnimationFrame(tick);
+      else el.textContent = target.toLocaleString('es');
+    })();
+  }
+
+  (function() {
+    var el = document.getElementById('stats-section');
+    if (!el || !window.IntersectionObserver) return;
+    new IntersectionObserver(function(entries) {
+      if (entries[0].isIntersecting && _statsData && !_counterAnimated) {
+        _counterAnimated = true;
+        setStatValues(_statsData, true);
+      }
+    }, { threshold: 0.3 }).observe(el);
+  })();
+
+  fetchStats();
+
+  /* ---- FEED ---- */
+  var _feedAll    = [];
+  var _feedFilter = 'todos';
+  var _feedSkip   = 0;
+
+  async function fetchFeed(skip) {
+    if (skip === 0) {
+      var loadEl = document.getElementById('feed-loading');
+      if (loadEl) loadEl.style.display = '';
+    }
+    try {
+      var res = await fetch('/api/feed?skip=' + skip);
+      if (!res.ok) throw new Error('err');
+      var data = await res.json();
+      _feedAll  = skip === 0 ? data : _feedAll.concat(data);
+      _feedSkip = skip + data.length;
+      renderFeedGrid();
+      var loadEl = document.getElementById('feed-loading');
+      if (loadEl) loadEl.style.display = 'none';
+      var moreWrap = document.getElementById('feed-more-wrap');
+      if (moreWrap) moreWrap.style.display = data.length === 50 ? '' : 'none';
+      var btn = document.getElementById('feed-more-btn');
+      if (btn) { btn.disabled = false; btn.textContent = 'Ver más'; }
+    } catch (e) {
+      var loadEl = document.getElementById('feed-loading');
+      if (loadEl) loadEl.style.display = 'none';
+      var btn = document.getElementById('feed-more-btn');
+      if (btn) { btn.disabled = false; btn.textContent = 'Ver más'; }
+    }
+  }
+
+  function loadMoreFeed() {
+    var btn = document.getElementById('feed-more-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Cargando...'; }
+    fetchFeed(_feedSkip);
+  }
+
+  function setFeedFilter(filter, btn) {
+    _feedFilter = filter;
+    document.querySelectorAll('.feed-pill').forEach(function(p) { p.classList.remove('active'); });
+    btn.classList.add('active');
+    renderFeedGrid();
+  }
+
+  function renderFeedGrid() {
+    var filtered = _feedAll.filter(function(p) {
+      if (_feedFilter === 'desaparecidos') return p.estado === 'desaparecido';
+      if (_feedFilter === 'localizados')   return p.estado === 'encontrado' || p.tipo_reporte === 'encontrado_vivo';
+      return true;
+    });
+    var grid = document.getElementById('feed-grid');
+    if (!grid) return;
+    if (filtered.length === 0) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#6b7280;padding:40px 20px">No hay registros en esta categoría.</div>';
+      return;
+    }
+    grid.innerHTML = filtered.map(renderFeedCard).join('');
+  }
+
+  function renderFeedCard(p) {
+    var isDesap = p.estado === 'desaparecido';
+    var isLoc   = p.estado === 'encontrado' || p.tipo_reporte === 'encontrado_vivo';
+    var badge   = isDesap
+      ? '<span class="feed-badge feed-badge-red">Sin contacto</span>'
+      : isLoc ? '<span class="feed-badge feed-badge-green">Localizado</span>' : '';
+
+    var initials = getInitials(p.nombres_apellidos);
+    var photoHtml;
+    if (p.foto_url) {
+      photoHtml =
+        '<img class="feed-card-photo" src="' + escHtml(p.foto_url) + '" alt="Foto"' +
+        ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+        '<div class="feed-card-initials" style="display:none">' + escHtml(initials) + '</div>';
+    } else {
+      photoHtml = '<div class="feed-card-initials">' + escHtml(initials) + '</div>';
+    }
+
+    var cedula    = p.cedula ? escHtml(p.cedula) : 'Sin cédula';
+    var ubicacion = p.ultima_ubicacion ? escHtml(p.ultima_ubicacion) : '—';
+    var fecha     = p.created_at
+      ? new Date(p.created_at).toLocaleDateString('es-VE', { day: 'numeric', month: 'short', year: 'numeric' })
+      : '—';
+
+    return '<div class="feed-card">' +
+      '<div class="feed-card-photo-wrap">' + badge + photoHtml + '</div>' +
+      '<div class="feed-card-body">' +
+        '<div class="feed-card-name">' + escHtml(p.nombres_apellidos) + '</div>' +
+        '<div class="feed-card-meta">🪪 ' + cedula + '</div>' +
+        '<div class="feed-card-meta feed-meta-loc">📍 ' + ubicacion + '</div>' +
+        '<div class="feed-card-meta">📅 ' + fecha + '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function getInitials(name) {
+    if (!name) return '??';
+    var parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+
+  fetchFeed(0);
 </script>
 
 <script src="/widget/rescate-widget.js"></script>

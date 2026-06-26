@@ -172,3 +172,33 @@ async def check_cedula(
     if persona:
         return {"existe": True, "id": persona.id}
     return {"existe": False}
+
+
+@check_router.get("/feed")
+@limiter.limit("30/hour")
+async def feed_publico(
+    request: Request,
+    estado: str = None,
+    tipo_reporte: str = None,
+    skip: int = 0,
+    db: Session = Depends(get_db),
+):
+    q = db.query(models.PersonaDesaparecida)
+    if estado:
+        q = q.filter(models.PersonaDesaparecida.estado == estado)
+    if tipo_reporte:
+        q = q.filter(models.PersonaDesaparecida.tipo_reporte == tipo_reporte)
+    personas = q.order_by(models.PersonaDesaparecida.created_at.desc()).offset(skip).limit(50).all()
+    return [
+        {
+            "id": p.id,
+            "nombres_apellidos": p.nombres_apellidos,
+            "cedula": p.cedula,
+            "ultima_ubicacion": p.ultima_ubicacion,
+            "foto_url": p.foto_url,
+            "estado": p.estado,
+            "tipo_reporte": p.tipo_reporte,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        }
+        for p in personas
+    ]

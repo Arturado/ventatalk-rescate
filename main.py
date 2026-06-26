@@ -16,7 +16,7 @@ import models
 from database import engine, SessionLocal
 from routers import personas, reportes
 from routers.admin import router as admin_router
-from routers.stats import router as stats_router
+from routers.stats import router as stats_router, public_router as stats_public_router
 
 templates = Jinja2Templates(directory="templates")
 limiter = Limiter(key_func=get_remote_address)
@@ -72,6 +72,7 @@ app.include_router(reportes.router)
 app.include_router(reportes.check_router)
 app.include_router(personas.router)
 app.include_router(stats_router)
+app.include_router(stats_public_router)
 app.include_router(admin_router)
 
 
