@@ -270,7 +270,7 @@
     });
     inputArea.appendChild(grid);
     const fallBtn = document.createElement("button");
-    fallBtn.className = "rw-btn-fallecido"; fallBtn.textContent = "Fallecido/a";
+    fallBtn.className = "rw-btn-fallecido"; fallBtn.textContent = "Fallecido/a"; fallBtn.style.display = "none";
     fallBtn.addEventListener("click", () => {
       if (confirm("¿Confirmas que la persona ha fallecido? Esta información es sensible.")) {
         formData.estado_clinico = "fallecido";
