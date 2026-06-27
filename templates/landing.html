@@ -838,7 +838,7 @@
     var cedula = r.cedula ? escHtml(r.cedula) : 'Sin cédula';
     var ubicacion = r.ultima_ubicacion ? escHtml(r.ultima_ubicacion) : '—';
     var fecha = r.created_at
-      ? new Date(r.created_at).toLocaleDateString('es-VE', { day: 'numeric', month: 'short', year: 'numeric' })
+      ? new Date(r.created_at).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'short', year: 'numeric' })
       : '—';
 
     return '<div class="result-card">' +
@@ -1039,7 +1039,7 @@
     var cedula    = p.cedula ? escHtml(p.cedula) : 'Sin cédula';
     var ubicacion = p.ultima_ubicacion ? escHtml(p.ultima_ubicacion) : '—';
     var fecha     = p.created_at
-      ? new Date(p.created_at).toLocaleDateString('es-VE', { day: 'numeric', month: 'short', year: 'numeric' })
+      ? new Date(p.created_at).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'short', year: 'numeric' })
       : '—';
     var telHtml = p.numero_contacto
       ? '<a href="tel:' + escHtml(p.numero_contacto) + '" class="card-tel" onclick="event.stopPropagation()">' +
@@ -1142,7 +1142,7 @@
     var ubicacion = p.ultima_ubicacion ? escHtml(p.ultima_ubicacion) : '—';
     var descHtml  = p.descripcion ? '<p class="lb-desc">' + escHtml(p.descripcion) + '</p>' : '';
     var fecha     = p.created_at
-      ? new Date(p.created_at).toLocaleDateString('es-VE', { day: 'numeric', month: 'short', year: 'numeric' })
+      ? new Date(p.created_at).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'short', year: 'numeric' })
       : '—';
     var telHtml = p.numero_contacto
       ? '<a href="tel:' + escHtml(p.numero_contacto) + '" class="lb-tel-btn">📞 Llamar a contacto: ' +

@@ -1,6 +1,8 @@
-from pydantic import BaseModel
-from datetime import datetime
+from pydantic import BaseModel, field_serializer
+from datetime import datetime, timezone, timedelta
 from typing import Optional
+
+VE_TZ = timezone(timedelta(hours=-4))
 
 class PersonaResponse(BaseModel):
     id: int
@@ -19,6 +21,12 @@ class PersonaResponse(BaseModel):
     tipo_reporte: str = "desaparecido"
     created_at: datetime
     tipo_reportante: Optional[str] = None
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, value: datetime) -> str:
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(VE_TZ).isoformat()
     sexo: Optional[str] = None
     edad_aproximada: Optional[str] = None
     contextura: Optional[str] = None
