@@ -166,7 +166,7 @@
     inputArea.appendChild(btnHosp);
     const btnBuscar = document.createElement("button");
     btnBuscar.className = "rw-btn-opt"; btnBuscar.textContent = "🔍 Buscar persona";
-    btnBuscar.addEventListener("click", () => { window.location.href = "https://venezuelarescate.com/buscar"; });
+    btnBuscar.addEventListener("click", () => { window.open("https://venezuelarescate.com/buscar", "_blank"); });
     inputArea.appendChild(btnBuscar);
     scroll();
   }
