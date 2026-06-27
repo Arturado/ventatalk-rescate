@@ -667,9 +667,44 @@ async function reconstructFiles(data) {
       return;
     }
     if (value) { formData[step.field] = value; userMsg(value); }
+    if (step.field === "numero_contacto") { askContacto2(); return; }
     currentStep++;
     saveDraft(currentStep, formData).catch(() => {});
     askStep();
+  }
+
+  async function askContacto2() {
+    await botMsg("¿Deseas agregar un segundo número de contacto?", 400);
+    inputArea.innerHTML = "";
+    const btnSi = document.createElement("button");
+    btnSi.className = "cb-btn"; btnSi.textContent = "Sí, agregar otro número";
+    btnSi.addEventListener("click", () => {
+      userMsg("Sí, agregar otro número");
+      inputArea.innerHTML = `
+        <input type="tel" id="cb-input-c2" maxlength="15" placeholder="+58 412 1234567">
+        <button class="cb-btn" id="cb-c2-ok">Guardar y continuar</button>`;
+      const inp2 = document.getElementById("cb-input-c2");
+      const confirmar = () => {
+        const v = inp2.value.trim();
+        if (v) { formData.numero_contacto_2 = v; userMsg(v); }
+        currentStep++;
+        saveDraft(currentStep, formData).catch(() => {});
+        askStep();
+      };
+      document.getElementById("cb-c2-ok").addEventListener("click", confirmar);
+      inp2.addEventListener("keydown", e => { if (e.key === "Enter") confirmar(); });
+      setTimeout(() => inp2 && inp2.focus(), 100);
+    });
+    const btnNo = document.createElement("button");
+    btnNo.className = "cb-btn cb-btn-sec"; btnNo.textContent = "No, continuar";
+    btnNo.addEventListener("click", () => {
+      userMsg("No, continuar");
+      currentStep++;
+      saveDraft(currentStep, formData).catch(() => {});
+      askStep();
+    });
+    inputArea.appendChild(btnSi);
+    inputArea.appendChild(btnNo);
   }
 
   function skipStep() { currentStep++; saveDraft(currentStep, formData).catch(() => {}); askStep(); }

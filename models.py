@@ -13,6 +13,7 @@ class PersonaDesaparecida(Base):
     foto_url_3 = Column(String(600), nullable=True)
     descripcion = Column(Text, nullable=True)
     numero_contacto = Column(String(30), nullable=False)
+    numero_contacto_2 = Column(String(30), nullable=True)
     quien_ayudo = Column(String(200), nullable=True)
     contacto_quien_ayudo = Column(String(30), nullable=True)
     estado = Column(String(20), nullable=False, default="desaparecido")

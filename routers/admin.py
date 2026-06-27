@@ -174,13 +174,14 @@ async def export_csv(request: Request, db: Session = Depends(get_db)):
     writer = csv.writer(output)
     writer.writerow([
         "ID", "Nombres y Apellidos", "Cédula", "Última Ubicación",
-        "Foto URL", "Descripción", "Número Contacto",
+        "Foto URL", "Descripción", "Número Contacto", "Número Contacto 2",
         "Quién Ayudó", "Contacto Quien Ayudó", "Estado", "Fecha Registro"
     ])
     for p in personas:
         writer.writerow([
             p.id, p.nombres_apellidos, p.cedula or "", p.ultima_ubicacion,
             p.foto_url or "", p.descripcion or "", p.numero_contacto,
+            p.numero_contacto_2 or "",
             p.quien_ayudo or "", p.contacto_quien_ayudo or "",
             p.estado, p.created_at.strftime("%Y-%m-%d %H:%M:%S") if p.created_at else "",
         ])

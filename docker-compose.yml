@@ -8,6 +8,8 @@ services:
     ports:
       - "8010:8010"
     env_file: .env
+    environment:
+      - TZ=America/Caracas
     volumes:
       - ./uploads:/app/uploads
       - ./rescate.db:/app/rescate.db

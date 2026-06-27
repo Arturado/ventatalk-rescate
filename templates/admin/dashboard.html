@@ -119,6 +119,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   <h2 style="font-size:20px;font-weight:800;">Panel de Reportes</h2>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <button id="btn-matches" onclick="toggleMatches()" style="padding:8px 16px;background:#2563eb;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">🔗 Posibles Matches (<span id="matches-count">…</span>)</button>
+    <button id="btn-duplicados" onclick="toggleDuplicados()" style="padding:8px 16px;background:#d97706;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">⚠️ Posibles duplicados (<span id="dup-count">…</span>)</button>
     <a href="/admin/export/csv" class="btn btn-red">⬇ Exportar CSV</a>
   </div>
 </div>
@@ -130,6 +131,15 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
     <p style="font-size:13px;color:#6b7280;">El sistema detectó estas personas que podrían ser la misma. Revisa y confirma.</p>
   </div>
   <div id="matches-content"><div class="matches-loading">Cargando matches…</div></div>
+</div>
+
+<!-- DUPLICADOS PANEL -->
+<div id="dup-panel" class="matches-panel">
+  <div style="margin-bottom:16px;">
+    <h3 style="font-size:16px;font-weight:800;margin-bottom:4px;">Posibles registros duplicados</h3>
+    <p style="font-size:13px;color:#6b7280;">Estos registros podrían ser la misma persona reportada más de una vez</p>
+  </div>
+  <div id="dup-content"><div class="matches-loading">Cargando duplicados…</div></div>
 </div>
 
 <div class="stats-grid">
@@ -295,6 +305,14 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
               {% if p.contacto_quien_ayudo %} — Tel: <span style="color:#6b7280;">{{ p.contacto_quien_ayudo }}</span>{% endif %}
             </div>
 
+            {% if p.numero_contacto_2 %}
+            <!-- Contacto adicional -->
+            <div>
+              <strong style="color:#374151;display:block;margin-bottom:4px;">Contacto adicional</strong>
+              <span style="color:#6b7280;">{{ p.numero_contacto_2 }}</span>
+            </div>
+            {% endif %}
+
             <!-- Tipo de reporte -->
             <div>
               <strong style="color:#374151;display:block;margin-bottom:4px;">Tipo de reporte</strong>
@@ -386,6 +404,10 @@ function getApiKey() {
 }
 
 function toggleMatches() {
+  if (_dupPanelOpen) {
+    _dupPanelOpen = false;
+    document.getElementById('dup-panel').classList.remove('open');
+  }
   _matchesPanelOpen = !_matchesPanelOpen;
   document.getElementById('matches-panel').classList.toggle('open', _matchesPanelOpen);
   if (_matchesPanelOpen && !_matchesLoaded) loadMatches();
@@ -526,6 +548,142 @@ function showToast(msg) {
     });
     document.getElementById('matches-count').textContent = visibles.length;
   } catch (e) { document.getElementById('matches-count').textContent = '?'; }
+})();
+
+/* ---- DUPLICADOS ---- */
+var _dupPanelOpen  = false;
+var _dupLoaded     = false;
+var _descartadosDup = JSON.parse(localStorage.getItem('vr_dup_desc') || '[]');
+
+function toggleDuplicados() {
+  if (_matchesPanelOpen) {
+    _matchesPanelOpen = false;
+    document.getElementById('matches-panel').classList.remove('open');
+  }
+  _dupPanelOpen = !_dupPanelOpen;
+  document.getElementById('dup-panel').classList.toggle('open', _dupPanelOpen);
+  if (_dupPanelOpen && !_dupLoaded) loadDuplicados();
+}
+
+async function loadDuplicados() {
+  const key = getApiKey();
+  if (!key) return;
+  const content = document.getElementById('dup-content');
+  content.innerHTML = '<div class="matches-loading">Buscando posibles duplicados…</div>';
+  try {
+    const res = await fetch('/api/matches/duplicados', { headers: { 'X-Api-Key': key } });
+    if (res.status === 401) {
+      sessionStorage.removeItem('vr_api_key');
+      content.innerHTML = '<p style="color:#dc2626;padding:16px;">API Key inválida. Recarga la página.</p>';
+      return;
+    }
+    const data = await res.json();
+    _dupLoaded = true;
+    const visibles = data.filter(function(d) {
+      const pid = Math.min(d.persona_a.id, d.persona_b.id) + '-' + Math.max(d.persona_a.id, d.persona_b.id);
+      return !_descartadosDup.includes(pid);
+    });
+    document.getElementById('dup-count').textContent = visibles.length;
+    if (!visibles.length) {
+      content.innerHTML = '<p style="color:#6b7280;padding:16px;text-align:center;">No se detectaron posibles duplicados.</p>';
+      return;
+    }
+    content.innerHTML = '';
+    visibles.forEach(function(d) { content.appendChild(renderDupPair(d)); });
+  } catch (e) {
+    content.innerHTML = '<p style="color:#dc2626;padding:16px;">Error al cargar. Intenta de nuevo.</p>';
+  }
+}
+
+function scoreCirclesDup(score) {
+  var dots = Math.min(score, 4);
+  return '●'.repeat(dots) + '○'.repeat(Math.max(0, 4 - dots)) + ' (' + score + ' pts)';
+}
+
+function renderDupPair(d) {
+  var idA = Math.min(d.persona_a.id, d.persona_b.id);
+  var idB = Math.max(d.persona_a.id, d.persona_b.id);
+  var pairId = idA + '-' + idB;
+  var pA = d.persona_a.id <= d.persona_b.id ? d.persona_a : d.persona_b;
+  var pB = d.persona_a.id <= d.persona_b.id ? d.persona_b : d.persona_a;
+
+  function dupCard(p, label) {
+    var photoEl = p.foto_url
+      ? '<img class="match-photo" src="' + p.foto_url + '" alt="foto" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+        '<div class="match-initials" style="display:none;background:#fef3c7;color:#d97706">' + getInitials(p.nombres_apellidos) + '</div>'
+      : '<div class="match-initials" style="background:#fef3c7;color:#d97706">' + getInitials(p.nombres_apellidos) + '</div>';
+    var cedula = p.sin_documentos ? 'Sin documentos' : (p.cedula || '—');
+    var tipo = p.tipo_reporte === 'encontrado_vivo' ? 'Encontrado vivo' : 'Desaparecido';
+    return '<div class="match-card" style="background:#fffbeb;border:1px solid #fde68a;">' +
+      '<div class="match-card-hdr" style="color:#d97706;">' + label + '</div>' +
+      photoEl +
+      '<div class="match-name">' + (p.nombres_apellidos || '—') + '</div>' +
+      '<div class="match-info">🪪 ' + cedula + '</div>' +
+      '<div class="match-info">📍 ' + (p.ultima_ubicacion || '—') + '</div>' +
+      '<div class="match-info" style="color:#9ca3af;font-size:11px;">' + tipo + '</div>' +
+    '</div>';
+  }
+
+  var el = document.createElement('div');
+  el.className = 'match-pair';
+  el.dataset.pairId = pairId;
+  el.innerHTML =
+    '<div class="match-cards">' +
+      dupCard(pA, '🟡 REGISTRO #' + pA.id) +
+      dupCard(pB, '🟡 REGISTRO #' + pB.id + ' (más reciente)') +
+    '</div>' +
+    '<div class="match-footer">' +
+      '<div class="match-score">' + scoreCirclesDup(d.score) + '</div>' +
+      '<div class="match-criterios">Coinciden en: ' + d.criterios_match.join(' · ') + '</div>' +
+      '<div class="match-actions">' +
+        '<button class="match-btn-discard" onclick="descartarDup(\'' + pairId + '\',this)">Mantener ambos</button>' +
+        '<button class="match-btn-confirm" style="background:#d97706;" onclick="eliminarDup(' + idB + ',\'' + pairId + '\',this)">Eliminar duplicado</button>' +
+      '</div>' +
+    '</div>';
+  return el;
+}
+
+function descartarDup(pairId, btn) {
+  _descartadosDup.push(pairId);
+  localStorage.setItem('vr_dup_desc', JSON.stringify(_descartadosDup));
+  document.querySelector('[data-pair-id="' + pairId + '"]').remove();
+  actualizarContadorDup();
+}
+
+async function eliminarDup(id, pairId, btn) {
+  if (!confirm('¿Eliminar el registro #' + id + '? Esta acción no se puede deshacer.')) return;
+  btn.disabled = true; btn.textContent = 'Eliminando…';
+  try {
+    const res = await fetch('/admin/personas/' + id, { method: 'DELETE' });
+    if (!res.ok) throw new Error();
+    document.querySelector('[data-pair-id="' + pairId + '"]').remove();
+    showToast('✓ Registro #' + id + ' eliminado');
+    actualizarContadorDup();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = 'Eliminar duplicado';
+    alert('Error al eliminar. Intenta de nuevo.');
+  }
+}
+
+function actualizarContadorDup() {
+  var n = document.getElementById('dup-content').querySelectorAll('.match-pair').length;
+  document.getElementById('dup-count').textContent = n;
+}
+
+/* Carga el conteo de duplicados en el botón al iniciar */
+(async function initDupCount() {
+  var key = sessionStorage.getItem('vr_api_key');
+  if (!key) { document.getElementById('dup-count').textContent = '?'; return; }
+  try {
+    var res = await fetch('/api/matches/duplicados', { headers: { 'X-Api-Key': key } });
+    if (!res.ok) { document.getElementById('dup-count').textContent = '?'; return; }
+    var data = await res.json();
+    var visibles = data.filter(function(d) {
+      var pid = Math.min(d.persona_a.id, d.persona_b.id) + '-' + Math.max(d.persona_a.id, d.persona_b.id);
+      return !_descartadosDup.includes(pid);
+    });
+    document.getElementById('dup-count').textContent = visibles.length;
+  } catch (e) { document.getElementById('dup-count').textContent = '?'; }
 })();
 </script>
 {% endblock %}

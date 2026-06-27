@@ -392,7 +392,33 @@
     const value = inp ? inp.value.trim() : "";
     if (step.required && !value) { inp.style.borderColor = "#ef4444"; inp.placeholder = "⚠️ Obligatorio"; return; }
     if (value) { formData[step.field] = value; userMsg(value); }
+    if (step.field === "numero_contacto") { askContacto2(); return; }
     currentStep++; askStep();
+  }
+
+  async function askContacto2() {
+    await botMsg("¿Deseas agregar un segundo número de contacto?", 400);
+    inputArea.innerHTML = "";
+    const btnSi = document.createElement("button");
+    btnSi.className = "rw-btn"; btnSi.textContent = "Sí, agregar otro número";
+    btnSi.addEventListener("click", () => {
+      userMsg("Sí, agregar otro número");
+      inputArea.innerHTML = `<input type="tel" id="rw-input-c2" maxlength="15" placeholder="+58 412 1234567"><button class="rw-btn" id="rw-c2-ok">Guardar y continuar</button>`;
+      const inp2 = document.getElementById("rw-input-c2");
+      const confirmar = () => {
+        const v = inp2.value.trim();
+        if (v) { formData.numero_contacto_2 = v; userMsg(v); }
+        currentStep++; askStep();
+      };
+      document.getElementById("rw-c2-ok").addEventListener("click", confirmar);
+      inp2.addEventListener("keydown", e => { if (e.key === "Enter") confirmar(); });
+      setTimeout(() => inp2 && inp2.focus(), 100);
+    });
+    const btnNo = document.createElement("button");
+    btnNo.className = "rw-btn rw-btn-sec"; btnNo.textContent = "No, continuar";
+    btnNo.addEventListener("click", () => { userMsg("No, continuar"); currentStep++; askStep(); });
+    inputArea.appendChild(btnSi);
+    inputArea.appendChild(btnNo);
   }
 
   function skipStep() { currentStep++; askStep(); }
@@ -407,6 +433,7 @@
       fd.append("ultima_ubicacion", formData.ultima_ubicacion || "");
       if (formData.descripcion) fd.append("descripcion", formData.descripcion);
       fd.append("numero_contacto", formData.numero_contacto || "");
+      if (formData.numero_contacto_2) fd.append("numero_contacto_2", formData.numero_contacto_2);
       if (formData.quien_ayudo) fd.append("quien_ayudo", formData.quien_ayudo);
       if (formData.contacto_quien_ayudo) fd.append("contacto_quien_ayudo", formData.contacto_quien_ayudo);
       fd.append("tipo_reporte", tipoReporte);

@@ -12,6 +12,7 @@ class PersonaResponse(BaseModel):
     foto_url_3: Optional[str] = None
     descripcion: Optional[str] = None
     numero_contacto: str
+    numero_contacto_2: Optional[str] = None
     quien_ayudo: Optional[str] = None
     contacto_quien_ayudo: Optional[str] = None
     estado: str = "desaparecido"

@@ -85,6 +85,7 @@ async def crear_reporte(
     ropa_aproximada: str = Form(None),
     estado_clinico: str = Form(None),
     sin_documentos: bool = Form(False),
+    numero_contacto_2: str = Form(None),
     website: str = Form(None),
     foto: UploadFile = File(None),
     foto_2: UploadFile = File(None),
@@ -101,6 +102,8 @@ async def crear_reporte(
     if cedula:
         cedula = normalize_cedula(cedula)
     numero_contacto = normalize_contacto(numero_contacto)
+    if numero_contacto_2:
+        numero_contacto_2 = normalize_contacto(numero_contacto_2)
     if contacto_quien_ayudo:
         contacto_quien_ayudo = normalize_contacto(contacto_quien_ayudo)
 
@@ -119,6 +122,7 @@ async def crear_reporte(
         edad_aproximada=edad_aproximada, contextura=contextura,
         cabello=cabello, ropa_aproximada=ropa_aproximada,
         estado_clinico=estado_clinico, sin_documentos=sin_documentos,
+        numero_contacto_2=numero_contacto_2,
     )
     db.add(persona)
     db.commit()
@@ -222,6 +226,7 @@ async def feed_publico(
             "ultima_ubicacion": p.ultima_ubicacion,
             "descripcion": p.descripcion,
             "numero_contacto": p.numero_contacto,
+            "numero_contacto_2": p.numero_contacto_2,
             "foto_url": p.foto_url,
             "estado": p.estado,
             "tipo_reporte": p.tipo_reporte,

@@ -79,6 +79,9 @@ def posibles_matches(
         models.PersonaDesaparecida.estado != "encontrado",
     ).all()
 
+    if not encontrados:
+        return []
+
     results = []
     for d in desaparecidos:
         for e in encontrados:
@@ -116,3 +119,58 @@ def posibles_matches(
 
     results.sort(key=lambda x: x["score"], reverse=True)
     return results[:20]
+
+
+@matches_router.get("/duplicados")
+@limiter.limit("30/hour")
+def posibles_duplicados(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    todas = db.query(models.PersonaDesaparecida).all()
+
+    results = []
+    seen: set = set()
+
+    for i, a in enumerate(todas):
+        for b in todas[i + 1:]:
+            if a.estado == "encontrado" and b.estado == "encontrado":
+                continue
+
+            score = 0
+            criterios: list = []
+
+            if (a.cedula and b.cedula
+                    and not a.sin_documentos and not b.sin_documentos
+                    and a.cedula == b.cedula):
+                score += 4
+                criterios.append("Cédula")
+
+            if (a.nombres_apellidos and b.nombres_apellidos
+                    and a.nombres_apellidos.lower() == b.nombres_apellidos.lower()):
+                score += 3
+                criterios.append("Nombre exacto")
+            elif a.nombres_apellidos and b.nombres_apellidos:
+                words_a = a.nombres_apellidos.lower().split()[:2]
+                words_b = b.nombres_apellidos.lower().split()[:2]
+                if words_a and words_a == words_b:
+                    z_a = {w.lower() for w in (a.ultima_ubicacion or "").split() if len(w) > 3}
+                    z_b = {w.lower() for w in (b.ultima_ubicacion or "").split() if len(w) > 3}
+                    if z_a & z_b:
+                        score += 2
+                        criterios.append("Nombre similar · Zona")
+
+            if score > 0:
+                pair_key = (min(a.id, b.id), max(a.id, b.id))
+                if pair_key not in seen:
+                    seen.add(pair_key)
+                    results.append({
+                        "score": score,
+                        "persona_a": schemas.PersonaResponse.model_validate(a),
+                        "persona_b": schemas.PersonaResponse.model_validate(b),
+                        "criterios_match": criterios,
+                    })
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return results[:30]
