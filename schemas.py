@@ -73,3 +73,23 @@ class PacienteResponse(BaseModel):
         return value.astimezone(VE_TZ).isoformat()
 
     model_config = {"from_attributes": True}
+
+class BomberoReporteResponse(BaseModel):
+    id: int
+    identificador: Optional[str] = None
+    latitud: str
+    longitud: str
+    precision_metros: Optional[str] = None
+    status: str
+    descripcion: Optional[str] = None
+    created_at: datetime
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, value: datetime) -> str:
+        from datetime import timezone, timedelta
+        VE_TZ = timezone(timedelta(hours=-4))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(VE_TZ).isoformat()
+
+    model_config = {"from_attributes": True}

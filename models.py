@@ -74,3 +74,14 @@ class PacienteHospitalizado(Base):
     reportado_por = Column(String(200), nullable=True)
     # Nombre del médico/enfermero que carga (sin auth, voluntario)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class BomberoReporte(Base):
+    __tablename__ = "bombero_reportes"
+    id = Column(Integer, primary_key=True, index=True)
+    identificador = Column(String(100), nullable=True)
+    latitud = Column(String(20), nullable=False)
+    longitud = Column(String(20), nullable=False)
+    precision_metros = Column(String(20), nullable=True)
+    status = Column(String(30), nullable=False, default="trabajando")
+    descripcion = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

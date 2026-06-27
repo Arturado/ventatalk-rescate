@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Unidad de Campo — Venezuela Rescate</title>
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #f1f5f9;
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      font-size: 16px;
+    }
+
+    /* ── HEADER ── */
+    #hdr {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: #0f172a;
+      border-bottom: 1px solid #1e293b;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    #hdr-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #conn-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: #1e293b;
+      transition: all .2s;
+    }
+    #conn-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #16a34a;
+      flex-shrink: 0;
+    }
+    #conn-badge.offline #conn-dot { background: #dc2626; }
+    #conn-badge.offline #conn-text { color: #fca5a5; }
+
+    /* ── MAIN ── */
+    #main {
+      flex: 1;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-width: 600px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* ── IDENTIFICACIÓN ── */
+    #id-input {
+      background: #1e293b;
+      border: 1.5px solid #334155;
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #f1f5f9;
+      font-size: 15px;
+      width: 100%;
+      outline: none;
+      transition: border-color .15s;
+    }
+    #id-input::placeholder { color: #64748b; }
+    #id-input:focus { border-color: #dc2626; }
+
+    /* ── COORDENADAS ── */
+    #gps-block {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #gps-block-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #94a3b8;
+    }
+    #gps-display {
+      min-height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #94a3b8;
+      background: #0f172a;
+      padding: 10px 14px;
+      text-align: center;
+      line-height: 1.5;
+    }
+    #gps-display.ok {
+      color: #4ade80;
+      background: #052e16;
+    }
+    #gps-display.error {
+      color: #fca5a5;
+      background: #3b0a0a;
+    }
+    #btn-gps {
+      width: 100%;
+      min-height: 56px;
+      background: #dc2626;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    #btn-gps:hover { background: #b91c1c; }
+    #btn-gps:disabled { background: #7f1d1d; color: #fca5a5; cursor: not-allowed; }
+
+    /* ── STATUS ── */
+    #status-block {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .status-btn {
+      flex: 1;
+      min-height: 56px;
+      min-width: 120px;
+      background: #1e293b;
+      color: #94a3b8;
+      border: 2px solid #334155;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .status-btn.selected {
+      background: #dc2626;
+      color: white;
+      border-color: #dc2626;
+    }
+    .status-btn:hover:not(.selected) {
+      border-color: #dc2626;
+      color: #f1f5f9;
+    }
+
+    /* ── DESCRIPCIÓN ── */
+    #desc-input {
+      background: #1e293b;
+      border: 1.5px solid #334155;
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #f1f5f9;
+      font-size: 16px;
+      width: 100%;
+      min-height: 90px;
+      resize: vertical;
+      outline: none;
+      font-family: inherit;
+      line-height: 1.5;
+      transition: border-color .15s;
+    }
+    #desc-input::placeholder { color: #64748b; }
+    #desc-input:focus { border-color: #dc2626; }
+
+    /* ── BOTÓN ENVIAR ── */
+    #btn-enviar {
+      width: 100%;
+      min-height: 64px;
+      background: #dc2626;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: background .15s;
+      letter-spacing: .02em;
+    }
+    #btn-enviar:hover:not(:disabled) { background: #b91c1c; }
+    #btn-enviar:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
+    #btn-enviar.success { background: #16a34a; }
+    #btn-enviar.error-state { background: #7f1d1d; }
+
+    /* ── FOOTER ── */
+    #footer {
+      padding: 12px 16px 20px;
+      text-align: center;
+      font-size: 12px;
+      color: #475569;
+      flex-shrink: 0;
+    }
+    #footer span { display: inline-block; margin: 0 8px; }
+
+    /* ── SPINNER ── */
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── SECTION LABELS ── */
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #64748b;
+      margin-bottom: -6px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header id="hdr">
+  <div id="hdr-title">
+    🚒 Venezuela Rescate &middot; Unidad de Campo
+  </div>
+  <div id="conn-badge">
+    <div id="conn-dot"></div>
+    <span id="conn-text">En línea</span>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main id="main">
+
+  <!-- Identificación -->
+  <div>
+    <div class="section-label">Identificación (opcional)</div>
+    <input
+      id="id-input"
+      type="text"
+      placeholder="Tu nombre o código de unidad (opcional)"
+      autocomplete="off"
+      autocorrect="off"
+      spellcheck="false"
+    >
+  </div>
+
+  <!-- Coordenadas -->
+  <div id="gps-block">
+    <div id="gps-block-label">Ubicación GPS</div>
+    <div id="gps-display">📍 Toca el botón para obtener tu ubicación</div>
+    <button id="btn-gps" onclick="localize()">
+      📍 LOCALIZAR
+    </button>
+  </div>
+
+  <!-- Status -->
+  <div>
+    <div class="section-label">Estado actual</div>
+    <div id="status-block">
+      <button class="status-btn selected" data-value="trabajando" onclick="selectStatus(this)">
+        🔨 Trabajando
+      </button>
+    </div>
+  </div>
+
+  <!-- Descripción -->
+  <div>
+    <div class="section-label">Nota / Situación</div>
+    <textarea
+      id="desc-input"
+      placeholder="Situación actual, necesidades, observaciones..."
+    ></textarea>
+  </div>
+
+  <!-- Botón enviar -->
+  <button id="btn-enviar" onclick="enviarReporte()" disabled>
+    📡 ENVIAR REPORTE
+  </button>
+
+</main>
+
+<!-- FOOTER -->
+<footer id="footer">
+  <span id="footer-ultimo">Sin reportes aún</span>
+  <span id="footer-contador">0 reportes esta sesión</span>
+</footer>
+
+<script>
+// ── Estado ────────────────────────────────────────────
+var _lat = null, _lon = null, _precision = null;
+var _status = 'trabajando';
+var _contadorSesion = 0;
+
+// ── localStorage ──────────────────────────────────────
+(function initStorage() {
+  var savedId = localStorage.getItem('bom_identificador');
+  if (savedId) document.getElementById('id-input').value = savedId;
+})();
+
+document.getElementById('id-input').addEventListener('input', function() {
+  localStorage.setItem('bom_identificador', this.value.trim());
+});
+
+// ── Online/Offline ────────────────────────────────────
+function updateConnBadge() {
+  var badge = document.getElementById('conn-badge');
+  var text  = document.getElementById('conn-text');
+  if (navigator.onLine) {
+    badge.classList.remove('offline');
+    text.textContent = 'En línea';
+  } else {
+    badge.classList.add('offline');
+    text.textContent = 'Sin señal';
+  }
+}
+window.addEventListener('online',  updateConnBadge);
+window.addEventListener('offline', updateConnBadge);
+updateConnBadge();
+
+// ── GPS ───────────────────────────────────────────────
+function localize() {
+  var btn = document.getElementById('btn-gps');
+  var display = document.getElementById('gps-display');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Obteniendo GPS...';
+  display.className = '';
+  display.textContent = 'Obteniendo ubicación...';
+
+  if (!navigator.geolocation) {
+    showGpsError('Geolocalización no disponible en este dispositivo');
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      _lat       = pos.coords.latitude.toFixed(6);
+      _lon       = pos.coords.longitude.toFixed(6);
+      _precision = pos.coords.accuracy ? Math.round(pos.coords.accuracy) + '' : null;
+
+      display.className = 'ok';
+      display.innerHTML = '✅ Lat: ' + _lat + ' &nbsp;&middot;&nbsp; Lon: ' + _lon +
+        (_precision ? ' &nbsp;&middot;&nbsp; ±' + _precision + 'm' : '');
+
+      btn.disabled = false;
+      btn.innerHTML = '🔄 Actualizar ubicación';
+      document.getElementById('btn-enviar').disabled = false;
+    },
+    function(err) {
+      var msg = 'No se pudo obtener GPS — intenta al aire libre';
+      if (err.code === 1) msg = 'Permiso de ubicación denegado — actívalo en configuración';
+      else if (err.code === 3) msg = 'Tiempo de espera agotado — intenta al aire libre';
+      showGpsError(msg);
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+  );
+}
+
+function showGpsError(msg) {
+  var display = document.getElementById('gps-display');
+  display.className = 'error';
+  display.textContent = '❌ ' + msg;
+  var btn = document.getElementById('btn-gps');
+  btn.disabled = false;
+  btn.innerHTML = '📍 LOCALIZAR';
+}
+
+// ── Status ────────────────────────────────────────────
+function selectStatus(el) {
+  document.querySelectorAll('.status-btn').forEach(function(b) {
+    b.classList.remove('selected');
+  });
+  el.classList.add('selected');
+  _status = el.dataset.value;
+}
+
+// ── Enviar ────────────────────────────────────────────
+async function enviarReporte() {
+  if (!_lat || !_lon) return;
+  var btn = document.getElementById('btn-enviar');
+  btn.disabled = true;
+  btn.className = '';
+  btn.textContent = 'Enviando...';
+
+  var fd = new FormData();
+  fd.append('latitud', _lat);
+  fd.append('longitud', _lon);
+  if (_precision) fd.append('precision_metros', _precision);
+  fd.append('status', _status);
+
+  var desc = document.getElementById('desc-input').value.trim();
+  if (desc) fd.append('descripcion', desc);
+
+  var ident = document.getElementById('id-input').value.trim();
+  if (ident) fd.append('identificador', ident);
+
+  try {
+    var res = await fetch('/api/bomberos/reporte', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+
+    _contadorSesion++;
+    var ahora = new Date();
+    var hora = ahora.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: false });
+    document.getElementById('footer-ultimo').textContent = 'Último reporte: ' + hora + ' VE';
+    document.getElementById('footer-contador').textContent = _contadorSesion + ' reporte' + (_contadorSesion === 1 ? '' : 's') + ' esta sesión';
+
+    btn.className = 'success';
+    btn.textContent = '✅ Reporte enviado';
+    document.getElementById('desc-input').value = '';
+
+    setTimeout(function() {
+      btn.className = '';
+      btn.textContent = '📡 ENVIAR REPORTE';
+      btn.disabled = false;
+    }, 3000);
+
+  } catch(e) {
+    btn.className = 'error-state';
+    btn.innerHTML = '❌ Error — verifica conexión &nbsp;<span style="font-size:13px;text-decoration:underline;cursor:pointer;" onclick="reintentar()">Reintentar</span>';
+  }
+}
+
+function reintentar() {
+  var btn = document.getElementById('btn-enviar');
+  btn.className = '';
+  btn.textContent = '📡 ENVIAR REPORTE';
+  btn.disabled = false;
+}
+</script>
+
+</body>
+</html>

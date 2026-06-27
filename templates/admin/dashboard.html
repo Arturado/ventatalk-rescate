@@ -106,6 +106,22 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 .est-pac-trasladado { background:#fefce8; color:#a16207; }
 .est-pac-fallecido  { background:#111827; color:#f9fafb; }
 
+/* Bomberos tab */
+.dash-tab.active-fire { color:#dc2626; border-bottom-color:#dc2626; }
+.bom-stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:22px; }
+.bom-stat { background:#fff; border-radius:10px; padding:16px 14px; box-shadow:0 1px 4px rgba(0,0,0,.07); border-left:4px solid #dc2626; }
+.bom-stat.green { border-left-color:#16a34a; }
+.bom-stat.amber { border-left-color:#d97706; }
+.bom-stat .num { font-size:26px; font-weight:800; color:#111; }
+.bom-stat .label { font-size:11px; color:#6b7280; margin-top:4px; text-transform:uppercase; letter-spacing:.04em; }
+.bom-status { display:inline-block; padding:2px 9px; border-radius:20px; font-size:11px; font-weight:700; text-transform:uppercase; }
+.bom-status-trabajando    { background:#dbeafe; color:#1e40af; }
+.bom-status-en_transito   { background:#fefce8; color:#a16207; }
+.bom-status-necesita_apoyo{ background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+.bom-status-fuera_de_servicio { background:#f3f4f6; color:#6b7280; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+.bom-apoyo-badge { animation:blink 1s ease-in-out infinite; display:inline-block; margin-left:8px; }
+.bom-hist-row td { background:#f8faff; font-size:12px; }
 /* Lightbox foto captura */
 .lb-foto { display:none; position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:9999; align-items:center; justify-content:center; padding:16px; }
 .lb-foto.open { display:flex; }
@@ -381,6 +397,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 <div class="dash-tabs">
   <button class="dash-tab active" id="tab-personas" onclick="switchTab('personas')">👥 Personas Desaparecidas</button>
   <button class="dash-tab" id="tab-pacientes" onclick="switchTab('pacientes')">🏥 Pacientes Hospitalizados</button>
+  <button class="dash-tab" id="tab-bomberos" onclick="switchTab('bomberos')">🚒 Bomberos en Campo <span id="bom-apoyo-indicator"></span></button>
 </div>
 
 <!-- Pane: Personas Desaparecidas -->
@@ -668,6 +685,43 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
     </table>
   </div>
 </div><!-- /#pane-pacientes -->
+
+<!-- Pane: Bomberos en Campo -->
+<div id="pane-bomberos" style="display:none">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+    <h2 style="font-size:20px;font-weight:800;">Bomberos en Campo</h2>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span id="bom-refresh-label" style="font-size:12px;color:#6b7280;">Actualiza en <span id="bom-countdown">30</span>s</span>
+      <button onclick="loadBomberos()" style="padding:8px 14px;background:#dc2626;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">🔄 Actualizar</button>
+    </div>
+  </div>
+
+  <div class="bom-stats-grid" id="bom-stats-grid">
+    <div class="bom-stat"><div class="num" id="bs-total">—</div><div class="label">Reportes hoy</div></div>
+    <div class="bom-stat green"><div class="num" id="bs-activas">—</div><div class="label">Unidades activas</div></div>
+    <div class="bom-stat amber"><div class="num" id="bs-ultimo">—</div><div class="label">Último reporte</div></div>
+  </div>
+
+  <div class="table-wrap">
+    <table id="tabla-bomberos" style="min-width:800px;">
+      <thead style="background:#dc2626;">
+        <tr>
+          <th>#</th>
+          <th>Identificador</th>
+          <th>Coordenadas</th>
+          <th>Precisión</th>
+          <th>Estado</th>
+          <th>Descripción</th>
+          <th>Hace cuánto</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="bom-tbody">
+        <tr><td colspan="8" style="text-align:center;color:#6b7280;padding:40px;">Cargando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div><!-- /#pane-bomberos -->
 
 <!-- Lightbox foto captura -->
 <div class="lb-foto" id="lb-foto" onclick="if(event.target===this)closeLbFoto()">
@@ -1058,13 +1112,25 @@ document.querySelectorAll('.estado-form').forEach(function(form) {
 /* ---- TABS ---- */
 var _pacientesLoaded = false;
 var _pacientesData = [];
+var _bomberosLoaded = false;
+var _bomberosData  = [];
+var _bomRefreshTimer = null;
+var _bomCountdown = 30;
 
 function switchTab(tab) {
-  document.getElementById('pane-personas').style.display = tab === 'personas' ? '' : 'none';
+  document.getElementById('pane-personas').style.display  = tab === 'personas'  ? '' : 'none';
   document.getElementById('pane-pacientes').style.display = tab === 'pacientes' ? '' : 'none';
-  document.getElementById('tab-personas').className = 'dash-tab' + (tab === 'personas' ? ' active' : '');
+  document.getElementById('pane-bomberos').style.display  = tab === 'bomberos'  ? '' : 'none';
+  document.getElementById('tab-personas').className  = 'dash-tab' + (tab === 'personas'  ? ' active' : '');
   document.getElementById('tab-pacientes').className = 'dash-tab' + (tab === 'pacientes' ? ' active-blue' : '');
+  document.getElementById('tab-bomberos').className  = 'dash-tab' + (tab === 'bomberos'  ? ' active-fire' : '');
   if (tab === 'pacientes' && !_pacientesLoaded) loadPacientes();
+  if (tab === 'bomberos') {
+    if (!_bomberosLoaded) loadBomberos();
+    startBomRefresh();
+  } else {
+    stopBomRefresh();
+  }
 }
 
 /* ---- PACIENTES TAB ---- */
@@ -1297,6 +1363,129 @@ async function importarCSV(key) {
     resEl.innerHTML = '❌ Error de conexión. Intenta de nuevo.';
   }
   btn.disabled = false; btn.textContent = 'Importar';
+}
+
+/* ---- BOMBEROS ---- */
+var _BOM_STATUS_LABELS = { trabajando:'Trabajando', en_transito:'En tránsito', necesita_apoyo:'Necesita apoyo', fuera_de_servicio:'Fuera de servicio' };
+
+function startBomRefresh() {
+  stopBomRefresh();
+  _bomCountdown = 30;
+  _bomRefreshTimer = setInterval(function() {
+    _bomCountdown--;
+    var el = document.getElementById('bom-countdown');
+    if (el) el.textContent = _bomCountdown;
+    if (_bomCountdown <= 0) {
+      loadBomberos();
+      _bomCountdown = 30;
+    }
+  }, 1000);
+}
+
+function stopBomRefresh() {
+  if (_bomRefreshTimer) { clearInterval(_bomRefreshTimer); _bomRefreshTimer = null; }
+}
+
+async function loadBomberos() {
+  var key = getApiKey(); if (!key) return;
+  _bomCountdown = 30;
+  var cdEl = document.getElementById('bom-countdown');
+  if (cdEl) cdEl.textContent = '30';
+  try {
+    var res = await fetch('/api/bomberos/ultimas-posiciones', { headers: { 'X-Api-Key': key } });
+    if (res.status === 401) { sessionStorage.removeItem('vr_api_key'); return; }
+    _bomberosData = await res.json();
+    _bomberosLoaded = true;
+    renderBomStats();
+    renderBomTable(_bomberosData);
+    checkNecesitaApoyo();
+  } catch(e) {
+    document.getElementById('bom-tbody').innerHTML = '<tr><td colspan="8" style="color:#dc2626;text-align:center;padding:24px;">Error al cargar. Intenta de nuevo.</td></tr>';
+  }
+}
+
+function renderBomStats() {
+  var d = _bomberosData;
+  document.getElementById('bs-total').textContent = d.length;
+  var uniq = new Set(d.map(function(r){ return r.identificador || ('anon-'+r.id); })).size;
+  document.getElementById('bs-activas').textContent = uniq;
+  if (!d.length) { document.getElementById('bs-ultimo').textContent = '—'; return; }
+  var latest = d.reduce(function(a,b){ return a.created_at > b.created_at ? a : b; });
+  document.getElementById('bs-ultimo').textContent = tiempoRelativo(latest.created_at);
+}
+
+function renderBomTable(arr) {
+  var tbody = document.getElementById('bom-tbody');
+  if (!arr.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#6b7280;padding:32px;">Sin reportes hoy.</td></tr>'; return; }
+  tbody.innerHTML = arr.map(function(r) {
+    var statusCls = 'bom-status-' + (r.status || 'trabajando');
+    var statusLbl = _BOM_STATUS_LABELS[r.status] || r.status;
+    var hace = tiempoRelativo(r.created_at);
+    var lat = parseFloat(r.latitud), lon = parseFloat(r.longitud);
+    var mapsUrl = 'https://www.google.com/maps?q=' + r.latitud + ',' + r.longitud;
+    return '<tr data-bid="'+r.id+'">' +
+      '<td>'+r.id+'</td>' +
+      '<td><strong>'+(esc(r.identificador)||'<span style="color:#9ca3af">Anónimo</span>')+'</strong></td>' +
+      '<td style="font-size:12px;font-family:monospace;">'+esc(r.latitud)+', '+esc(r.longitud)+'</td>' +
+      '<td>'+(r.precision_metros ? '±'+esc(r.precision_metros)+'m' : '—')+'</td>' +
+      '<td><span class="bom-status '+statusCls+'">'+esc(statusLbl)+'</span></td>' +
+      '<td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(r.descripcion||'')+'">'+esc(r.descripcion||'—')+'</td>' +
+      '<td style="white-space:nowrap;font-size:12px;">'+hace+'</td>' +
+      '<td>' +
+        '<div style="display:flex;gap:4px;flex-wrap:wrap;">' +
+          '<a href="'+mapsUrl+'" target="_blank" style="font-size:11px;padding:4px 8px;background:#1e40af;color:white;border-radius:5px;text-decoration:none;white-space:nowrap;">🗺 Mapa</a>' +
+          (r.identificador ? '<button onclick="toggleBomHistorial('+r.id+',\''+esc(r.identificador||'')+'\',this)" style="font-size:11px;padding:4px 8px;background:#374151;color:white;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">📋 Historial</button>' : '') +
+        '</div>' +
+      '</td>' +
+    '</tr>' +
+    '<tr id="bom-hist-'+r.id+'" class="bom-hist-row" style="display:none;"><td colspan="8" style="background:#f8faff;padding:10px 16px;"><div id="bom-hist-content-'+r.id+'">Cargando historial...</div></td></tr>';
+  }).join('');
+}
+
+async function toggleBomHistorial(id, identificador, btn) {
+  var row = document.getElementById('bom-hist-'+id);
+  if (row.style.display !== 'none') { row.style.display = 'none'; btn.textContent = '📋 Historial'; return; }
+  row.style.display = '';
+  btn.textContent = '▲ Cerrar';
+  var key = getApiKey(); if (!key) return;
+  var content = document.getElementById('bom-hist-content-'+id);
+  content.textContent = 'Cargando...';
+  try {
+    var res = await fetch('/api/bomberos/historial?identificador='+encodeURIComponent(identificador)+'&limit=20', { headers: { 'X-Api-Key': key } });
+    var data = await res.json();
+    if (!data.length) { content.textContent = 'Sin historial.'; return; }
+    content.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+      '<thead><tr style="color:#6b7280;text-align:left;">' +
+        '<th style="padding:4px 8px;">#</th><th style="padding:4px 8px;">Coordenadas</th><th style="padding:4px 8px;">Estado</th><th style="padding:4px 8px;">Nota</th><th style="padding:4px 8px;">Fecha/hora</th><th style="padding:4px 8px;">Mapa</th>' +
+      '</tr></thead><tbody>' +
+      data.map(function(r) {
+        var mapsUrl = 'https://www.google.com/maps?q='+r.latitud+','+r.longitud;
+        return '<tr style="border-top:1px solid #e5e7eb;">' +
+          '<td style="padding:4px 8px;">'+r.id+'</td>' +
+          '<td style="padding:4px 8px;font-family:monospace;">'+esc(r.latitud)+', '+esc(r.longitud)+'</td>' +
+          '<td style="padding:4px 8px;"><span class="bom-status bom-status-'+esc(r.status)+'">'+esc(_BOM_STATUS_LABELS[r.status]||r.status)+'</span></td>' +
+          '<td style="padding:4px 8px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(r.descripcion||'—')+'</td>' +
+          '<td style="padding:4px 8px;white-space:nowrap;">'+fmtDate(r.created_at)+'</td>' +
+          '<td style="padding:4px 8px;"><a href="'+mapsUrl+'" target="_blank" style="color:#1e40af;font-size:11px;">🗺 Ver</a></td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table>';
+  } catch(e) { content.textContent = 'Error al cargar historial.'; }
+}
+
+function checkNecesitaApoyo() {
+  var hay = _bomberosData.some(function(r){ return r.status === 'necesita_apoyo'; });
+  var ind = document.getElementById('bom-apoyo-indicator');
+  if (ind) ind.innerHTML = hay ? '<span class="bom-apoyo-badge" style="color:#dc2626;">🚨</span>' : '';
+}
+
+function tiempoRelativo(iso) {
+  if (!iso) return '—';
+  var diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60)   return 'hace ' + diff + 's';
+  if (diff < 3600) return 'hace ' + Math.floor(diff/60) + 'min';
+  if (diff < 86400)return 'hace ' + Math.floor(diff/3600) + 'h';
+  return 'hace ' + Math.floor(diff/86400) + 'd';
 }
 
 /* ---- MODALES ---- */

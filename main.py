@@ -18,6 +18,7 @@ from routers import personas, reportes
 from routers.admin import router as admin_router
 from routers.stats import router as stats_router, public_router as stats_public_router
 from routers.hospitales import router as hospitales_router, pacientes_router
+from routers.bomberos import router as bomberos_router
 from sqlalchemy import text as sql_text
 
 templates = Jinja2Templates(directory="templates")
@@ -152,6 +153,7 @@ app.include_router(stats_router)
 app.include_router(stats_public_router)
 app.include_router(hospitales_router)
 app.include_router(pacientes_router)
+app.include_router(bomberos_router)
 app.include_router(admin_router)
 
 
@@ -173,6 +175,11 @@ async def hospitales_page(request: Request):
 @app.get("/hospitales/reportar", response_class=HTMLResponse)
 async def hospitales_reportar_page(request: Request):
     return templates.TemplateResponse("hospitales_reportar.html", {"request": request})
+
+
+@app.get("/bombero", response_class=HTMLResponse)
+async def bombero_page(request: Request):
+    return templates.TemplateResponse("bombero.html", {"request": request})
 
 
 @app.get("/health", tags=["sistema"])
