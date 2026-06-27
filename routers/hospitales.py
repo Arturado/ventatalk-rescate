@@ -95,6 +95,33 @@ async def crear_paciente(
     db.refresh(paciente)
     return paciente
 
+@pacientes_router.get("/recientes")
+def pacientes_recientes(db: Session = Depends(get_db)):
+    from datetime import timezone
+    rows = (
+        db.query(models.PacienteHospitalizado)
+        .filter(models.PacienteHospitalizado.estado_paciente != "fallecido")
+        .order_by(models.PacienteHospitalizado.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    out = []
+    for p in rows:
+        dt = p.created_at
+        if dt and dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        out.append({
+            "id": p.id,
+            "nombre_hospital": p.nombre_hospital,
+            "nombres_apellidos": p.nombres_apellidos,
+            "edad": p.edad,
+            "sexo": p.sexo,
+            "estado_paciente": p.estado_paciente,
+            "procedencia": p.procedencia,
+            "created_at": dt.isoformat() if dt else None,
+        })
+    return out
+
 @pacientes_router.get("/buscar", response_model=List[schemas.PacienteResponse])
 def buscar_pacientes(
     nombre: Optional[str] = Query(None),

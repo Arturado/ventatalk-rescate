@@ -142,12 +142,18 @@
     footer { background: #111; color: #9ca3af; text-align: center; padding: 20px 24px; font-size: 12px; }
     footer strong { color: #f3f4f6; }
 
-    @media (max-width: 900px) { .hosp-grid { grid-template-columns: repeat(2, 1fr); } }
+    /* Recientes */
+    .recientes-section { padding: 48px 24px; background: #f0f6ff; border-top: 1px solid #dbeafe; border-bottom: 1px solid #dbeafe; }
+    .recientes-inner { max-width: 1200px; margin: 0 auto; }
+    #pac-recientes-grid { margin-top: 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+
+    @media (max-width: 900px) { .hosp-grid { grid-template-columns: repeat(2, 1fr); } #pac-recientes-grid { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 580px) {
       .hosp-grid { grid-template-columns: 1fr; }
       .buscar-fields { flex-direction: column; }
       .buscar-fields input, .buscar-fields select, .buscar-btn { width: 100%; }
       #pac-resultados { grid-template-columns: 1fr; }
+      #pac-recientes-grid { grid-template-columns: repeat(2, 1fr); }
       header nav { display: none; }
     }
   </style>
@@ -176,28 +182,7 @@
   <p>Directorio de hospitales activos y buscador de personas hospitalizadas en las zonas afectadas.</p>
 </div>
 
-<!-- SECCIÓN A: Directorio de hospitales -->
-<div class="section">
-  <div class="section-title">Centros de Salud Activos</div>
-  <div class="section-sub">Hospitales, clínicas y ambulatorios en zonas afectadas</div>
-
-  <div class="zone-pills" id="zone-pills">
-    <button class="zone-pill active" data-zona="">Todas</button>
-    <button class="zone-pill" data-zona="Caracas">Caracas</button>
-    <button class="zone-pill" data-zona="Vargas">Vargas</button>
-    <button class="zone-pill" data-zona="Miranda">Miranda</button>
-    <button class="zone-pill" data-zona="Carabobo">Carabobo</button>
-    <button class="zone-pill" data-zona="Aragua">Aragua</button>
-    <button class="zone-pill" data-zona="Falcon">Falcón</button>
-    <button class="zone-pill" data-zona="Yaracuy">Yaracuy</button>
-  </div>
-
-  <div id="hosp-grid-wrap">
-    <div class="loading-msg">Cargando hospitales...</div>
-  </div>
-</div>
-
-<!-- SECCIÓN B: Buscador de pacientes -->
+<!-- SECCIÓN A: Buscador de pacientes -->
 <div class="buscar-section">
   <div class="buscar-inner">
     <div class="section-title">Buscar persona en hospitales</div>
@@ -221,6 +206,36 @@
     <div class="pac-error" id="pac-error"></div>
     <div class="pac-spinner" id="pac-spinner" hidden>Buscando...</div>
     <div id="pac-resultados"></div>
+  </div>
+</div>
+
+<!-- SECCIÓN B: Últimos pacientes registrados -->
+<div class="recientes-section">
+  <div class="recientes-inner">
+    <div class="section-title">Últimos pacientes registrados</div>
+    <div class="section-sub">Actualizados en tiempo real — ayúdanos a encontrar a sus familias</div>
+    <div id="pac-recientes-grid"><div class="pac-spinner">Cargando...</div></div>
+  </div>
+</div>
+
+<!-- SECCIÓN C: Directorio de hospitales -->
+<div class="section">
+  <div class="section-title">Centros de Salud Activos</div>
+  <div class="section-sub">Hospitales, clínicas y ambulatorios en zonas afectadas</div>
+
+  <div class="zone-pills" id="zone-pills">
+    <button class="zone-pill active" data-zona="">Todas</button>
+    <button class="zone-pill" data-zona="Caracas">Caracas</button>
+    <button class="zone-pill" data-zona="Vargas">Vargas</button>
+    <button class="zone-pill" data-zona="Miranda">Miranda</button>
+    <button class="zone-pill" data-zona="Carabobo">Carabobo</button>
+    <button class="zone-pill" data-zona="Aragua">Aragua</button>
+    <button class="zone-pill" data-zona="Falcon">Falcón</button>
+    <button class="zone-pill" data-zona="Yaracuy">Yaracuy</button>
+  </div>
+
+  <div id="hosp-grid-wrap">
+    <div class="loading-msg">Cargando hospitales...</div>
   </div>
 </div>
 
@@ -372,7 +387,53 @@
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  /* ---- Recientes ---- */
+
+  function renderRecienteCard(p) {
+    var hospDisplay = p.nombre_hospital || 'Hospital no especificado';
+    var metaItems = [];
+    if (p.edad) metaItems.push('🎂 ' + esc(p.edad));
+    if (p.sexo) metaItems.push(p.sexo === 'masculino' ? '♂' : p.sexo === 'femenino' ? '♀' : '—');
+    if (p.procedencia) metaItems.push('📍 ' + esc(p.procedencia));
+    var fecha = p.created_at ? new Date(p.created_at).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+    return '<div class="pac-card">' +
+      '<div class="pac-name">' + esc(p.nombres_apellidos) + '</div>' +
+      '<div class="pac-hospital">🏥 ' + esc(hospDisplay) + '</div>' +
+      (metaItems.length ? '<div class="pac-meta">' + metaItems.join(' &nbsp;·&nbsp; ') + '</div>' : '') +
+      '<div class="pac-footer">' + estadoBadge(p.estado_paciente || 'ingresado') + '<span class="pac-date">' + fecha + '</span></div>' +
+    '</div>';
+  }
+
+  async function loadRecientes() {
+    try {
+      var res = await fetch('/api/pacientes/recientes');
+      if (!res.ok) throw new Error();
+      var data = await res.json();
+      var grid = document.getElementById('pac-recientes-grid');
+      if (!data.length) {
+        grid.innerHTML = '<div class="pac-empty">Aún no hay pacientes registrados. Si eres personal de salud, <a href="/hospitales/reportar">regístralos aquí</a>.</div>';
+        return;
+      }
+      grid.innerHTML = data.map(renderRecienteCard).join('');
+    } catch(e) { /* mantener contenido existente en error */ }
+  }
+
+  var _recientes_timer = null;
+  function startRecientesPolling() { _recientes_timer = setInterval(loadRecientes, 60000); }
+  function stopRecientesPolling() { clearInterval(_recientes_timer); _recientes_timer = null; }
+
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+      stopRecientesPolling();
+    } else {
+      loadRecientes();
+      startRecientesPolling();
+    }
+  });
+
   loadHospitales();
+  loadRecientes();
+  startRecientesPolling();
 </script>
 </body>
 </html>
