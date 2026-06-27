@@ -681,8 +681,8 @@
     <h3>Buscar en nuestros registros</h3>
     <p class="sp-subtitle">Ingresa un nombre o número de cédula para buscar en la base de datos</p>
     <div class="sp-fields">
-      <input type="text" id="sp-nombre" placeholder="Nombres o apellidos" autocomplete="off" onkeydown="if(event.key==='Enter') buscarPersonas()">
-      <input type="text" id="sp-cedula" placeholder="Ej: V-12345678 o 12345678" autocomplete="off" maxlength="15" onkeydown="if(event.key==='Enter') buscarPersonas()">
+      <input type="text" id="sp-nombre" placeholder="Nombres o apellidos" autocomplete="off" onkeydown="if(event.key==='Enter') buscarPersonas()" oninput="buscarPersonasDebounced()">
+      <input type="text" id="sp-cedula" placeholder="Ej: V-12345678 o 12345678" autocomplete="off" maxlength="15" onkeydown="if(event.key==='Enter') buscarPersonas()" oninput="buscarPersonasDebounced()">
       <button class="sp-btn" onclick="buscarPersonas()">Buscar</button>
     </div>
     <p class="sp-hint">Para mejores resultados, busca por número de cédula</p>
@@ -797,6 +797,12 @@
       document.getElementById('sp-resultados').innerHTML = '';
       document.getElementById('sp-error-inline').textContent = '';
     }
+  }
+
+  var _buscarTimer = null;
+  function buscarPersonasDebounced() {
+    clearTimeout(_buscarTimer);
+    _buscarTimer = setTimeout(buscarPersonas, 800);
   }
 
   async function buscarPersonas() {

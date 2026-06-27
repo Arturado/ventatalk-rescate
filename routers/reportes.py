@@ -135,7 +135,7 @@ check_router = APIRouter(prefix="/api", tags=["utils"])
 # Auxiliar decorada: aplica rate limit 60/hour al IP cuando no hay API key válida.
 # Se llama manualmente desde buscar_personas en lugar de usar @limiter.limit en el endpoint.
 async def _buscar_noop(request: Request): pass
-_buscar_noop = limiter.limit("60/hour")(_buscar_noop)
+_buscar_noop = limiter.limit("300/hour")(_buscar_noop)
 
 @check_router.get("/buscar")
 async def buscar_personas(
