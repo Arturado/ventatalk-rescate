@@ -73,6 +73,8 @@ class PacienteHospitalizado(Base):
     # valores: "ingresado", "estable", "grave", "critico", "alta", "trasladado", "fallecido"
     reportado_por = Column(String(200), nullable=True)
     # Nombre del médico/enfermero que carga (sin auth, voluntario)
+    necesita_ayuda = Column(Boolean, nullable=False, default=False)
+    tipo_ayuda = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class BomberoReporte(Base):

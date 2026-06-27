@@ -62,6 +62,8 @@ class PacienteResponse(BaseModel):
     foto_captura_url: Optional[str] = None
     estado_paciente: str
     reportado_por: Optional[str] = None
+    necesita_ayuda: bool = False
+    tipo_ayuda: Optional[str] = None
     created_at: datetime
 
     @field_serializer('created_at')

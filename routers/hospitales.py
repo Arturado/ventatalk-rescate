@@ -58,6 +58,8 @@ async def crear_paciente(
     datos_adicionales: str = Form(None),
     estado_paciente: str = Form("ingresado"),
     reportado_por: str = Form(None),
+    necesita_ayuda: bool = Form(False),
+    tipo_ayuda: str = Form(None),
     foto_captura: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
@@ -88,6 +90,8 @@ async def crear_paciente(
         datos_adicionales=datos_adicionales,
         estado_paciente=estado_paciente,
         reportado_por=reportado_por,
+        necesita_ayuda=necesita_ayuda,
+        tipo_ayuda=tipo_ayuda or None,
         foto_captura_url=foto_url
     )
     db.add(paciente)

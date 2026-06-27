@@ -425,6 +425,8 @@ async def nuevo_paciente_admin(
     datos_adicionales: Optional[str] = Form(None),
     estado_paciente: str = Form("ingresado"),
     reportado_por: Optional[str] = Form(None),
+    necesita_ayuda: bool = Form(False),
+    tipo_ayuda: Optional[str] = Form(None),
     foto_captura: UploadFile = File(None),
     x_csrf_token: str = Header(""),
     db: Session = Depends(get_db),
@@ -465,9 +467,54 @@ async def nuevo_paciente_admin(
         datos_adicionales=datos_adicionales or None,
         estado_paciente=estado_paciente or "ingresado",
         reportado_por=reportado_por or None,
+        necesita_ayuda=necesita_ayuda,
+        tipo_ayuda=tipo_ayuda or None,
         foto_captura_url=foto_url,
     )
     db.add(paciente)
     db.commit()
     db.refresh(paciente)
     return {"ok": True, "id": paciente.id}
+
+
+# --- Eliminar todos los pacientes ---
+
+@router.delete("/pacientes/todos")
+async def eliminar_todos_pacientes(
+    request: Request,
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+    count = db.query(models.PacienteHospitalizado).count()
+    db.query(models.PacienteHospitalizado).delete()
+    db.commit()
+    return {"ok": True, "eliminados": count}
+
+
+# --- Eliminar paciente por id ---
+
+@router.delete("/pacientes/{paciente_id}")
+async def eliminar_paciente(
+    paciente_id: int,
+    request: Request,
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+    paciente = db.query(models.PacienteHospitalizado).filter(
+        models.PacienteHospitalizado.id == paciente_id
+    ).first()
+    if not paciente:
+        raise HTTPException(status_code=404, detail="No encontrado")
+    db.delete(paciente)
+    db.commit()
+    return {"ok": True}
