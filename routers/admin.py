@@ -192,6 +192,31 @@ async def eliminar_persona(
     db.commit()
     return {"ok": True}
 
+# --- Eliminar bombero ---
+
+@router.delete("/bomberos/{reporte_id}")
+async def eliminar_bombero(
+    reporte_id: int,
+    request: Request,
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+
+    reporte = db.query(models.BomberoReporte).filter(
+        models.BomberoReporte.id == reporte_id
+    ).first()
+    if not reporte:
+        raise HTTPException(status_code=404, detail="No encontrado")
+    db.delete(reporte)
+    db.commit()
+    return {"ok": True}
+
 # --- Export CSV ---
 
 @router.get("/export/csv")

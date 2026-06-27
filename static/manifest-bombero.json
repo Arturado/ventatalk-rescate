@@ -1,0 +1,12 @@
+{
+  "name": "Venezuela Rescate — Unidad de Campo",
+  "short_name": "VE Campo",
+  "description": "App de campo para bomberos y rescatistas",
+  "start_url": "/bombero",
+  "scope": "/bombero",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": []
+}

@@ -4,10 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Unidad de Campo — Venezuela Rescate</title>
+  <link rel="manifest" href="/static/manifest-bombero.json">
   <meta name="theme-color" content="#0f172a">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VE Campo">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
@@ -450,6 +452,49 @@ async function enviarDesdeBoton(btn) {
       btn.disabled = false;
     }, 2000);
   }
+}
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/static/sw-bombero.js')
+      .catch(() => {});
+  });
+}
+</script>
+
+<script>
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const banner = document.createElement('div');
+  banner.id = 'install-banner';
+  banner.style.cssText = `position:fixed;top:0;left:0;right:0;
+    background:#1e40af;color:white;padding:10px 16px;
+    display:flex;align-items:center;justify-content:space-between;
+    font-size:13px;z-index:9999;`;
+  banner.innerHTML = `
+    <span>📲 Instala esta app para usarla sin internet</span>
+    <div style="display:flex;gap:8px">
+      <button onclick="installApp()" style="background:#dc2626;color:white;
+        border:none;padding:6px 12px;border-radius:6px;cursor:pointer;
+        font-size:12px">Instalar</button>
+      <button onclick="this.closest('#install-banner').remove()"
+        style="background:transparent;color:#94a3b8;border:none;
+        cursor:pointer;font-size:18px">×</button>
+    </div>
+  `;
+  document.body.prepend(banner);
+});
+
+async function installApp() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  document.getElementById('install-banner')?.remove();
 }
 </script>
 
