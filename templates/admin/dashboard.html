@@ -141,15 +141,242 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 .match-btn-discard:hover { border-color:#9ca3af; color:#374151; }
 .match-toast { position:fixed; bottom:24px; right:24px; background:#16a34a; color:white; padding:12px 20px; border-radius:10px; font-size:14px; font-weight:600; z-index:9999; box-shadow:0 4px 16px rgba(0,0,0,.15); opacity:0; pointer-events:none; transition:opacity .3s; }
 .match-toast.show { opacity:1; }
+/* Import panel */
+.import-panel { display:none; background:#fff; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,.08); padding:24px; margin-bottom:24px; }
+.import-panel.open { display:block; }
+.import-tabs { display:flex; gap:0; border-bottom:2px solid #e5e7eb; margin-bottom:20px; }
+.import-tab { padding:8px 18px; border:none; background:transparent; font-size:13px; font-weight:700; color:#6b7280; cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-2px; transition:all .15s; }
+.import-tab:hover { color:#111; }
+.import-tab.active { color:#1e40af; border-bottom-color:#1e40af; }
+.drop-zone { border:2px dashed #d1d5db; border-radius:10px; padding:32px 20px; text-align:center; cursor:pointer; transition:all .15s; background:#fafafa; }
+.drop-zone.drag-over { border-color:#1e40af; background:#eff6ff; }
+.drop-zone-icon { font-size:28px; display:block; margin-bottom:8px; }
+.drop-zone-txt { font-size:14px; color:#6b7280; }
+.drop-zone-file { font-size:13px; color:#1e40af; font-weight:600; margin-top:8px; min-height:18px; }
+.import-help { font-size:12px; color:#6b7280; background:#f9fafb; border-radius:8px; padding:10px 14px; margin:12px 0; line-height:1.9; word-break:break-word; border:1px solid #e5e7eb; }
+.import-result { margin-top:14px; padding:12px 16px; border-radius:8px; font-size:14px; display:none; }
+.import-result.ok  { background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; }
+.import-result.partial { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
+.import-result.err { background:#fef2f2; border:1px solid #fecaca; color:#dc2626; }
+/* Modals */
+.adm-modal-bd { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:1000; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto; }
+.adm-modal-bd.open { display:flex; }
+.adm-modal { background:#fff; border-radius:16px; padding:28px; width:100%; max-width:560px; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+.adm-modal-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+.adm-modal-title { font-size:17px; font-weight:800; }
+.adm-modal-x { border:none; background:transparent; font-size:24px; cursor:pointer; color:#9ca3af; line-height:1; padding:0 4px; }
+.adm-modal-x:hover { color:#111; }
+.fg { margin-bottom:14px; }
+.fg label { display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:5px; }
+.fg input, .fg select, .fg textarea { width:100%; padding:9px 12px; border:1.5px solid #d1d5db; border-radius:7px; font-size:14px; outline:none; color:#111; transition:border-color .15s; background:#fff; box-sizing:border-box; }
+.fg input:focus, .fg select:focus, .fg textarea:focus { border-color:#1e40af; }
+.fg textarea { resize:vertical; min-height:68px; font-family:inherit; }
+.fg-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.adm-save-btn { width:100%; padding:12px; background:#1e40af; color:white; border:none; border-radius:8px; font-size:15px; font-weight:700; cursor:pointer; margin-top:6px; transition:background .15s; }
+.adm-save-btn:hover { background:#1e3a8a; }
+.adm-save-btn:disabled { background:#9ca3af; cursor:not-allowed; }
 @media (max-width: 640px) {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .toolbar { flex-direction: column; align-items: stretch; }
   .toolbar input { min-width: unset; }
   .match-cards { grid-template-columns: 1fr; }
+  .fg-row { grid-template-columns: 1fr; }
 }
 {% endblock %}
 {% block content %}
 <meta name="csrf-token" content="{{ csrf_token }}">
+
+<!-- Barra de acciones globales -->
+<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+  <button onclick="toggleImportPanel()" style="padding:8px 16px;background:#7c3aed;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">⬆️ Importar CSV</button>
+  <button onclick="openModal('modal-hosp')" style="padding:8px 16px;background:#0369a1;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">➕ Nuevo hospital</button>
+</div>
+
+<!-- Panel de importación CSV -->
+<div id="import-panel" class="import-panel">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+    <h3 style="font-size:16px;font-weight:800;">Importar datos desde CSV</h3>
+    <button onclick="toggleImportPanel()" style="border:none;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:#9ca3af;">×</button>
+  </div>
+  <div class="import-tabs">
+    <button class="import-tab active" id="itab-pac" onclick="switchImportTab('pac')">🏥 Pacientes</button>
+    <button class="import-tab" id="itab-hosp" onclick="switchImportTab('hosp')">🏗️ Hospitales</button>
+  </div>
+  <!-- Tab pacientes -->
+  <div id="ipane-pac">
+    <div class="drop-zone" id="dz-pac" onclick="document.getElementById('file-pac').click()" ondragover="dzDragOver(event,'pac')" ondragleave="dzDragLeave('pac')" ondrop="dzDrop(event,'pac')">
+      <span class="drop-zone-icon">📄</span>
+      <div class="drop-zone-txt">Arrastra tu CSV aquí o <strong>haz clic para seleccionar</strong></div>
+      <div class="drop-zone-file" id="dz-pac-name"></div>
+    </div>
+    <input type="file" id="file-pac" accept=".csv" style="display:none" onchange="dzFileChange(event,'pac')">
+    <div class="import-help">
+      <strong>Columnas:</strong> nombres_apellidos* · nombre_hospital · hospital_id · edad · sexo · cedula · parentesco · procedencia · observaciones · datos_adicionales · estado_paciente · reportado_por<br>
+      <small>* requerido &nbsp;·&nbsp; orden libre &nbsp;·&nbsp; case-insensitive</small>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px;">
+      <button onclick="descargarTemplate('pac')" style="padding:7px 14px;background:#f3f4f6;color:#374151;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;">⬇ Template CSV</button>
+      <button onclick="importarCSV('pac')" id="btn-import-pac" style="padding:7px 20px;background:#1e40af;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">Importar</button>
+    </div>
+    <div id="import-result-pac" class="import-result"></div>
+  </div>
+  <!-- Tab hospitales -->
+  <div id="ipane-hosp" style="display:none">
+    <div class="drop-zone" id="dz-hosp" onclick="document.getElementById('file-hosp').click()" ondragover="dzDragOver(event,'hosp')" ondragleave="dzDragLeave('hosp')" ondrop="dzDrop(event,'hosp')">
+      <span class="drop-zone-icon">📄</span>
+      <div class="drop-zone-txt">Arrastra tu CSV aquí o <strong>haz clic para seleccionar</strong></div>
+      <div class="drop-zone-file" id="dz-hosp-name"></div>
+    </div>
+    <input type="file" id="file-hosp" accept=".csv" style="display:none" onchange="dzFileChange(event,'hosp')">
+    <div class="import-help">
+      <strong>Columnas:</strong> nombre* · zona* · direccion · telefono · tipo · activo<br>
+      <small>* requerido &nbsp;·&nbsp; tipo: publico/privado/clinica/ambulatorio/refugio_medico &nbsp;·&nbsp; activo: true/false (default true)</small>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px;">
+      <button onclick="descargarTemplate('hosp')" style="padding:7px 14px;background:#f3f4f6;color:#374151;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;">⬇ Template CSV</button>
+      <button onclick="importarCSV('hosp')" id="btn-import-hosp" style="padding:7px 20px;background:#1e40af;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">Importar</button>
+    </div>
+    <div id="import-result-hosp" class="import-result"></div>
+  </div>
+</div>
+
+<!-- Modal: Nuevo Hospital -->
+<div class="adm-modal-bd" id="modal-hosp" onclick="if(event.target===this)closeModal('modal-hosp')">
+  <div class="adm-modal">
+    <div class="adm-modal-hdr">
+      <div class="adm-modal-title">🏥 Nuevo hospital</div>
+      <button class="adm-modal-x" onclick="closeModal('modal-hosp')">×</button>
+    </div>
+    <form id="form-hosp" onsubmit="guardarHospital(event)">
+      <div class="fg">
+        <label>Nombre *</label>
+        <input type="text" name="nombre" required placeholder="Hospital Central...">
+      </div>
+      <div class="fg-row">
+        <div class="fg">
+          <label>Zona *</label>
+          <select name="zona" required>
+            <option value="">Seleccionar zona...</option>
+            <option>Caracas</option><option>Vargas</option><option>Miranda</option>
+            <option>Carabobo</option><option>Aragua</option>
+            <option value="Falcon">Falcón</option>
+            <option>Yaracuy</option><option>Otro</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>Tipo</label>
+          <select name="tipo">
+            <option value="">— No especificado —</option>
+            <option value="publico">Público</option>
+            <option value="privado">Privado</option>
+            <option value="clinica">Clínica</option>
+            <option value="ambulatorio">Ambulatorio</option>
+            <option value="refugio_medico">Refugio médico</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg">
+        <label>Dirección</label>
+        <input type="text" name="direccion" placeholder="Av. Principal, Caracas">
+      </div>
+      <div class="fg-row">
+        <div class="fg">
+          <label>Teléfono</label>
+          <input type="text" name="telefono" placeholder="0212-1234567">
+        </div>
+        <div class="fg" style="display:flex;align-items:center;gap:8px;padding-top:22px;">
+          <input type="checkbox" name="activo" id="cb-hosp-activo" value="true" checked style="width:18px;height:18px;cursor:pointer;flex-shrink:0;">
+          <label for="cb-hosp-activo" style="margin:0;cursor:pointer;font-weight:600;">Activo</label>
+        </div>
+      </div>
+      <button type="submit" class="adm-save-btn" id="btn-guardar-hosp">Guardar hospital</button>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Nuevo Paciente -->
+<div class="adm-modal-bd" id="modal-pac" onclick="if(event.target===this)closeModal('modal-pac')">
+  <div class="adm-modal">
+    <div class="adm-modal-hdr">
+      <div class="adm-modal-title">🏥 Registrar paciente</div>
+      <button class="adm-modal-x" onclick="closeModal('modal-pac')">×</button>
+    </div>
+    <form id="form-pac-nuevo" enctype="multipart/form-data" onsubmit="guardarPacienteAdmin(event)">
+      <div class="fg">
+        <label>Hospital</label>
+        <select id="pac-hosp-sel" onchange="toggleOtroHosp(this.value)">
+          <option value="">Cargando hospitales...</option>
+        </select>
+      </div>
+      <div class="fg" id="pac-otro-wrap" style="display:none">
+        <label>Nombre del hospital (libre)</label>
+        <input type="text" name="nombre_hospital" placeholder="Nombre del hospital">
+      </div>
+      <div class="fg">
+        <label>Nombres y Apellidos *</label>
+        <input type="text" name="nombres_apellidos" required placeholder="Juan García">
+      </div>
+      <div class="fg-row">
+        <div class="fg">
+          <label>Cédula</label>
+          <input type="text" name="cedula" placeholder="V-12345678">
+        </div>
+        <div class="fg">
+          <label>Estado</label>
+          <select name="estado_paciente">
+            <option value="ingresado">Ingresado</option>
+            <option value="estable">Estable</option>
+            <option value="grave">Grave</option>
+            <option value="critico">Crítico</option>
+            <option value="alta">De Alta</option>
+            <option value="trasladado">Trasladado</option>
+            <option value="fallecido">Fallecido</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>Edad</label>
+          <input type="text" name="edad" placeholder="35 años">
+        </div>
+        <div class="fg">
+          <label>Sexo</label>
+          <select name="sexo">
+            <option value="">— No especificado —</option>
+            <option value="masculino">Masculino</option>
+            <option value="femenino">Femenino</option>
+            <option value="no_determinado">No determinado</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>Procedencia</label>
+          <input type="text" name="procedencia" placeholder="Caracas">
+        </div>
+        <div class="fg">
+          <label>Parentesco</label>
+          <input type="text" name="parentesco" placeholder="Madre, Hijo...">
+        </div>
+      </div>
+      <div class="fg">
+        <label>Observaciones</label>
+        <textarea name="observaciones" placeholder="Estado clínico, condición..."></textarea>
+      </div>
+      <div class="fg">
+        <label>Datos adicionales</label>
+        <textarea name="datos_adicionales" placeholder="Información complementaria..."></textarea>
+      </div>
+      <div class="fg-row">
+        <div class="fg">
+          <label>Reportado por</label>
+          <input type="text" name="reportado_por" placeholder="Nombre del reportante">
+        </div>
+        <div class="fg">
+          <label>Foto/Captura (opcional)</label>
+          <input type="file" name="foto_captura" accept="image/*" style="padding:6px;">
+        </div>
+      </div>
+      <button type="submit" class="adm-save-btn" id="btn-guardar-pac">Registrar paciente</button>
+    </form>
+  </div>
+</div>
 
 <div class="dash-tabs">
   <button class="dash-tab active" id="tab-personas" onclick="switchTab('personas')">👥 Personas Desaparecidas</button>
@@ -390,6 +617,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
     <h2 style="font-size:20px;font-weight:800;">Pacientes Hospitalizados</h2>
     <div style="display:flex;gap:8px;align-items:center;">
+      <button onclick="openNuevoPaciente()" style="padding:8px 16px;background:#1e40af;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">➕ Registrar paciente</button>
       <button onclick="exportPacientesCSV()" style="padding:8px 16px;background:#16a34a;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Exportar CSV</button>
     </div>
   </div>
@@ -971,7 +1199,7 @@ function closeLbFoto() {
   document.getElementById('lb-foto').classList.remove('open');
   document.getElementById('lb-foto-img').src = '';
 }
-document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLbFoto(); });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { closeLbFoto(); closeModal('modal-hosp'); closeModal('modal-pac'); } });
 
 function exportPacientesCSV() {
   var rows = [['ID','Hospital','Nombre','Cedula','Edad','Sexo','Estado','Procedencia','Observaciones','Reportado por','Fecha']];
@@ -984,5 +1212,183 @@ function exportPacientesCSV() {
 }
 
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ---- IMPORT CSV ---- */
+var _importFiles = { pac: null, hosp: null };
+
+function toggleImportPanel() {
+  document.getElementById('import-panel').classList.toggle('open');
+}
+
+function switchImportTab(tab) {
+  document.getElementById('ipane-pac').style.display  = tab === 'pac'  ? '' : 'none';
+  document.getElementById('ipane-hosp').style.display = tab === 'hosp' ? '' : 'none';
+  document.getElementById('itab-pac').className  = 'import-tab' + (tab === 'pac'  ? ' active' : '');
+  document.getElementById('itab-hosp').className = 'import-tab' + (tab === 'hosp' ? ' active' : '');
+}
+
+function dzDragOver(e, key) { e.preventDefault(); document.getElementById('dz-' + key).classList.add('drag-over'); }
+function dzDragLeave(key)   { document.getElementById('dz-' + key).classList.remove('drag-over'); }
+
+function dzDrop(e, key) {
+  e.preventDefault();
+  document.getElementById('dz-' + key).classList.remove('drag-over');
+  var f = e.dataTransfer.files[0];
+  if (f) setImportFile(key, f);
+}
+
+function dzFileChange(e, key) { var f = e.target.files[0]; if (f) setImportFile(key, f); }
+
+function setImportFile(key, f) {
+  _importFiles[key] = f;
+  document.getElementById('dz-' + key + '-name').textContent = '📎 ' + f.name;
+  document.getElementById('import-result-' + key).style.display = 'none';
+}
+
+var _PAC_COLS  = 'nombres_apellidos,nombre_hospital,hospital_id,edad,sexo,cedula,parentesco,procedencia,observaciones,datos_adicionales,estado_paciente,reportado_por';
+var _HOSP_COLS = 'nombre,zona,direccion,telefono,tipo,activo';
+
+function descargarTemplate(key) {
+  var cols = key === 'pac' ? _PAC_COLS : _HOSP_COLS;
+  var blob = new Blob([cols + '\n'], { type: 'text/csv;charset=utf-8;' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'template_' + key + '.csv';
+  a.click();
+}
+
+async function importarCSV(key) {
+  var file = _importFiles[key];
+  if (!file) { alert('Selecciona un archivo CSV primero.'); return; }
+  var btn = document.getElementById('btn-import-' + key);
+  var resEl = document.getElementById('import-result-' + key);
+  btn.disabled = true; btn.textContent = 'Importando...';
+  resEl.style.display = 'none';
+  var fd = new FormData();
+  fd.append('file', file);
+  var url = key === 'pac' ? '/admin/import/pacientes' : '/admin/import/hospitales';
+  try {
+    var res = await fetch(url, {
+      method: 'POST',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content },
+      body: fd
+    });
+    var data = await res.json();
+    resEl.style.display = 'block';
+    if (!res.ok) {
+      resEl.className = 'import-result err';
+      resEl.innerHTML = '❌ ' + esc(data.detail || 'Error al importar');
+    } else if (data.importados === 0 && data.errores > 0) {
+      resEl.className = 'import-result err';
+      resEl.innerHTML = '❌ 0 importados · ' + data.errores + ' errores' +
+        (data.detalle.length ? '<ul style="margin:8px 0 0;padding-left:18px;font-size:12px;">' + data.detalle.map(function(d){return '<li>'+esc(d)+'</li>';}).join('') + '</ul>' : '');
+    } else if (data.errores > 0) {
+      resEl.className = 'import-result partial';
+      resEl.innerHTML = '✅ ' + data.importados + ' importados · ⚠️ ' + data.errores + ' errores' +
+        (data.detalle.length ? '<ul style="margin:8px 0 0;padding-left:18px;font-size:12px;">' + data.detalle.map(function(d){return '<li>'+esc(d)+'</li>';}).join('') + '</ul>' : '');
+    } else {
+      resEl.className = 'import-result ok';
+      resEl.innerHTML = '✅ ' + data.importados + ' importados correctamente';
+      if (key === 'pac' && _pacientesLoaded) { _pacientesLoaded = false; loadPacientes(); }
+    }
+  } catch(e) {
+    resEl.style.display = 'block';
+    resEl.className = 'import-result err';
+    resEl.innerHTML = '❌ Error de conexión. Intenta de nuevo.';
+  }
+  btn.disabled = false; btn.textContent = 'Importar';
+}
+
+/* ---- MODALES ---- */
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+/* ---- NUEVO HOSPITAL ---- */
+async function guardarHospital(e) {
+  e.preventDefault();
+  var form = document.getElementById('form-hosp');
+  var btn  = document.getElementById('btn-guardar-hosp');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  var fd = new FormData(form);
+  try {
+    var res  = await fetch('/admin/hospitales/nuevo', {
+      method: 'POST',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content },
+      body: fd
+    });
+    var data = await res.json();
+    if (data.ok) {
+      showToast('✅ Hospital "' + data.nombre + '" agregado');
+      form.reset();
+      closeModal('modal-hosp');
+    } else {
+      alert('Error: ' + (data.detail || 'No se pudo guardar'));
+    }
+  } catch(e) { alert('Error de conexión.'); }
+  btn.disabled = false; btn.textContent = 'Guardar hospital';
+}
+
+/* ---- NUEVO PACIENTE ---- */
+var _hospitalesListLoaded = false;
+
+async function openNuevoPaciente() {
+  openModal('modal-pac');
+  if (_hospitalesListLoaded) return;
+  var sel = document.getElementById('pac-hosp-sel');
+  try {
+    var res  = await fetch('/api/hospitales/');
+    var list = await res.json();
+    _hospitalesListLoaded = true;
+    sel.innerHTML = '<option value="">— Sin asignar —</option>';
+    list.forEach(function(h) {
+      var opt = document.createElement('option');
+      opt.value = h.id;
+      opt.textContent = h.nombre + ' (' + (h.zona === 'Falcon' ? 'Falcón' : h.zona) + ')';
+      sel.appendChild(opt);
+    });
+    var otro = document.createElement('option');
+    otro.value = 'otro'; otro.textContent = 'Otro (ingresar nombre)';
+    sel.appendChild(otro);
+  } catch(e) {
+    sel.innerHTML = '<option value="">Error al cargar hospitales</option>';
+  }
+}
+
+function toggleOtroHosp(val) {
+  document.getElementById('pac-otro-wrap').style.display = val === 'otro' ? '' : 'none';
+}
+
+async function guardarPacienteAdmin(e) {
+  e.preventDefault();
+  var form = document.getElementById('form-pac-nuevo');
+  var btn  = document.getElementById('btn-guardar-pac');
+  btn.disabled = true; btn.textContent = 'Registrando...';
+  var fd = new FormData(form);
+  var hospVal = document.getElementById('pac-hosp-sel').value;
+  if (hospVal && hospVal !== 'otro') {
+    fd.append('hospital_id', hospVal);
+    fd.delete('nombre_hospital');
+  } else if (!hospVal) {
+    fd.delete('nombre_hospital');
+  }
+  try {
+    var res  = await fetch('/admin/pacientes/nuevo', {
+      method: 'POST',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content },
+      body: fd
+    });
+    var data = await res.json();
+    if (data.ok) {
+      showToast('✅ Paciente registrado');
+      form.reset();
+      document.getElementById('pac-otro-wrap').style.display = 'none';
+      closeModal('modal-pac');
+      if (_pacientesLoaded) { _pacientesLoaded = false; loadPacientes(); }
+    } else {
+      alert('Error: ' + (data.detail || 'No se pudo registrar'));
+    }
+  } catch(e) { alert('Error de conexión.'); }
+  btn.disabled = false; btn.textContent = 'Registrar paciente';
+}
 </script>
 {% endblock %}

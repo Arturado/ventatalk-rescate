@@ -2,19 +2,25 @@ import csv
 import hashlib
 import io
 import os
+import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 import bcrypt
-from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from PIL import Image
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 import models
 from database import get_db
+
+BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
+UPLOAD_DIR = "uploads/capturas"
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -221,3 +227,222 @@ async def export_csv(request: Request, db: Session = Depends(get_db)):
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=rescate_{fecha}.csv"},
     )
+
+# --- Importar CSV ---
+
+_VALID_ESTADOS_PAC = {"ingresado", "estable", "grave", "critico", "alta", "trasladado", "fallecido"}
+
+
+@router.post("/import/pacientes")
+async def import_pacientes(
+    request: Request,
+    file: UploadFile = File(...),
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="El archivo debe ser .csv")
+
+    content = await file.read()
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(text))
+    importados = 0
+    errores = 0
+    detalle: list[str] = []
+
+    for i, row in enumerate(reader, start=2):
+        row_n = {(k or "").strip().lower(): (v or "").strip() for k, v in row.items()}
+        nombres = row_n.get("nombres_apellidos", "")
+        if not nombres:
+            continue
+        try:
+            hosp_id_str = row_n.get("hospital_id", "")
+            hosp_id = int(hosp_id_str) if hosp_id_str else None
+            estado = row_n.get("estado_paciente", "").lower() or "ingresado"
+            if estado not in _VALID_ESTADOS_PAC:
+                estado = "ingresado"
+            paciente = models.PacienteHospitalizado(
+                nombres_apellidos=nombres,
+                nombre_hospital=row_n.get("nombre_hospital") or None,
+                hospital_id=hosp_id,
+                edad=row_n.get("edad") or None,
+                sexo=row_n.get("sexo") or None,
+                cedula=row_n.get("cedula") or None,
+                parentesco=row_n.get("parentesco") or None,
+                procedencia=row_n.get("procedencia") or None,
+                observaciones=row_n.get("observaciones") or None,
+                datos_adicionales=row_n.get("datos_adicionales") or None,
+                estado_paciente=estado,
+                reportado_por=row_n.get("reportado_por") or None,
+            )
+            db.add(paciente)
+            importados += 1
+        except Exception as exc:
+            errores += 1
+            detalle.append(f"Fila {i}: {exc}")
+
+    db.commit()
+    return {"importados": importados, "errores": errores, "detalle": detalle}
+
+
+@router.post("/import/hospitales")
+async def import_hospitales(
+    request: Request,
+    file: UploadFile = File(...),
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="El archivo debe ser .csv")
+
+    content = await file.read()
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(text))
+    importados = 0
+    errores = 0
+    detalle: list[str] = []
+
+    for i, row in enumerate(reader, start=2):
+        row_n = {(k or "").strip().lower(): (v or "").strip() for k, v in row.items()}
+        nombre = row_n.get("nombre", "")
+        zona = row_n.get("zona", "")
+        if not nombre or not zona:
+            if nombre or zona:
+                errores += 1
+                detalle.append(f"Fila {i}: faltan nombre o zona requeridos")
+            continue
+        try:
+            activo_str = row_n.get("activo", "").lower()
+            activo = activo_str not in ("false", "0", "no")
+            hospital = models.Hospital(
+                nombre=nombre,
+                zona=zona,
+                direccion=row_n.get("direccion") or None,
+                telefono=row_n.get("telefono") or None,
+                tipo=row_n.get("tipo") or None,
+                activo=activo,
+            )
+            db.add(hospital)
+            importados += 1
+        except Exception as exc:
+            errores += 1
+            detalle.append(f"Fila {i}: {exc}")
+
+    db.commit()
+    return {"importados": importados, "errores": errores, "detalle": detalle}
+
+
+# --- Nuevo hospital ---
+
+@router.post("/hospitales/nuevo")
+async def nuevo_hospital(
+    request: Request,
+    nombre: str = Form(...),
+    zona: str = Form(...),
+    direccion: Optional[str] = Form(None),
+    telefono: Optional[str] = Form(None),
+    tipo: Optional[str] = Form(None),
+    activo: Optional[str] = Form(None),
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+    hospital = models.Hospital(
+        nombre=nombre,
+        zona=zona,
+        direccion=direccion or None,
+        telefono=telefono or None,
+        tipo=tipo or None,
+        activo=activo is not None,
+    )
+    db.add(hospital)
+    db.commit()
+    db.refresh(hospital)
+    return {"ok": True, "id": hospital.id, "nombre": hospital.nombre}
+
+
+# --- Nuevo paciente (admin) ---
+
+@router.post("/pacientes/nuevo")
+async def nuevo_paciente_admin(
+    request: Request,
+    nombres_apellidos: str = Form(...),
+    hospital_id: Optional[int] = Form(None),
+    nombre_hospital: Optional[str] = Form(None),
+    edad: Optional[str] = Form(None),
+    sexo: Optional[str] = Form(None),
+    cedula: Optional[str] = Form(None),
+    parentesco: Optional[str] = Form(None),
+    procedencia: Optional[str] = Form(None),
+    observaciones: Optional[str] = Form(None),
+    datos_adicionales: Optional[str] = Form(None),
+    estado_paciente: str = Form("ingresado"),
+    reportado_por: Optional[str] = Form(None),
+    foto_captura: UploadFile = File(None),
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+
+    foto_url = None
+    if foto_captura and foto_captura.filename:
+        file_bytes = await foto_captura.read()
+        try:
+            img = Image.open(io.BytesIO(file_bytes))
+            if img.mode not in ("RGB",):
+                img = img.convert("RGB")
+            img.thumbnail((2000, 2000), Image.LANCZOS)
+            out = io.BytesIO()
+            img.save(out, format="JPEG", quality=85, optimize=True)
+            filename = f"cap_{uuid.uuid4()}.jpg"
+            with open(os.path.join(UPLOAD_DIR, filename), "wb") as f:
+                f.write(out.getvalue())
+            foto_url = f"{BASE_URL}/uploads/capturas/{filename}"
+        except Exception:
+            pass
+
+    paciente = models.PacienteHospitalizado(
+        hospital_id=hospital_id,
+        nombre_hospital=nombre_hospital or None,
+        nombres_apellidos=nombres_apellidos,
+        edad=edad or None,
+        sexo=sexo or None,
+        cedula=cedula or None,
+        parentesco=parentesco or None,
+        procedencia=procedencia or None,
+        observaciones=observaciones or None,
+        datos_adicionales=datos_adicionales or None,
+        estado_paciente=estado_paciente or "ingresado",
+        reportado_por=reportado_por or None,
+        foto_captura_url=foto_url,
+    )
+    db.add(paciente)
+    db.commit()
+    db.refresh(paciente)
+    return {"ok": True, "id": paciente.id}
