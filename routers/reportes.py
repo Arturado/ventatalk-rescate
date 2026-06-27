@@ -166,7 +166,7 @@ async def buscar_personas(
             q = q.filter(models.PersonaDesaparecida.cedula == cedula)
     elif nombre:
         q = q.filter(models.PersonaDesaparecida.nombres_apellidos.ilike(f"%{nombre}%"))
-    personas = q.order_by(models.PersonaDesaparecida.created_at.desc()).limit(10).all()
+    personas = q.order_by(models.PersonaDesaparecida.created_at.desc()).limit(500).all()
     return [
         {
             "id": p.id,
@@ -217,7 +217,7 @@ async def feed_publico(
         q = q.filter(models.PersonaDesaparecida.estado == estado)
     if tipo_reporte:
         q = q.filter(models.PersonaDesaparecida.tipo_reporte == tipo_reporte)
-    personas = q.order_by(models.PersonaDesaparecida.created_at.desc()).offset(skip).limit(50).all()
+    personas = q.order_by(models.PersonaDesaparecida.created_at.desc()).offset(skip).limit(500).all()
     return [
         {
             "id": p.id,

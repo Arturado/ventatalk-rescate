@@ -29,7 +29,7 @@ def listar_personas(
     sexo: Optional[str] = Query(None),
     edad_aproximada: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(100, ge=1, le=2000),
     db: Session = Depends(get_db),
     _: str = Depends(verify_api_key),
 ):
