@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registrar Paciente — Venezuela Rescate</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #111; background: #f5f5f5; }
+
+    header {
+      background: linear-gradient(135deg, #1e3a5f, #1e40af);
+      color: white; padding: 14px 20px;
+      display: flex; align-items: center; gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    }
+    header svg { width: 30px; height: 30px; flex-shrink: 0; }
+    header h1 { font-size: 17px; font-weight: 800; }
+    header p { font-size: 11px; opacity: .85; }
+
+    .form-wrap {
+      max-width: 640px; margin: 0 auto;
+      padding: 24px 20px 80px;
+    }
+
+    .form-intro {
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;
+      padding: 12px 16px; margin-bottom: 24px;
+      font-size: 13px; color: #92400e; line-height: 1.6;
+    }
+
+    .form-section {
+      background: #fff; border-radius: 14px;
+      border: 1px solid #e5e7eb; padding: 20px 20px 24px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.05);
+    }
+    .form-section-title {
+      font-size: 13px; font-weight: 700; color: #6b7280;
+      text-transform: uppercase; letter-spacing: .06em;
+      margin-bottom: 16px; padding-bottom: 10px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+    .field label .req { color: #dc2626; }
+    .field input[type="text"], .field select, .field textarea {
+      width: 100%; padding: 12px 14px;
+      border: 1.5px solid #d1d5db; border-radius: 10px;
+      font-size: 15px; outline: none; color: #111;
+      background: #fafafa; transition: border-color .15s;
+      -webkit-appearance: none;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      border-color: #1e40af; background: #fff;
+    }
+    .field textarea { height: 90px; resize: vertical; }
+    .field .hint { font-size: 12px; color: #9ca3af; margin-top: 4px; }
+
+    /* Botones de selección (sexo, estado) */
+    .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn-sel {
+      flex: 1; min-width: 0; padding: 12px 8px;
+      background: #fff; color: #374151;
+      border: 1.5px solid #d1d5db; border-radius: 10px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      text-align: center; transition: all .15s;
+      min-height: 44px;
+    }
+    .btn-sel:hover { border-color: #1e40af; color: #1e40af; background: #eff6ff; }
+    .btn-sel.active { background: #1e40af; color: white; border-color: #1e40af; }
+
+    /* Estado clínico */
+    .estado-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .btn-estado {
+      padding: 14px 10px; border: 1.5px solid #d1d5db;
+      border-radius: 10px; font-size: 14px; font-weight: 600;
+      cursor: pointer; text-align: center; background: #fff;
+      color: #374151; transition: all .15s; min-height: 50px;
+    }
+    .btn-estado:hover { opacity: .85; }
+    .btn-estado.active { color: white; }
+    .btn-estado.est-estable  { }
+    .btn-estado.est-grave    { }
+    .btn-estado.est-critico  { }
+    .btn-estado.est-alta     { }
+    .btn-estado.est-trasladado { }
+    .btn-estado.sel-estable    { background: #15803d; border-color: #15803d; color: white; }
+    .btn-estado.sel-grave      { background: #ea580c; border-color: #ea580c; color: white; }
+    .btn-estado.sel-critico    { background: #dc2626; border-color: #dc2626; color: white; }
+    .btn-estado.sel-alta       { background: #4b5563; border-color: #4b5563; color: white; }
+    .btn-estado.sel-trasladado { background: #d97706; border-color: #d97706; color: white; }
+
+    .btn-fallecido-wrap { margin-top: 10px; }
+    .btn-fallecido {
+      width: 100%; padding: 12px;
+      background: transparent; color: #9ca3af;
+      border: 1.5px solid #e5e7eb; border-radius: 10px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: all .15s;
+    }
+    .btn-fallecido:hover { border-color: #374151; color: #374151; }
+    .btn-fallecido.sel-fallecido { background: #111827; border-color: #111827; color: white; }
+
+    /* Foto upload */
+    .foto-area { border: 2px dashed #d1d5db; border-radius: 10px; padding: 20px; text-align: center; transition: border-color .15s; }
+    .foto-area:hover { border-color: #1e40af; }
+    .foto-hint { font-size: 13px; color: #6b7280; margin-bottom: 14px; line-height: 1.5; }
+    .foto-btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+    .foto-btn-label {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 11px 18px; border-radius: 8px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: all .15s;
+    }
+    .foto-btn-primary { background: #1e40af; color: white; }
+    .foto-btn-primary:hover { background: #1e3a8a; }
+    .foto-btn-secondary { background: #fff; color: #374151; border: 1.5px solid #d1d5db; }
+    .foto-btn-secondary:hover { border-color: #1e40af; color: #1e40af; }
+    .foto-preview { margin-top: 14px; }
+    .foto-preview img { max-width: 100%; max-height: 220px; border-radius: 8px; object-fit: contain; border: 1px solid #e5e7eb; }
+    .foto-preview .foto-name { font-size: 13px; color: #16a34a; margin-top: 6px; font-weight: 600; }
+
+    /* Submit */
+    .btn-submit {
+      width: 100%; padding: 16px;
+      background: #dc2626; color: white;
+      border: none; border-radius: 12px;
+      font-size: 16px; font-weight: 800;
+      cursor: pointer; margin-top: 8px;
+      transition: background .15s;
+      min-height: 52px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn-submit:hover { background: #b91c1c; }
+    .btn-submit:disabled { background: #9ca3af; cursor: default; }
+
+    .spinner-inline {
+      width: 20px; height: 20px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-top-color: white; border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .success-msg {
+      text-align: center; padding: 40px 20px;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 14px;
+    }
+    .success-msg .icon { font-size: 60px; }
+    .success-msg h3 { font-size: 20px; font-weight: 800; color: #16a34a; }
+    .success-msg p { font-size: 15px; color: #6b7280; max-width: 320px; text-align: center; }
+    .btn-nuevo { width: 100%; padding: 14px; background: #1e40af; color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 4px; }
+
+    .error-msg { background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 12px 16px; color: #dc2626; font-size: 14px; font-weight: 600; margin-bottom: 12px; display: none; }
+
+    /* Hidden otro hospital input */
+    #otro-hospital-wrap { display: none; margin-top: 10px; }
+    #otro-hospital-wrap input {
+      width: 100%; padding: 12px 14px;
+      border: 1.5px solid #d1d5db; border-radius: 10px;
+      font-size: 15px; outline: none; background: #fafafa;
+    }
+    #otro-hospital-wrap input:focus { border-color: #1e40af; background: #fff; }
+
+    @media (max-width: 480px) {
+      .estado-grid { grid-template-columns: 1fr; }
+      .btn-grupo { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    <path d="M12 8v4M12 16h.01"/>
+  </svg>
+  <div>
+    <h1>🏥 Registrar Paciente — Venezuela Rescate</h1>
+    <p>Sistema de emergencia post-sismo</p>
+  </div>
+</header>
+
+<div class="form-wrap">
+  <div class="form-intro">
+    <strong>Este formulario es para personal de salud y rescatistas.</strong><br>
+    Tu identidad no será publicada. La información ayuda a familias a localizar a sus seres queridos.
+  </div>
+
+  <div id="error-msg" class="error-msg"></div>
+
+  <div id="form-content">
+
+    <!-- Sección 1: Hospital -->
+    <div class="form-section">
+      <div class="form-section-title">1. Hospital o Centro Médico</div>
+      <div class="field">
+        <label>¿En qué centro médico está el paciente? <span class="req">*</span></label>
+        <select id="hosp-select" onchange="onHospChange()">
+          <option value="">Cargando hospitales...</option>
+        </select>
+      </div>
+      <div id="otro-hospital-wrap">
+        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Nombre del centro médico</label>
+        <input type="text" id="otro-hospital" placeholder="Escribe el nombre del hospital o clínica">
+      </div>
+    </div>
+
+    <!-- Sección 2: Datos del paciente -->
+    <div class="form-section">
+      <div class="form-section-title">2. Datos del Paciente</div>
+      <div class="field">
+        <label>Nombres y Apellidos <span class="req">*</span></label>
+        <input type="text" id="nombres" placeholder="Ej: María González Pérez" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Cédula de Identidad</label>
+        <input type="text" id="cedula" placeholder="V-12345678 o solo los números" maxlength="15">
+      </div>
+      <div class="field">
+        <label>Edad</label>
+        <input type="text" id="edad" placeholder="Ej: 45 años, adulto mayor, niño de ~8 años">
+      </div>
+      <div class="field">
+        <label>Sexo</label>
+        <div class="btn-group" id="sexo-group">
+          <button type="button" class="btn-sel" data-val="masculino" onclick="selBtn('sexo-group',this)">♂ Masculino</button>
+          <button type="button" class="btn-sel" data-val="femenino" onclick="selBtn('sexo-group',this)">♀ Femenino</button>
+          <button type="button" class="btn-sel" data-val="no_determinado" onclick="selBtn('sexo-group',this)">No determinado</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Procedencia</label>
+        <input type="text" id="procedencia" placeholder="¿De dónde viene? Ej: El Valle, Caracas">
+      </div>
+      <div class="field">
+        <label>Parentesco / Relación conocida</label>
+        <input type="text" id="parentesco" placeholder="Ej: madre, vecino, desconocido">
+      </div>
+    </div>
+
+    <!-- Sección 3: Estado clínico -->
+    <div class="form-section">
+      <div class="form-section-title">3. Estado del Paciente</div>
+      <div class="estado-grid" id="estado-group">
+        <button type="button" class="btn-estado" data-val="estable" onclick="selEstado(this,'#15803d')">✅ Ingresado — Estable</button>
+        <button type="button" class="btn-estado" data-val="grave" onclick="selEstado(this,'#ea580c')">⚠️ Ingresado — Grave</button>
+        <button type="button" class="btn-estado" data-val="critico" onclick="selEstado(this,'#dc2626')">🚨 Estado Crítico</button>
+        <button type="button" class="btn-estado" data-val="alta" onclick="selEstado(this,'#4b5563')">🏠 De Alta</button>
+        <button type="button" class="btn-estado" data-val="trasladado" onclick="selEstado(this,'#d97706')" style="grid-column:1/-1;">🚑 Trasladado</button>
+      </div>
+      <div class="btn-fallecido-wrap">
+        <button type="button" class="btn-fallecido" id="btn-fall" data-val="fallecido" onclick="selFallecido()">⬛ Fallecido/a</button>
+      </div>
+    </div>
+
+    <!-- Sección 4: Información adicional -->
+    <div class="form-section">
+      <div class="form-section-title">4. Información Adicional</div>
+      <div class="field">
+        <label>Observaciones</label>
+        <textarea id="observaciones" placeholder="Señas físicas, lesiones, estado mental, medicación que recibe..."></textarea>
+      </div>
+      <div class="field">
+        <label>Datos adicionales</label>
+        <textarea id="datos_adicionales" placeholder="Información específica de este hospital: cama, piso, sala..."></textarea>
+      </div>
+      <div class="field">
+        <label>¿Quién reporta?</label>
+        <input type="text" id="reportado_por" placeholder="Nombre o cargo — ej: Enfermera Sala 3, Voluntario Cruz Roja — opcional">
+        <p class="hint">No es obligatorio. No se muestra al público.</p>
+      </div>
+    </div>
+
+    <!-- Sección 5: Foto -->
+    <div class="form-section">
+      <div class="form-section-title">5. Foto o Captura (opcional)</div>
+      <div class="foto-area">
+        <div class="foto-hint">
+          Puedes subir una foto del paciente o una <strong>captura/foto de una lista manuscrita</strong> para que el equipo la transcriba.
+        </div>
+        <div class="foto-btns">
+          <label class="foto-btn-label foto-btn-primary">
+            📷 Tomar foto
+            <input type="file" id="foto-cam" accept="image/*" capture="environment" style="display:none" onchange="onFotoSelect(this)">
+          </label>
+          <label class="foto-btn-label foto-btn-secondary">
+            🖼️ Adjuntar imagen
+            <input type="file" id="foto-gal" accept="image/*" style="display:none" onchange="onFotoSelect(this)">
+          </label>
+        </div>
+        <div class="foto-preview" id="foto-preview" style="display:none">
+          <img id="foto-img" src="" alt="Vista previa">
+          <div class="foto-name" id="foto-name"></div>
+        </div>
+      </div>
+    </div>
+
+    <button type="button" class="btn-submit" id="btn-submit" onclick="submitForm()">
+      Registrar paciente
+    </button>
+
+  </div><!-- /#form-content -->
+
+</div><!-- /.form-wrap -->
+
+<script>
+  var _selectedSexo = '';
+  var _selectedEstado = 'ingresado';
+  var _selectedFile = null;
+  var _hospData = [];
+  var _hospById = {};
+
+  async function loadHospitales() {
+    try {
+      var res = await fetch('/api/hospitales/');
+      _hospData = await res.json();
+      _hospData.forEach(function(h) { _hospById[h.id] = h; });
+
+      var byZona = {};
+      _hospData.forEach(function(h) {
+        if (!byZona[h.zona]) byZona[h.zona] = [];
+        byZona[h.zona].push(h);
+      });
+
+      var sel = document.getElementById('hosp-select');
+      sel.innerHTML = '<option value="">— Selecciona un centro médico —</option>';
+      Object.entries(byZona).forEach(function(entry) {
+        var zona = entry[0], hosps = entry[1];
+        var grp = document.createElement('optgroup');
+        grp.label = zona === 'Falcon' ? 'Falcón' : zona;
+        hosps.forEach(function(h) {
+          var opt = document.createElement('option');
+          opt.value = h.id;
+          opt.textContent = h.nombre;
+          grp.appendChild(opt);
+        });
+        sel.appendChild(grp);
+      });
+      var otro = document.createElement('option');
+      otro.value = 'otro';
+      otro.textContent = '📝 Otro / No está en la lista';
+      sel.appendChild(otro);
+    } catch(e) {
+      document.getElementById('hosp-select').innerHTML = '<option value="otro">📝 Otro / No está en la lista</option>';
+      document.getElementById('otro-hospital-wrap').style.display = 'block';
+    }
+  }
+
+  function onHospChange() {
+    var val = document.getElementById('hosp-select').value;
+    document.getElementById('otro-hospital-wrap').style.display = val === 'otro' ? 'block' : 'none';
+  }
+
+  function selBtn(groupId, btn) {
+    document.querySelectorAll('#' + groupId + ' .btn-sel').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    _selectedSexo = btn.dataset.val;
+  }
+
+  function selEstado(btn, color) {
+    document.querySelectorAll('#estado-group .btn-estado').forEach(function(b) {
+      b.style.background = ''; b.style.color = ''; b.style.borderColor = '';
+    });
+    document.getElementById('btn-fall').classList.remove('sel-fallecido');
+    btn.style.background = color;
+    btn.style.borderColor = color;
+    btn.style.color = 'white';
+    _selectedEstado = btn.dataset.val;
+  }
+
+  function selFallecido() {
+    if (!confirm('¿Confirmas que el paciente ha fallecido? Esta información es sensible.')) return;
+    document.querySelectorAll('#estado-group .btn-estado').forEach(function(b) {
+      b.style.background = ''; b.style.color = ''; b.style.borderColor = '';
+    });
+    document.getElementById('btn-fall').classList.add('sel-fallecido');
+    _selectedEstado = 'fallecido';
+  }
+
+  function onFotoSelect(inp) {
+    var f = inp.files[0];
+    if (!f) return;
+    _selectedFile = f;
+    var preview = document.getElementById('foto-preview');
+    var img = document.getElementById('foto-img');
+    var nm = document.getElementById('foto-name');
+    img.src = URL.createObjectURL(f);
+    nm.textContent = '✅ ' + f.name;
+    preview.style.display = 'block';
+    // sync the other input
+    if (inp.id === 'foto-cam') document.getElementById('foto-gal').value = '';
+    else document.getElementById('foto-cam').value = '';
+  }
+
+  async function submitForm() {
+    var btn = document.getElementById('btn-submit');
+    var errEl = document.getElementById('error-msg');
+    errEl.style.display = 'none';
+
+    var hospSel = document.getElementById('hosp-select').value;
+    var otrohospital = document.getElementById('otro-hospital').value.trim();
+    var nombres = document.getElementById('nombres').value.trim();
+
+    if (!hospSel && !otrohospital) { showErr('Selecciona o escribe el nombre del centro médico.'); return; }
+    if (!nombres) { showErr('El nombre del paciente es obligatorio.'); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner-inline"></div> Registrando...';
+
+    var fd = new FormData();
+    if (hospSel && hospSel !== 'otro') { fd.append('hospital_id', hospSel); fd.append('nombre_hospital', (_hospById[hospSel] || {}).nombre || ''); }
+    else if (otrohospital) { fd.append('nombre_hospital', otrohospital); }
+    fd.append('nombres_apellidos', nombres);
+    var cedula = document.getElementById('cedula').value.trim();
+    if (cedula) fd.append('cedula', cedula);
+    var edad = document.getElementById('edad').value.trim();
+    if (edad) fd.append('edad', edad);
+    if (_selectedSexo) fd.append('sexo', _selectedSexo);
+    var proc = document.getElementById('procedencia').value.trim();
+    if (proc) fd.append('procedencia', proc);
+    var par = document.getElementById('parentesco').value.trim();
+    if (par) fd.append('parentesco', par);
+    fd.append('estado_paciente', _selectedEstado);
+    var obs = document.getElementById('observaciones').value.trim();
+    if (obs) fd.append('observaciones', obs);
+    var datos = document.getElementById('datos_adicionales').value.trim();
+    if (datos) fd.append('datos_adicionales', datos);
+    var rep = document.getElementById('reportado_por').value.trim();
+    if (rep) fd.append('reportado_por', rep);
+    if (_selectedFile) fd.append('foto_captura', _selectedFile);
+
+    try {
+      var res = await fetch('/api/pacientes/', { method: 'POST', body: fd });
+      if (!res.ok) { var d = await res.json().catch(function(){return {};}); throw new Error(d.detail || 'Error del servidor'); }
+      showSuccess();
+    } catch(e) {
+      btn.disabled = false;
+      btn.innerHTML = 'Registrar paciente';
+      showErr(e.message || 'Error al enviar. Verifica tu conexión e intenta de nuevo.');
+    }
+  }
+
+  function showErr(msg) {
+    var el = document.getElementById('error-msg');
+    el.textContent = '⚠️ ' + msg;
+    el.style.display = 'block';
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function showSuccess() {
+    document.getElementById('form-content').innerHTML = `
+      <div class="form-section">
+        <div class="success-msg">
+          <div class="icon">✅</div>
+          <h3>Paciente registrado</h3>
+          <p>Gracias por tu ayuda. Las familias podrán buscar a esta persona en Venezuela Rescate.</p>
+          <a href="/hospitales" style="display:block;width:100%;padding:13px;background:#1e40af;color:white;border-radius:10px;text-align:center;text-decoration:none;font-weight:700;font-size:15px;margin-top:8px;">Ver directorio de hospitales</a>
+          <button class="btn-nuevo" onclick="location.reload()">Registrar otro paciente</button>
+        </div>
+      </div>
+    `;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  loadHospitales();
+</script>
+</body>
+</html>

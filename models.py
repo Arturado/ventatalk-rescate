@@ -34,3 +34,43 @@ class AdminUser(Base):
     username = Column(String(100), unique=True, nullable=False, index=True)
     password_hash = Column(String(200), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class Hospital(Base):
+    __tablename__ = "hospitales"
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(200), nullable=False, index=True)
+    direccion = Column(String(500), nullable=True)
+    zona = Column(String(100), nullable=False, index=True)
+    # zona valores: "Caracas", "Vargas", "Miranda", "Carabobo", "Falcon", "Yaracuy", "Aragua"
+    telefono = Column(String(50), nullable=True)
+    tipo = Column(String(50), nullable=True)
+    # tipo valores: "publico", "privado", "clinica", "ambulatorio", "refugio_medico"
+    activo = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class PacienteHospitalizado(Base):
+    __tablename__ = "pacientes_hospitalizados"
+    id = Column(Integer, primary_key=True, index=True)
+    hospital_id = Column(Integer, nullable=True, index=True)
+    # nullable porque a veces no saben en qué hospital exacto
+    nombre_hospital = Column(String(200), nullable=True)
+    # Campo libre por si no está en el directorio
+    nombres_apellidos = Column(String(200), nullable=False, index=True)
+    edad = Column(String(20), nullable=True)
+    sexo = Column(String(20), nullable=True)
+    # valores: "masculino", "femenino", "no_determinado"
+    cedula = Column(String(30), nullable=True, index=True)
+    parentesco = Column(String(100), nullable=True)
+    # Quién reporta y su relación con el paciente
+    procedencia = Column(String(200), nullable=True)
+    # De dónde viene el paciente
+    observaciones = Column(Text, nullable=True)
+    datos_adicionales = Column(Text, nullable=True)
+    # JSON string con campos extra según el hospital
+    foto_captura_url = Column(String(600), nullable=True)
+    # Foto de lista/captura para transcripción manual
+    estado_paciente = Column(String(30), nullable=False, default="ingresado")
+    # valores: "ingresado", "estable", "grave", "critico", "alta", "trasladado", "fallecido"
+    reportado_por = Column(String(200), nullable=True)
+    # Nombre del médico/enfermero que carga (sin auth, voluntario)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

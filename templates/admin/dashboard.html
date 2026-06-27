@@ -79,6 +79,40 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 .clinico-fallecido      { background:#111827; color:#f9fafb; }
 .clinico-sin_informacion { background:#f3f4f6; color:#374151; }
 
+/* Tabs */
+.dash-tabs { display:flex; gap:0; border-bottom:2px solid #e5e7eb; margin-bottom:24px; }
+.dash-tab { padding:10px 20px; border:none; background:transparent; font-size:14px; font-weight:700; color:#6b7280; cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-2px; transition:all .15s; }
+.dash-tab:hover { color:#111; }
+.dash-tab.active { color:#dc2626; border-bottom-color:#dc2626; }
+.dash-tab.active-blue { color:#1e40af; border-bottom-color:#1e40af; }
+
+/* Pacientes tab */
+.pac-stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; margin-bottom:22px; }
+.pac-stat { background:#fff; border-radius:10px; padding:16px 14px; box-shadow:0 1px 4px rgba(0,0,0,.07); border-left:4px solid #1e40af; }
+.pac-stat.green { border-left-color:#16a34a; }
+.pac-stat.orange { border-left-color:#ea580c; }
+.pac-stat.red { border-left-color:#dc2626; }
+.pac-stat.gray { border-left-color:#6b7280; }
+.pac-stat .num { font-size:26px; font-weight:800; color:#111; }
+.pac-stat .label { font-size:11px; color:#6b7280; margin-top:4px; text-transform:uppercase; letter-spacing:.04em; }
+
+/* Estado pac badges */
+.est-pac { display:inline-block; padding:2px 9px; border-radius:20px; font-size:11px; font-weight:700; text-transform:uppercase; }
+.est-pac-ingresado  { background:#dbeafe; color:#1e40af; }
+.est-pac-estable    { background:#dcfce7; color:#15803d; }
+.est-pac-grave      { background:#ffedd5; color:#c2410c; }
+.est-pac-critico    { background:#fef2f2; color:#dc2626; }
+.est-pac-alta       { background:#f3f4f6; color:#374151; }
+.est-pac-trasladado { background:#fefce8; color:#a16207; }
+.est-pac-fallecido  { background:#111827; color:#f9fafb; }
+
+/* Lightbox foto captura */
+.lb-foto { display:none; position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:9999; align-items:center; justify-content:center; padding:16px; }
+.lb-foto.open { display:flex; }
+.lb-foto img { max-width:100%; max-height:90vh; border-radius:8px; object-fit:contain; }
+.lb-foto-close { position:absolute; top:16px; right:16px; width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,.2); border:none; cursor:pointer; font-size:20px; color:white; display:flex; align-items:center; justify-content:center; }
+.lb-foto-close:hover { background:rgba(255,255,255,.35); }
+
 /* Matches panel */
 .matches-panel { display:none; background:white; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,.08); padding:24px; margin-bottom:24px; }
 .matches-panel.open { display:block; }
@@ -116,6 +150,14 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 {% endblock %}
 {% block content %}
 <meta name="csrf-token" content="{{ csrf_token }}">
+
+<div class="dash-tabs">
+  <button class="dash-tab active" id="tab-personas" onclick="switchTab('personas')">👥 Personas Desaparecidas</button>
+  <button class="dash-tab" id="tab-pacientes" onclick="switchTab('pacientes')">🏥 Pacientes Hospitalizados</button>
+</div>
+
+<!-- Pane: Personas Desaparecidas -->
+<div id="pane-personas">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
   <h2 style="font-size:20px;font-weight:800;">Panel de Reportes</h2>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -341,6 +383,69 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 
 <!-- Toast -->
 <div id="match-toast" class="match-toast"></div>
+</div><!-- /#pane-personas -->
+
+<!-- Pane: Pacientes Hospitalizados -->
+<div id="pane-pacientes" style="display:none">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+    <h2 style="font-size:20px;font-weight:800;">Pacientes Hospitalizados</h2>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button onclick="exportPacientesCSV()" style="padding:8px 16px;background:#16a34a;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Exportar CSV</button>
+    </div>
+  </div>
+
+  <div class="pac-stats-grid" id="pac-stats-grid">
+    <div class="pac-stat"><div class="num" id="ps-total">—</div><div class="label">Total</div></div>
+    <div class="pac-stat"><div class="num" id="ps-ingresados">—</div><div class="label">Ingresados</div></div>
+    <div class="pac-stat green"><div class="num" id="ps-estables">—</div><div class="label">Estables</div></div>
+    <div class="pac-stat orange"><div class="num" id="ps-graves">—</div><div class="label">Graves</div></div>
+    <div class="pac-stat red"><div class="num" id="ps-criticos">—</div><div class="label">Críticos</div></div>
+    <div class="pac-stat gray"><div class="num" id="ps-altas">—</div><div class="label">De Alta</div></div>
+  </div>
+
+  <div class="toolbar" style="margin-bottom:16px;">
+    <input type="text" id="pac-buscar-nombre" placeholder="Buscar por nombre..." oninput="filtrarPacientes()">
+    <input type="text" id="pac-buscar-cedula" placeholder="Buscar por cédula..." oninput="filtrarPacientes()">
+    <select id="pac-filtrar-hospital" onchange="filtrarPacientes()"><option value="">Todos los hospitales</option></select>
+    <select id="pac-filtrar-estado" onchange="filtrarPacientes()">
+      <option value="">Todos los estados</option>
+      <option value="ingresado">Ingresado</option>
+      <option value="estable">Estable</option>
+      <option value="grave">Grave</option>
+      <option value="critico">Crítico</option>
+      <option value="alta">De Alta</option>
+      <option value="trasladado">Trasladado</option>
+      <option value="fallecido">Fallecido</option>
+    </select>
+  </div>
+
+  <div class="table-wrap">
+    <table id="tabla-pacientes" style="min-width:900px;">
+      <thead style="background:#1e40af;">
+        <tr>
+          <th>#</th>
+          <th>Hospital</th>
+          <th>Nombre</th>
+          <th>Cédula</th>
+          <th>Edad</th>
+          <th>Sexo</th>
+          <th>Estado</th>
+          <th>Fecha</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="pac-tbody">
+        <tr><td colspan="9" style="text-align:center;color:#6b7280;padding:40px;">Cargando pacientes...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div><!-- /#pane-pacientes -->
+
+<!-- Lightbox foto captura -->
+<div class="lb-foto" id="lb-foto" onclick="if(event.target===this)closeLbFoto()">
+  <button class="lb-foto-close" onclick="closeLbFoto()">×</button>
+  <img id="lb-foto-img" src="" alt="Captura">
+</div>
 
 <script>
 function fmtDate(iso) {
@@ -721,5 +826,163 @@ document.querySelectorAll('.estado-form').forEach(function(form) {
     document.getElementById('dup-count').textContent = visibles.length;
   } catch (e) { document.getElementById('dup-count').textContent = '?'; }
 })();
+
+/* ---- TABS ---- */
+var _pacientesLoaded = false;
+var _pacientesData = [];
+
+function switchTab(tab) {
+  document.getElementById('pane-personas').style.display = tab === 'personas' ? '' : 'none';
+  document.getElementById('pane-pacientes').style.display = tab === 'pacientes' ? '' : 'none';
+  document.getElementById('tab-personas').className = 'dash-tab' + (tab === 'personas' ? ' active' : '');
+  document.getElementById('tab-pacientes').className = 'dash-tab' + (tab === 'pacientes' ? ' active-blue' : '');
+  if (tab === 'pacientes' && !_pacientesLoaded) loadPacientes();
+}
+
+/* ---- PACIENTES TAB ---- */
+var _ESTADO_PAC_LABELS = { ingresado:'Ingresado', estable:'Estable', grave:'Grave', critico:'Crítico', alta:'De Alta', trasladado:'Trasladado', fallecido:'Fallecido' };
+
+async function loadPacientes() {
+  var key = getApiKey();
+  if (!key) return;
+  try {
+    var res = await fetch('/api/pacientes/?limit=500', { headers: { 'X-Api-Key': key } });
+    if (res.status === 401) { sessionStorage.removeItem('vr_api_key'); document.getElementById('pac-tbody').innerHTML = '<tr><td colspan="9" style="color:#dc2626;padding:20px;text-align:center;">API Key inválida.</td></tr>'; return; }
+    _pacientesData = await res.json();
+    _pacientesLoaded = true;
+    renderPacStats();
+    buildHospFilter();
+    renderPacTable(_pacientesData);
+  } catch(e) {
+    document.getElementById('pac-tbody').innerHTML = '<tr><td colspan="9" style="color:#dc2626;padding:20px;text-align:center;">Error al cargar. Intenta de nuevo.</td></tr>';
+  }
+}
+
+function renderPacStats() {
+  var d = _pacientesData;
+  document.getElementById('ps-total').textContent = d.length;
+  document.getElementById('ps-ingresados').textContent = d.filter(function(p){return p.estado_paciente==='ingresado';}).length;
+  document.getElementById('ps-estables').textContent  = d.filter(function(p){return p.estado_paciente==='estable';}).length;
+  document.getElementById('ps-graves').textContent    = d.filter(function(p){return p.estado_paciente==='grave';}).length;
+  document.getElementById('ps-criticos').textContent  = d.filter(function(p){return p.estado_paciente==='critico';}).length;
+  document.getElementById('ps-altas').textContent     = d.filter(function(p){return p.estado_paciente==='alta';}).length;
+}
+
+function buildHospFilter() {
+  var hosps = {};
+  _pacientesData.forEach(function(p) {
+    var n = p.nombre_hospital || ('Hospital #' + p.hospital_id);
+    if (p.hospital_id || p.nombre_hospital) hosps[n] = true;
+  });
+  var sel = document.getElementById('pac-filtrar-hospital');
+  Object.keys(hosps).sort().forEach(function(n) {
+    var opt = document.createElement('option'); opt.value = n; opt.textContent = n;
+    sel.appendChild(opt);
+  });
+}
+
+function filtrarPacientes() {
+  var nombre = document.getElementById('pac-buscar-nombre').value.toLowerCase();
+  var cedula = document.getElementById('pac-buscar-cedula').value.toLowerCase();
+  var hosp   = document.getElementById('pac-filtrar-hospital').value;
+  var estado = document.getElementById('pac-filtrar-estado').value;
+  var filtered = _pacientesData.filter(function(p) {
+    var hNom = p.nombre_hospital || ('Hospital #' + p.hospital_id) || '';
+    return (!nombre || (p.nombres_apellidos||'').toLowerCase().includes(nombre))
+        && (!cedula || (p.cedula||'').toLowerCase().includes(cedula))
+        && (!hosp   || hNom === hosp)
+        && (!estado || p.estado_paciente === estado);
+  });
+  renderPacTable(filtered);
+}
+
+function renderPacTable(arr) {
+  var tbody = document.getElementById('pac-tbody');
+  if (!arr.length) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#6b7280;padding:32px;">Sin registros.</td></tr>'; return; }
+  tbody.innerHTML = arr.map(function(p) {
+    var hosp = p.nombre_hospital || (p.hospital_id ? 'ID #'+p.hospital_id : '—');
+    var est = p.estado_paciente || 'ingresado';
+    var estLabel = _ESTADO_PAC_LABELS[est] || est;
+    var fecha = p.created_at ? fmtDate(p.created_at) : '—';
+    var sexoLbl = { masculino:'♂ M', femenino:'♀ F', no_determinado:'—' }[p.sexo] || (p.sexo||'—');
+    return '<tr data-pid="'+p.id+'">' +
+      '<td>'+p.id+'</td>' +
+      '<td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(hosp)+'">'+esc(hosp)+'</td>' +
+      '<td><strong>'+esc(p.nombres_apellidos)+'</strong></td>' +
+      '<td>'+esc(p.cedula||'—')+'</td>' +
+      '<td>'+esc(p.edad||'—')+'</td>' +
+      '<td>'+sexoLbl+'</td>' +
+      '<td><span class="est-pac est-pac-'+esc(est)+'">'+esc(estLabel)+'</span></td>' +
+      '<td style="white-space:nowrap;font-size:12px;">'+fecha+'</td>' +
+      '<td><div style="display:flex;gap:4px;align-items:center;">' +
+        '<select onchange="cambiarEstadoPac('+p.id+',this.value)" style="font-size:11px;padding:3px 6px;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;">' +
+          Object.entries(_ESTADO_PAC_LABELS).map(function(e){return '<option value="'+e[0]+'"'+(est===e[0]?' selected':'')+'>'+e[1]+'</option>';}).join('') +
+        '</select>' +
+        '<button onclick="toggleDetallePac('+p.id+',this)" style="font-size:11px;padding:3px 8px;background:#2563eb;color:white;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">Ver más</button>' +
+      '</div></td>' +
+    '</tr>' +
+    '<tr id="dp-'+p.id+'" style="display:none;">' +
+      '<td colspan="9" style="background:#f8faff;padding:12px 16px;">' +
+        renderDetallePac(p) +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function renderDetallePac(p) {
+  var foto = p.foto_captura_url
+    ? '<div><strong style="font-size:12px;color:#374151;display:block;margin-bottom:4px;">FOTO/CAPTURA</strong>' +
+      '<img src="'+esc(p.foto_captura_url)+'" onclick="openLbFoto(\''+esc(p.foto_captura_url)+'\')" style="width:80px;height:80px;object-fit:cover;border-radius:6px;cursor:zoom-in;border:2px solid #1e40af;" alt="captura"></div>'
+    : '';
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px 24px;font-size:13px;">' +
+    (p.procedencia  ? '<div><strong style="color:#374151;font-size:11px;display:block;margin-bottom:2px;">PROCEDENCIA</strong><span style="color:#6b7280;">'+esc(p.procedencia)+'</span></div>' : '') +
+    (p.parentesco   ? '<div><strong style="color:#374151;font-size:11px;display:block;margin-bottom:2px;">PARENTESCO</strong><span style="color:#6b7280;">'+esc(p.parentesco)+'</span></div>' : '') +
+    (p.reportado_por? '<div><strong style="color:#374151;font-size:11px;display:block;margin-bottom:2px;">REPORTADO POR</strong><span style="color:#6b7280;">'+esc(p.reportado_por)+'</span></div>' : '') +
+    (p.observaciones? '<div style="grid-column:1/-1"><strong style="color:#374151;font-size:11px;display:block;margin-bottom:2px;">OBSERVACIONES</strong><span style="color:#6b7280;">'+esc(p.observaciones)+'</span></div>' : '') +
+    (p.datos_adicionales? '<div style="grid-column:1/-1"><strong style="color:#374151;font-size:11px;display:block;margin-bottom:2px;">DATOS ADICIONALES</strong><span style="color:#6b7280;">'+esc(p.datos_adicionales)+'</span></div>' : '') +
+    foto +
+  '</div>';
+}
+
+function toggleDetallePac(id, btn) {
+  var det = document.getElementById('dp-'+id);
+  var vis = det.style.display !== 'none';
+  det.style.display = vis ? 'none' : '';
+  btn.textContent = vis ? 'Ver más' : 'Ocultar';
+}
+
+async function cambiarEstadoPac(id, estado) {
+  var key = getApiKey(); if (!key) return;
+  try {
+    var fd = new FormData(); fd.append('estado', estado);
+    var res = await fetch('/api/pacientes/'+id+'/estado', { method: 'PATCH', headers: {'X-Api-Key': key}, body: fd });
+    if (!res.ok) throw new Error();
+    showToast('✓ Estado actualizado');
+    var p = _pacientesData.find(function(x){return x.id===id;});
+    if (p) { p.estado_paciente = estado; renderPacStats(); }
+  } catch(e) { alert('Error al actualizar estado.'); }
+}
+
+function openLbFoto(url) {
+  document.getElementById('lb-foto-img').src = url;
+  document.getElementById('lb-foto').classList.add('open');
+}
+function closeLbFoto() {
+  document.getElementById('lb-foto').classList.remove('open');
+  document.getElementById('lb-foto-img').src = '';
+}
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLbFoto(); });
+
+function exportPacientesCSV() {
+  var rows = [['ID','Hospital','Nombre','Cedula','Edad','Sexo','Estado','Procedencia','Observaciones','Reportado por','Fecha']];
+  _pacientesData.forEach(function(p) {
+    rows.push([p.id, p.nombre_hospital||'', p.nombres_apellidos||'', p.cedula||'', p.edad||'', p.sexo||'', p.estado_paciente||'', p.procedencia||'', (p.observaciones||'').replace(/\n/g,' '), p.reportado_por||'', p.created_at||'']);
+  });
+  var csv = rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+  var blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pacientes_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+}
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 </script>
 {% endblock %}

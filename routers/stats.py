@@ -63,9 +63,11 @@ def get_stats_publico(request: Request, db: Session = Depends(get_db)):
     encontrados_vivos = sum(
         1 for p in todas if getattr(p, "tipo_reporte", None) == "encontrado_vivo"
     )
+    pacientes_hospitalizados = db.query(models.PacienteHospitalizado).count()
     return {
         "total": total,
         "desaparecidos": desaparecidos,
         "encontrados": encontrados,
         "encontrados_vivos": encontrados_vivos,
+        "pacientes_hospitalizados": pacientes_hospitalizados,
     }

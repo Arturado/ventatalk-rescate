@@ -17,6 +17,8 @@ from database import engine, SessionLocal
 from routers import personas, reportes
 from routers.admin import router as admin_router
 from routers.stats import router as stats_router, public_router as stats_public_router
+from routers.hospitales import router as hospitales_router, pacientes_router
+from sqlalchemy import text as sql_text
 
 templates = Jinja2Templates(directory="templates")
 limiter = Limiter(key_func=get_remote_address)
@@ -38,12 +40,72 @@ def seed_admin_users(db: Session):
     db.commit()
 
 
+def seed_hospitales(db: Session):
+    count = db.execute(sql_text("SELECT COUNT(*) FROM hospitales")).scalar()
+    if count > 0:
+        return
+
+    hospitales_data = [
+        # CARACAS / DISTRITO CAPITAL
+        {"nombre": "Hospital Universitario de Caracas", "direccion": "Ciudad Universitaria, Caracas", "zona": "Caracas", "telefono": "0212-6053111", "tipo": "publico"},
+        {"nombre": "Hospital Vargas de Caracas", "direccion": "Av. Vargas, San José, Caracas", "zona": "Caracas", "telefono": "0212-4083020", "tipo": "publico"},
+        {"nombre": "Hospital Dr. José María Vargas", "direccion": "Calle Real de Carballo, San José, Caracas", "zona": "Caracas", "telefono": "0212-4083000", "tipo": "publico"},
+        {"nombre": "Hospital de Niños J.M. de los Ríos", "direccion": "San Bernardino, Caracas", "zona": "Caracas", "telefono": "0212-5749111", "tipo": "publico"},
+        {"nombre": "Maternidad Concepción Palacios", "direccion": "Av. Vollmer, San Bernardino, Caracas", "zona": "Caracas", "telefono": "0212-5742122", "tipo": "publico"},
+        {"nombre": "Hospital Pérez Carreño (IVSS)", "direccion": "Av. Principal de Los Ruices, Caracas", "zona": "Caracas", "telefono": "0212-2395911", "tipo": "publico"},
+        {"nombre": "Hospital Dr. José Ignacio Baldó (El Algodonal)", "direccion": "El Algodonal, Carapita, Caracas", "zona": "Caracas", "telefono": "0212-4435111", "tipo": "publico"},
+        {"nombre": "Clínica El Ávila", "direccion": "Av. San Juan Bosco, Altamira, Caracas", "zona": "Caracas", "telefono": "0212-2760100", "tipo": "privado"},
+        {"nombre": "Centro Médico de Caracas", "direccion": "Av. Eraso, San Bernardino, Caracas", "zona": "Caracas", "telefono": "0212-5554111", "tipo": "privado"},
+        {"nombre": "Clínica La Floresta", "direccion": "Av. Principal de La Floresta, Caracas", "zona": "Caracas", "telefono": "0212-2095511", "tipo": "privado"},
+        {"nombre": "Hospital Domingo Luciani (IVSS)", "direccion": "El Llanito, Caracas", "zona": "Caracas", "telefono": "0212-2561111", "tipo": "publico"},
+        {"nombre": "Hospital Dr. Enrique Tejera (Cotiza)", "direccion": "Cotiza, Caracas", "zona": "Caracas", "telefono": "0212-8625511", "tipo": "publico"},
+        # VARGAS / LA GUAIRA
+        {"nombre": "Hospital Dr. Raúl Leoni (La Guaira)", "direccion": "Av. La Armada, La Guaira, Vargas", "zona": "Vargas", "telefono": "0212-3521111", "tipo": "publico"},
+        {"nombre": "Hospital Tipo II Dr. Patrocinio Peñuela Ruiz", "direccion": "Macuto, Vargas", "zona": "Vargas", "telefono": None, "tipo": "publico"},
+        {"nombre": "Ambulatorio Urbano III Caraballeda", "direccion": "Caraballeda, Vargas", "zona": "Vargas", "telefono": None, "tipo": "ambulatorio"},
+        {"nombre": "Ambulatorio Los Caracas", "direccion": "Los Caracas, Vargas", "zona": "Vargas", "telefono": None, "tipo": "ambulatorio"},
+        # MIRANDA
+        {"nombre": "Hospital Dr. Victorino Santaella Ruiz", "direccion": "Los Teques, Miranda", "zona": "Miranda", "telefono": "0212-3214111", "tipo": "publico"},
+        {"nombre": "Hospital General del Este Dr. Domingo Luciani", "direccion": "El Llanito, Miranda", "zona": "Miranda", "telefono": "0212-2561111", "tipo": "publico"},
+        {"nombre": "Hospital Gervasio Vera Custodio", "direccion": "Ocumare del Tuy, Miranda", "zona": "Miranda", "telefono": None, "tipo": "publico"},
+        {"nombre": "Hospital Dr. Jesús Yerena (Lídice)", "direccion": "Lídice, Miranda", "zona": "Miranda", "telefono": None, "tipo": "publico"},
+        {"nombre": "Clínica El Ávila Guarenas", "direccion": "Guarenas, Miranda", "zona": "Miranda", "telefono": None, "tipo": "privado"},
+        # CARABOBO
+        {"nombre": "Ciudad Hospitalaria Dr. Enrique Tejera (CHET)", "direccion": "Valencia, Carabobo", "zona": "Carabobo", "telefono": "0241-8576111", "tipo": "publico"},
+        {"nombre": "Hospital General de Valencia (IVSS)", "direccion": "Av. Bolívar Norte, Valencia, Carabobo", "zona": "Carabobo", "telefono": "0241-8232111", "tipo": "publico"},
+        {"nombre": "Hospital de Niños Angel Larralde", "direccion": "Urb. La Viña, Valencia, Carabobo", "zona": "Carabobo", "telefono": "0241-8243111", "tipo": "publico"},
+        {"nombre": "Clínica Razetti de Valencia", "direccion": "Av. Bolívar, Valencia, Carabobo", "zona": "Carabobo", "telefono": "0241-8222111", "tipo": "privado"},
+        {"nombre": "Hospital General Dr. Adolfo Prince Lara (Puerto Cabello)", "direccion": "Puerto Cabello, Carabobo", "zona": "Carabobo", "telefono": None, "tipo": "publico"},
+        # ARAGUA
+        {"nombre": "Hospital Central de Maracay (Dr. Carlos Arvelo)", "direccion": "Av. Bolívar, Maracay, Aragua", "zona": "Aragua", "telefono": "0243-2325111", "tipo": "publico"},
+        {"nombre": "Hospital de Niños Rafael Tobías Guevara", "direccion": "Maracay, Aragua", "zona": "Aragua", "telefono": "0243-2335111", "tipo": "publico"},
+        {"nombre": "Hospital Militar Dr. Carlos Arvelo", "direccion": "Av. Las Delicias, Maracay, Aragua", "zona": "Aragua", "telefono": None, "tipo": "publico"},
+        {"nombre": "Clínica Razetti de Maracay", "direccion": "Maracay, Aragua", "zona": "Aragua", "telefono": "0243-2422111", "tipo": "privado"},
+        {"nombre": "Hospital Dr. Domingo Guzmán Lander (La Victoria)", "direccion": "La Victoria, Aragua", "zona": "Aragua", "telefono": None, "tipo": "publico"},
+        # FALCON
+        {"nombre": "Hospital Universitario Dr. Alfredo Van Grieken", "direccion": "Coro, Falcón", "zona": "Falcon", "telefono": "0268-2525111", "tipo": "publico"},
+        {"nombre": "Hospital Dr. Rafael Calles Sierra (Punto Fijo)", "direccion": "Punto Fijo, Falcón", "zona": "Falcon", "telefono": "0269-2454111", "tipo": "publico"},
+        {"nombre": "Ambulatorio La Vela de Coro", "direccion": "La Vela de Coro, Falcón", "zona": "Falcon", "telefono": None, "tipo": "ambulatorio"},
+        # YARACUY
+        {"nombre": "Hospital Plácido Daniel Rodríguez Rivero", "direccion": "San Felipe, Yaracuy", "zona": "Yaracuy", "telefono": "0254-2312111", "tipo": "publico"},
+        {"nombre": "Hospital Dr. Manuel Núñez Tovar (Nirgua)", "direccion": "Nirgua, Yaracuy", "zona": "Yaracuy", "telefono": None, "tipo": "publico"},
+        {"nombre": "Ambulatorio Urbano Tipo III San Felipe", "direccion": "San Felipe, Yaracuy", "zona": "Yaracuy", "telefono": None, "tipo": "ambulatorio"},
+    ]
+
+    for h in hospitales_data:
+        hospital = models.Hospital(**h)
+        db.add(hospital)
+    db.commit()
+    print(f"Seed: {len(hospitales_data)} hospitales insertados")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     models.Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         seed_admin_users(db)
+        seed_hospitales(db)
     finally:
         db.close()
     yield
@@ -79,6 +141,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.mount("/uploads/capturas", StaticFiles(directory="uploads/capturas"), name="capturas")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.mount("/widget", StaticFiles(directory="static"), name="widget")
 app.mount("/static", StaticFiles(directory="static"), name="static-files")
@@ -89,6 +152,8 @@ app.include_router(personas.router)
 app.include_router(personas.matches_router)
 app.include_router(stats_router)
 app.include_router(stats_public_router)
+app.include_router(hospitales_router)
+app.include_router(pacientes_router)
 app.include_router(admin_router)
 
 
@@ -100,6 +165,16 @@ async def landing(request: Request):
 @app.get("/chatbot", response_class=HTMLResponse)
 async def chatbot(request: Request):
     return templates.TemplateResponse("chatbot.html", {"request": request})
+
+
+@app.get("/hospitales", response_class=HTMLResponse)
+async def hospitales_page(request: Request):
+    return templates.TemplateResponse("hospitales.html", {"request": request})
+
+
+@app.get("/hospitales/reportar", response_class=HTMLResponse)
+async def hospitales_reportar_page(request: Request):
+    return templates.TemplateResponse("hospitales_reportar.html", {"request": request})
 
 
 @app.get("/health", tags=["sistema"])

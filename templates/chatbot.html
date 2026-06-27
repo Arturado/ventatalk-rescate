@@ -164,6 +164,22 @@
       font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;
     }
     .cb-btn-fallecido:hover { border-color: #9ca3af; color: #374151; }
+    .cb-btn-tipo-hosp {
+      width: 100%; padding: 16px;
+      background: #1e40af; color: white;
+      border: none; border-radius: 12px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      text-align: left; line-height: 1.4;
+      transition: background .15s;
+    }
+    .cb-btn-tipo-hosp:hover { background: #1e3a8a; }
+    .cb-hosp-list {
+      max-height: 220px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 5px;
+      margin-bottom: 8px; padding-right: 4px;
+    }
+    .cb-hosp-zone { font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; padding: 6px 2px 2px; }
+    .cb-hosp-btn { text-align: left; font-size: 13px; padding: 9px 12px; }
   </style>
 </head>
 <body>
@@ -425,9 +441,172 @@ async function reconstructFiles(data) {
     btnEnc.className = "cb-btn-tipo-enc";
     btnEnc.textContent = "🟢 Reportar persona encontrada — Está vivo/a pero necesita ser ubicado/a";
     btnEnc.addEventListener("click", () => seleccionarTipo("encontrado_vivo"));
+    const btnHosp = document.createElement("button");
+    btnHosp.className = "cb-btn-tipo-hosp";
+    btnHosp.textContent = "🏥 Reportar paciente en hospital";
+    btnHosp.addEventListener("click", () => seleccionarTipoHospital());
     inputArea.appendChild(btnDes);
     inputArea.appendChild(btnEnc);
+    inputArea.appendChild(btnHosp);
     scroll();
+  }
+
+  function buildHospitalSteps() {
+    return [
+      { field: "_hospital_selector", type: "hospital-selector", question: "¿En qué hospital o centro médico está el paciente?" },
+      { field: "nombres_apellidos", question: "¿Cuál es el nombre del paciente?", subtext: "Si no lo sabes escribe 'Desconocido'", type: "text", placeholder: "Ej: Maria Gonzalez Perez", required: true },
+      { field: "_doc_pac", type: "doc-choice-pac", question: "¿Tienes su cédula?" },
+      { field: "sexo", type: "buttons", question: "Sexo del paciente", buttons: [{ label: "Masculino", value: "masculino" }, { label: "Femenino", value: "femenino" }, { label: "No determinado", value: "no_determinado" }] },
+      { field: "edad", type: "buttons", question: "Edad aproximada", buttons: [{ label: "Niño", value: "niño" }, { label: "Joven", value: "joven" }, { label: "Adulto", value: "adulto" }, { label: "Adulto mayor", value: "adulto mayor" }, { label: "No sé", value: "no_sabe" }] },
+      { field: "procedencia", type: "text", question: "¿De dónde procede? ¿Dónde vivía o fue encontrado?", placeholder: "Ej: El Valle, Caracas", required: false },
+      { field: "estado_paciente", type: "estado-paciente", question: "¿Cuál es el estado actual del paciente?" },
+      { field: "observaciones", type: "textarea", question: "¿Alguna observación adicional? (opcional)", placeholder: "Señas físicas, lesiones, información relevante...", required: false },
+      { field: "_contacto_pac", type: "tel", question: "¿Cuál es tu número de contacto? (opcional — puedes omitir)", placeholder: "+58 412 1234567", maxlength: 15, required: false },
+    ];
+  }
+
+  async function seleccionarTipoHospital() {
+    tipoReporte = "paciente_hospital";
+    formData._tipo_reporte = "paciente_hospital";
+    inputArea.innerHTML = "";
+    userMsg("🏥 Reportar paciente en hospital");
+    await botMsg("Entendido. Voy a ayudarte a registrar al paciente en el sistema hospitalario. Las familias podrán buscarlo. 🏥", 600);
+    STEPS = buildHospitalSteps();
+    currentStep = 0;
+    setTimeout(askStep, 300);
+  }
+
+  async function renderHospitalSelector() {
+    inputArea.innerHTML = '<div style="text-align:center;padding:20px;color:#6b7280;font-size:14px;">Cargando hospitales...</div>';
+    try {
+      const res = await fetch('/api/hospitales/');
+      const hospitales = await res.json();
+      inputArea.innerHTML = '';
+      const listWrap = document.createElement('div');
+      listWrap.className = 'cb-hosp-list';
+      const byZona = {};
+      hospitales.forEach(h => { if (!byZona[h.zona]) byZona[h.zona] = []; byZona[h.zona].push(h); });
+      Object.entries(byZona).forEach(([zona, hosps]) => {
+        const hdr = document.createElement('div');
+        hdr.className = 'cb-hosp-zone'; hdr.textContent = zona === 'Falcon' ? 'Falcón' : zona;
+        listWrap.appendChild(hdr);
+        hosps.forEach(h => {
+          const b = document.createElement('button');
+          b.className = 'cb-btn cb-btn-sec cb-hosp-btn'; b.textContent = h.nombre;
+          b.addEventListener('click', () => {
+            formData.hospital_id = h.id; formData.nombre_hospital = h.nombre;
+            userMsg(h.nombre); currentStep++;
+            saveDraft(currentStep, formData).catch(() => {});
+            askStep();
+          });
+          listWrap.appendChild(b);
+        });
+      });
+      inputArea.appendChild(listWrap);
+      const otroBtn = document.createElement('button');
+      otroBtn.className = 'cb-btn cb-btn-sec'; otroBtn.textContent = '📝 Otro centro / No está en la lista';
+      otroBtn.addEventListener('click', () => {
+        inputArea.innerHTML = '';
+        const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'Nombre del hospital o clínica';
+        inp.style.cssText = 'width:100%;border:1.5px solid #d1d5db;border-radius:10px;padding:11px 14px;font-size:15px;outline:none;margin-bottom:8px;background:#fafafa;';
+        const btn = document.createElement('button'); btn.className = 'cb-btn'; btn.textContent = 'Continuar';
+        const go = () => { const v = inp.value.trim(); if (!v) { inp.style.borderColor='#ef4444'; return; } formData.nombre_hospital = v; userMsg(v); currentStep++; saveDraft(currentStep,formData).catch(()=>{}); askStep(); };
+        btn.addEventListener('click', go);
+        inp.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+        inputArea.appendChild(inp); inputArea.appendChild(btn);
+        setTimeout(() => inp.focus(), 100);
+      });
+      inputArea.appendChild(otroBtn);
+    } catch(e) {
+      inputArea.innerHTML = '';
+      const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'Nombre del hospital o clínica';
+      inp.style.cssText = 'width:100%;border:1.5px solid #d1d5db;border-radius:10px;padding:11px 14px;font-size:15px;outline:none;margin-bottom:8px;background:#fafafa;';
+      const btn = document.createElement('button'); btn.className = 'cb-btn'; btn.textContent = 'Continuar';
+      btn.addEventListener('click', () => { const v = inp.value.trim(); if (!v) { inp.style.borderColor='#ef4444'; return; } formData.nombre_hospital = v; userMsg(v); currentStep++; saveDraft(currentStep,formData).catch(()=>{}); askStep(); });
+      inputArea.appendChild(inp); inputArea.appendChild(btn);
+    }
+  }
+
+  function renderDocChoicePac() {
+    const btnSi = document.createElement('button'); btnSi.className = 'cb-btn'; btnSi.textContent = 'Sí, tengo la cédula';
+    btnSi.addEventListener('click', () => {
+      userMsg('Sí, tengo la cédula');
+      inputArea.innerHTML = `<input type="text" id="cb-input" placeholder="V-12345678 o solo números" maxlength="15">
+        <button class="cb-btn" id="cb-next">Continuar</button>
+        <button class="cb-btn cb-btn-sec" id="cb-skip">No la sé</button>`;
+      document.getElementById('cb-next').addEventListener('click', () => {
+        const v = document.getElementById('cb-input').value.trim();
+        if (v) { formData.cedula = v; userMsg(v); }
+        currentStep++; saveDraft(currentStep, formData).catch(() => {}); askStep();
+      });
+      document.getElementById('cb-skip').addEventListener('click', () => { currentStep++; saveDraft(currentStep,formData).catch(()=>{}); askStep(); });
+      setTimeout(() => document.getElementById('cb-input').focus(), 100);
+    });
+    const btnNo = document.createElement('button'); btnNo.className = 'cb-btn cb-btn-sec'; btnNo.textContent = 'No / No la sé';
+    btnNo.addEventListener('click', () => { userMsg('No / No la sé'); currentStep++; saveDraft(currentStep,formData).catch(()=>{}); askStep(); });
+    inputArea.appendChild(btnSi); inputArea.appendChild(btnNo);
+  }
+
+  function renderEstadoPaciente() {
+    const grid = document.createElement('div'); grid.className = 'cb-btn-grid';
+    [
+      { label: '✅ Ingresado — Estable', value: 'estable' },
+      { label: '⚠️ Ingresado — Grave',  value: 'grave' },
+      { label: '🚨 Estado Crítico',       value: 'critico' },
+      { label: '🏠 De Alta',              value: 'alta' },
+      { label: '🚑 Trasladado',           value: 'trasladado' },
+    ].forEach(opt => {
+      const b = document.createElement('button'); b.className = 'cb-btn-opt'; b.textContent = opt.label;
+      b.addEventListener('click', () => { formData.estado_paciente = opt.value; userMsg(opt.label); currentStep++; saveDraft(currentStep,formData).catch(()=>{}); askStep(); });
+      grid.appendChild(b);
+    });
+    inputArea.appendChild(grid);
+    const fallBtn = document.createElement('button'); fallBtn.className = 'cb-btn-fallecido'; fallBtn.textContent = 'Fallecido/a';
+    fallBtn.addEventListener('click', () => {
+      if (confirm('¿Confirmas que el paciente ha fallecido?')) { formData.estado_paciente = 'fallecido'; userMsg('Fallecido/a'); currentStep++; saveDraft(currentStep,formData).catch(()=>{}); askStep(); }
+    });
+    inputArea.appendChild(fallBtn);
+  }
+
+  async function submitPaciente() {
+    setProgress(STEPS.length);
+    inputArea.innerHTML = '';
+    await clearDraft();
+    await botMsg('Registrando paciente... ⏳', 500);
+    try {
+      const fd = new FormData();
+      if (formData.hospital_id) fd.append('hospital_id', formData.hospital_id);
+      if (formData.nombre_hospital) fd.append('nombre_hospital', formData.nombre_hospital);
+      fd.append('nombres_apellidos', formData.nombres_apellidos || '');
+      if (formData.cedula) fd.append('cedula', formData.cedula);
+      if (formData.sexo) fd.append('sexo', formData.sexo);
+      if (formData.edad) fd.append('edad', formData.edad);
+      if (formData.procedencia) fd.append('procedencia', formData.procedencia);
+      fd.append('estado_paciente', formData.estado_paciente || 'ingresado');
+      if (formData.observaciones) fd.append('observaciones', formData.observaciones);
+      if (formData._contacto_pac) fd.append('reportado_por', formData._contacto_pac);
+      const res = await fetch('/api/pacientes/', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error('Error ' + res.status);
+      showPacienteSuccess();
+    } catch(e) {
+      await botMsg('❌ Error al registrar. Intenta de nuevo.');
+      inputArea.innerHTML = '<button class="cb-btn" id="cb-retry">Reintentar</button>';
+      document.getElementById('cb-retry').addEventListener('click', submitPaciente);
+    }
+  }
+
+  function showPacienteSuccess() {
+    msgs.innerHTML = '';
+    bar.style.width = '100%';
+    const el = document.createElement('div');
+    el.className = 'cb-success';
+    el.innerHTML = `
+      <div class="cb-success-icon">✅</div>
+      <h4>¡Paciente registrado!</h4>
+      <p>Las familias podrán buscarlo en <a href="/hospitales" style="color:#1e40af;font-weight:700">rescate.ventatalk.com/hospitales</a></p>
+    `;
+    msgs.appendChild(el);
+    inputArea.innerHTML = '<button class="cb-btn" onclick="resetChat()">Registrar otro paciente</button>';
   }
 
   async function seleccionarTipo(tipo) {
@@ -444,7 +623,10 @@ async function reconstructFiles(data) {
   }
 
   function askStep() {
-    if (currentStep >= STEPS.length) { submitForm(); return; }
+    if (currentStep >= STEPS.length) {
+      if (tipoReporte === "paciente_hospital") { submitPaciente(); } else { submitForm(); }
+      return;
+    }
     const step = STEPS[currentStep];
     setProgress(currentStep);
     botMsg(step.question, 350).then(() => setTimeout(() => renderInput(step), 200));
@@ -452,10 +634,13 @@ async function reconstructFiles(data) {
 
   function renderInput(step) {
     inputArea.innerHTML = "";
-    if (step.type === "file")       { renderFotoPanel(); return; }
-    if (step.type === "buttons")    { renderButtonStep(step); return; }
-    if (step.type === "doc-choice") { renderDocChoice(); return; }
-    if (step.type === "clinico")    { renderClinico(); return; }
+    if (step.type === "file")              { renderFotoPanel(); return; }
+    if (step.type === "buttons")           { renderButtonStep(step); return; }
+    if (step.type === "doc-choice")        { renderDocChoice(); return; }
+    if (step.type === "clinico")           { renderClinico(); return; }
+    if (step.type === "hospital-selector") { renderHospitalSelector(); return; }
+    if (step.type === "doc-choice-pac")    { renderDocChoicePac(); return; }
+    if (step.type === "estado-paciente")   { renderEstadoPaciente(); return; }
     renderTextInput(step);
   }
 

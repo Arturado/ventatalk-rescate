@@ -72,6 +72,11 @@
     .rw-btn-tipo-des:hover { background:#b91c1c; }
     .rw-btn-tipo-enc { width:100%; padding:12px; background:#16a34a; color:white; border:none; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; text-align:left; line-height:1.4; transition:background .15s; }
     .rw-btn-tipo-enc:hover { background:#15803d; }
+    .rw-btn-tipo-hosp { width:100%; padding:12px; background:#1e40af; color:white; border:none; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; text-align:left; line-height:1.4; transition:background .15s; }
+    .rw-btn-tipo-hosp:hover { background:#1e3a8a; }
+    .rw-hosp-list { max-height:180px; overflow-y:auto; display:flex; flex-direction:column; gap:5px; margin-bottom:6px; padding-right:2px; }
+    .rw-hosp-zone { font-size:10px; font-weight:700; color:#9ca3af; text-transform:uppercase; padding:5px 2px 2px; }
+    .rw-hosp-btn { text-align:left; font-size:12px; padding:8px 10px; }
     .rw-btn-grid { display:flex; gap:6px; flex-wrap:wrap; }
     .rw-btn-opt { display:inline-block; width:auto; padding:8px 12px; background:white; color:#dc2626; border:2px solid #dc2626; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; text-align:left; margin:0 4px 6px 0; transition:background .15s, color .15s; }
     .rw-btn-opt:hover { background:#dc2626; color:white; }
@@ -178,9 +183,133 @@
     btnEnc.className = "rw-btn-tipo-enc";
     btnEnc.textContent = "🟢 Reportar persona encontrada";
     btnEnc.addEventListener("click", () => seleccionarTipo("encontrado_vivo"));
+    const btnHosp = document.createElement("button");
+    btnHosp.className = "rw-btn-tipo-hosp";
+    btnHosp.textContent = "🏥 Reportar paciente en hospital";
+    btnHosp.addEventListener("click", () => seleccionarTipoHospital());
     inputArea.appendChild(btnDes);
     inputArea.appendChild(btnEnc);
+    inputArea.appendChild(btnHosp);
     scroll();
+  }
+
+  function buildHospitalSteps() {
+    return [
+      { field: "_hospital_selector", type: "hospital-selector", question: "¿En qué hospital está el paciente?" },
+      { field: "nombres_apellidos", question: "¿Cuál es el nombre del paciente?", subtext: "Escribe 'Desconocido' si no lo sabes", type: "text", placeholder: "Ej: Maria Gonzalez", required: true },
+      { field: "_doc_pac", type: "doc-choice-pac", question: "¿Tienes su cédula?" },
+      { field: "sexo", type: "buttons", question: "Sexo", buttons: [{ label: "Masculino", value: "masculino" }, { label: "Femenino", value: "femenino" }, { label: "No det.", value: "no_determinado" }] },
+      { field: "edad", type: "buttons", question: "Edad aproximada", buttons: [{ label: "Niño", value: "niño" }, { label: "Joven", value: "joven" }, { label: "Adulto", value: "adulto" }, { label: "Mayor", value: "adulto mayor" }, { label: "No sé", value: "no_sabe" }] },
+      { field: "procedencia", type: "text", question: "¿De dónde procede?", placeholder: "Ej: El Valle, Caracas", required: false },
+      { field: "estado_paciente", type: "estado-paciente", question: "¿Estado actual del paciente?" },
+      { field: "observaciones", type: "textarea", question: "Observaciones adicionales (opcional)", placeholder: "Señas físicas, lesiones...", required: false },
+      { field: "_contacto_pac", type: "tel", question: "Tu número de contacto (opcional)", placeholder: "+58 412 1234567", maxlength: 15, required: false },
+    ];
+  }
+
+  async function seleccionarTipoHospital() {
+    tipoReporte = "paciente_hospital";
+    inputArea.innerHTML = "";
+    userMsg("🏥 Reportar paciente en hospital");
+    await botMsg("Entendido. 🏥 Te haré unas preguntas.", 500);
+    STEPS = buildHospitalSteps();
+    currentStep = 0;
+    setTimeout(askStep, 300);
+  }
+
+  async function renderHospitalSelector() {
+    inputArea.innerHTML = '<div style="text-align:center;padding:16px;color:#6b7280;font-size:13px;">Cargando...</div>';
+    try {
+      const res = await fetch(API_URL + '/api/hospitales/');
+      const hospitales = await res.json();
+      inputArea.innerHTML = '';
+      const listWrap = document.createElement('div');
+      listWrap.className = 'rw-hosp-list';
+      const byZona = {};
+      hospitales.forEach(h => { if (!byZona[h.zona]) byZona[h.zona] = []; byZona[h.zona].push(h); });
+      Object.entries(byZona).forEach(([zona, hosps]) => {
+        const hdr = document.createElement('div'); hdr.className = 'rw-hosp-zone'; hdr.textContent = zona === 'Falcon' ? 'Falcón' : zona;
+        listWrap.appendChild(hdr);
+        hosps.forEach(h => {
+          const b = document.createElement('button'); b.className = 'rw-btn rw-btn-sec rw-hosp-btn'; b.textContent = h.nombre;
+          b.addEventListener('click', () => { formData.hospital_id = h.id; formData.nombre_hospital = h.nombre; userMsg(h.nombre); currentStep++; askStep(); });
+          listWrap.appendChild(b);
+        });
+      });
+      inputArea.appendChild(listWrap);
+      const otroBtn = document.createElement('button'); otroBtn.className = 'rw-btn rw-btn-sec'; otroBtn.textContent = '📝 Otro / No está en la lista';
+      otroBtn.addEventListener('click', () => {
+        inputArea.innerHTML = `<input type="text" id="rw-hinp" placeholder="Nombre del hospital" style="width:100%;border:1.5px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:14px;outline:none;margin-bottom:6px;"><button class="rw-btn" id="rw-hok">Continuar</button>`;
+        document.getElementById('rw-hok').addEventListener('click', () => { const v = document.getElementById('rw-hinp').value.trim(); if (!v) return; formData.nombre_hospital = v; userMsg(v); currentStep++; askStep(); });
+        setTimeout(() => document.getElementById('rw-hinp').focus(), 100);
+      });
+      inputArea.appendChild(otroBtn);
+    } catch(e) {
+      inputArea.innerHTML = `<input type="text" id="rw-hinp" placeholder="Nombre del hospital" style="width:100%;border:1.5px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:14px;outline:none;margin-bottom:6px;"><button class="rw-btn" id="rw-hok">Continuar</button>`;
+      document.getElementById('rw-hok').addEventListener('click', () => { const v = document.getElementById('rw-hinp').value.trim(); if (!v) return; formData.nombre_hospital = v; userMsg(v); currentStep++; askStep(); });
+    }
+  }
+
+  function renderDocChoicePac() {
+    const btnSi = document.createElement('button'); btnSi.className = 'rw-btn'; btnSi.textContent = 'Sí, tengo la cédula';
+    btnSi.addEventListener('click', () => {
+      userMsg('Sí'); inputArea.innerHTML = `<input type="text" id="rw-input" placeholder="V-12345678" maxlength="15"><button class="rw-btn" id="rw-next">Continuar</button><button class="rw-btn rw-btn-sec" id="rw-skip">No la sé</button>`;
+      document.getElementById('rw-next').addEventListener('click', () => { const v = document.getElementById('rw-input').value.trim(); if (v) { formData.cedula = v; userMsg(v); } currentStep++; askStep(); });
+      document.getElementById('rw-skip').addEventListener('click', () => { currentStep++; askStep(); });
+      setTimeout(() => document.getElementById('rw-input').focus(), 100);
+    });
+    const btnNo = document.createElement('button'); btnNo.className = 'rw-btn rw-btn-sec'; btnNo.textContent = 'No / No la sé';
+    btnNo.addEventListener('click', () => { userMsg('No'); currentStep++; askStep(); });
+    inputArea.appendChild(btnSi); inputArea.appendChild(btnNo);
+  }
+
+  function renderEstadoPaciente() {
+    const grid = document.createElement('div'); grid.className = 'rw-btn-grid';
+    [
+      { label: '✅ Estable', value: 'estable' },
+      { label: '⚠️ Grave',  value: 'grave' },
+      { label: '🚨 Crítico', value: 'critico' },
+      { label: '🏠 De Alta', value: 'alta' },
+      { label: '🚑 Trasladado', value: 'trasladado' },
+    ].forEach(opt => {
+      const b = document.createElement('button'); b.className = 'rw-btn-opt'; b.textContent = opt.label;
+      b.addEventListener('click', () => { formData.estado_paciente = opt.value; userMsg(opt.label); currentStep++; askStep(); });
+      grid.appendChild(b);
+    });
+    inputArea.appendChild(grid);
+    const fallBtn = document.createElement('button'); fallBtn.className = 'rw-btn-fallecido'; fallBtn.textContent = 'Fallecido/a';
+    fallBtn.addEventListener('click', () => { if (confirm('¿Confirmas fallecido?')) { formData.estado_paciente = 'fallecido'; userMsg('Fallecido/a'); currentStep++; askStep(); } });
+    inputArea.appendChild(fallBtn);
+  }
+
+  async function submitPaciente() {
+    setProgress(STEPS.length); inputArea.innerHTML = '';
+    await botMsg('Registrando paciente... ⏳', 500);
+    try {
+      const fd = new FormData();
+      if (formData.hospital_id) fd.append('hospital_id', formData.hospital_id);
+      if (formData.nombre_hospital) fd.append('nombre_hospital', formData.nombre_hospital);
+      fd.append('nombres_apellidos', formData.nombres_apellidos || '');
+      if (formData.cedula) fd.append('cedula', formData.cedula);
+      if (formData.sexo) fd.append('sexo', formData.sexo);
+      if (formData.edad) fd.append('edad', formData.edad);
+      if (formData.procedencia) fd.append('procedencia', formData.procedencia);
+      fd.append('estado_paciente', formData.estado_paciente || 'ingresado');
+      if (formData.observaciones) fd.append('observaciones', formData.observaciones);
+      if (formData._contacto_pac) fd.append('reportado_por', formData._contacto_pac);
+      const res = await fetch(API_URL + '/api/pacientes/', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error();
+      msgs.innerHTML = ''; inputArea.innerHTML = ''; bar.style.width = '100%';
+      const ok = document.createElement('div'); ok.className = 'rw-success';
+      ok.innerHTML = `<div class="rw-success-icon">✅</div><h4>¡Paciente registrado!</h4><p>Las familias podrán buscarlo en <a href="/hospitales" style="color:#1e40af">venezrescate.com/hospitales</a></p>`;
+      msgs.appendChild(ok);
+      inputArea.innerHTML = '<button class="rw-btn rw-btn-sec" id="rw-new">Hacer otro reporte</button>';
+      document.getElementById('rw-new').addEventListener('click', () => { currentStep = 0; formData = {}; tipoReporte = ''; STEPS = []; msgs.innerHTML = ''; bar.style.width = '0%'; startChat(); });
+    } catch(e) {
+      await botMsg('❌ Error al registrar. Intenta de nuevo.');
+      inputArea.innerHTML = '<button class="rw-btn" id="rw-retry">Reintentar</button>';
+      document.getElementById('rw-retry').addEventListener('click', submitPaciente);
+    }
   }
 
   async function seleccionarTipo(tipo) {
@@ -196,7 +325,10 @@
   }
 
   function askStep() {
-    if (currentStep >= STEPS.length) { submitForm(); return; }
+    if (currentStep >= STEPS.length) {
+      if (tipoReporte === "paciente_hospital") { submitPaciente(); } else { submitForm(); }
+      return;
+    }
     const step = STEPS[currentStep];
     setProgress(currentStep);
     botMsg(step.question, 350).then(() => setTimeout(() => renderInput(step), 200));
@@ -204,10 +336,13 @@
 
   function renderInput(step) {
     inputArea.innerHTML = "";
-    if (step.type === "file")       { renderFotoPanel(); return; }
-    if (step.type === "buttons")    { renderButtonStep(step); return; }
-    if (step.type === "doc-choice") { renderDocChoice(); return; }
-    if (step.type === "clinico")    { renderClinico(); return; }
+    if (step.type === "file")              { renderFotoPanel(); return; }
+    if (step.type === "buttons")           { renderButtonStep(step); return; }
+    if (step.type === "doc-choice")        { renderDocChoice(); return; }
+    if (step.type === "clinico")           { renderClinico(); return; }
+    if (step.type === "hospital-selector") { renderHospitalSelector(); return; }
+    if (step.type === "doc-choice-pac")    { renderDocChoicePac(); return; }
+    if (step.type === "estado-paciente")   { renderEstadoPaciente(); return; }
     renderTextInput(step);
   }
 

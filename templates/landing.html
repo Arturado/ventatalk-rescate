@@ -65,6 +65,22 @@
       transition: background .15s;
     }
     .cta-secondary:hover { background: rgba(255,255,255,.1); }
+    .cta-hosp {
+      background: rgba(30,64,175,.85);
+      color: white;
+      border: 2px solid rgba(147,197,253,.6);
+      padding: 13px 28px; border-radius: 10px;
+      font-size: 15px; font-weight: 700;
+      text-decoration: none;
+      transition: background .15s;
+    }
+    .cta-hosp:hover { background: rgba(30,64,175,1); }
+    .staff-bar {
+      background: #1e3a5f; color: rgba(255,255,255,.85);
+      text-align: center; padding: 10px 20px; font-size: 13px;
+    }
+    .staff-bar a { color: #93c5fd; font-weight: 700; text-decoration: none; }
+    .staff-bar a:hover { text-decoration: underline; }
 
     /* SEARCH PANEL */
     #search-panel {
@@ -656,6 +672,7 @@
   <div class="cta-group">
     <a href="/chatbot" class="cta-primary">🆘 Reportar desaparecido</a>
     <a href="#" class="cta-secondary" id="btn-buscar" onclick="toggleBuscador(event)">🔍 Buscar persona</a>
+    <a href="/hospitales" class="cta-hosp">🏥 Buscar en hospitales</a>
   </div>
 </section>
 
@@ -760,6 +777,9 @@
   <a href="/chatbot">Iniciar reporte ahora</a>
 </section>
 
+<div class="staff-bar">
+  ¿Trabajas en un centro de salud o eres rescatista? &nbsp;<a href="/hospitales/reportar">Registra pacientes aquí →</a>
+</div>
 <footer>
   <strong>Venezuela Rescate</strong> &mdash; Sistema de emergencia post-sismo &mdash; Todos los datos son confidenciales.
 </footer>
