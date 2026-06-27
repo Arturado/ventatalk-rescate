@@ -152,16 +152,42 @@ def buscar_pacientes(
         query = query.filter(models.PacienteHospitalizado.hospital_id == hospital_id)
     return query.order_by(models.PacienteHospitalizado.created_at.desc()).limit(50).all()
 
+@pacientes_router.get("/count")
+def contar_pacientes(
+    nombre: Optional[str] = Query(None),
+    cedula: Optional[str] = Query(None),
+    hospital_id: Optional[int] = Query(None),
+    estado: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key)
+):
+    query = db.query(models.PacienteHospitalizado)
+    if nombre:
+        query = query.filter(models.PacienteHospitalizado.nombres_apellidos.ilike(f"%{nombre}%"))
+    if cedula:
+        query = query.filter(models.PacienteHospitalizado.cedula.ilike(f"%{cedula}%"))
+    if estado:
+        query = query.filter(models.PacienteHospitalizado.estado_paciente == estado)
+    if hospital_id:
+        query = query.filter(models.PacienteHospitalizado.hospital_id == hospital_id)
+    return {"total": query.count()}
+
 @pacientes_router.get("/", response_model=List[schemas.PacienteResponse])
 def listar_pacientes(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(100, ge=1, le=5000),
+    nombre: Optional[str] = Query(None),
+    cedula: Optional[str] = Query(None),
     estado: Optional[str] = Query(None),
     hospital_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     _: str = Depends(verify_api_key)
 ):
     query = db.query(models.PacienteHospitalizado)
+    if nombre:
+        query = query.filter(models.PacienteHospitalizado.nombres_apellidos.ilike(f"%{nombre}%"))
+    if cedula:
+        query = query.filter(models.PacienteHospitalizado.cedula.ilike(f"%{cedula}%"))
     if estado:
         query = query.filter(models.PacienteHospitalizado.estado_paciente == estado)
     if hospital_id:

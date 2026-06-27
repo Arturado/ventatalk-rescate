@@ -122,6 +122,13 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
 .bom-apoyo-badge { animation:blink 1s ease-in-out infinite; display:inline-block; margin-left:8px; }
 .bom-hist-row td { background:#f8faff; font-size:12px; }
+/* Paginación pacientes */
+.pac-paginacion { display:flex; align-items:center; justify-content:center; gap:10px; margin-top:16px; flex-wrap:wrap; }
+.pac-paginacion button { padding:7px 14px; border:1.5px solid #d1d5db; background:#fff; color:#374151; border-radius:7px; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; }
+.pac-paginacion button:hover:not(:disabled) { border-color:#1e40af; color:#1e40af; }
+.pac-paginacion button:disabled { opacity:.4; cursor:not-allowed; }
+.pac-pag-info { font-size:13px; color:#6b7280; white-space:nowrap; }
+.pac-contador { font-size:12px; color:#6b7280; margin-top:10px; text-align:right; }
 /* Lightbox foto captura */
 .lb-foto { display:none; position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:9999; align-items:center; justify-content:center; padding:16px; }
 .lb-foto.open { display:flex; }
@@ -693,6 +700,12 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
       </tbody>
     </table>
   </div>
+  <div id="pac-contador" class="pac-contador"></div>
+  <div id="pac-paginacion" class="pac-paginacion" style="display:none;">
+    <button id="pac-btn-prev" onclick="cambiarPagPac(-1)" disabled>← Anterior</button>
+    <span id="pac-pag-info" class="pac-pag-info">Página 1 de 1</span>
+    <button id="pac-btn-next" onclick="cambiarPagPac(1)">Siguiente →</button>
+  </div>
 </div><!-- /#pane-pacientes -->
 
 <!-- Pane: Bomberos en Campo -->
@@ -1121,6 +1134,10 @@ document.querySelectorAll('.estado-form').forEach(function(form) {
 /* ---- TABS ---- */
 var _pacientesLoaded = false;
 var _pacientesData = [];
+var _pacientesPage = 1;
+var _pacientesPorPagina = 100;
+var _pacientesTotal = 0;
+var _pacFiltroTimer = null;
 var _bomberosLoaded = false;
 var _bomberosData  = [];
 var _bomRefreshTimer = null;
@@ -1145,58 +1162,122 @@ function switchTab(tab) {
 /* ---- PACIENTES TAB ---- */
 var _ESTADO_PAC_LABELS = { ingresado:'Ingresado', estable:'Estable', grave:'Grave', critico:'Crítico', alta:'De Alta', trasladado:'Trasladado', fallecido:'Fallecido' };
 
+function _getPacFiltros() {
+  return {
+    nombre: document.getElementById('pac-buscar-nombre').value,
+    cedula: document.getElementById('pac-buscar-cedula').value,
+    hospital_id: document.getElementById('pac-filtrar-hospital').value,
+    estado: document.getElementById('pac-filtrar-estado').value
+  };
+}
+
+function _pacFiltroParams(filtros) {
+  var p = new URLSearchParams();
+  if (filtros.nombre)      p.set('nombre', filtros.nombre);
+  if (filtros.cedula)      p.set('cedula', filtros.cedula);
+  if (filtros.hospital_id) p.set('hospital_id', filtros.hospital_id);
+  if (filtros.estado)      p.set('estado', filtros.estado);
+  return p;
+}
+
 async function loadPacientes() {
   var key = getApiKey();
   if (!key) return;
+  _pacientesPage = 1;
+  await _cargarPaginaPacientes(key);
+  loadPacStats(key);
+  cargarHospitalesFiltro();
+}
+
+async function _cargarPaginaPacientes(key) {
+  var filtros = _getPacFiltros();
+  var skip = (_pacientesPage - 1) * _pacientesPorPagina;
+  var dataParams = _pacFiltroParams(filtros);
+  dataParams.set('skip', skip);
+  dataParams.set('limit', _pacientesPorPagina);
+  var countParams = _pacFiltroParams(filtros);
   try {
-    var res = await fetch('/api/pacientes/?limit=500', { headers: { 'X-Api-Key': key } });
-    if (res.status === 401) { sessionStorage.removeItem('vr_api_key'); document.getElementById('pac-tbody').innerHTML = '<tr><td colspan="9" style="color:#dc2626;padding:20px;text-align:center;">API Key inválida.</td></tr>'; return; }
-    _pacientesData = await res.json();
+    var responses = await Promise.all([
+      fetch('/api/pacientes/count?' + countParams.toString(), { headers: { 'X-Api-Key': key } }),
+      fetch('/api/pacientes/?' + dataParams.toString(), { headers: { 'X-Api-Key': key } })
+    ]);
+    if (responses[1].status === 401) {
+      sessionStorage.removeItem('vr_api_key');
+      document.getElementById('pac-tbody').innerHTML = '<tr><td colspan="9" style="color:#dc2626;padding:20px;text-align:center;">API Key inválida.</td></tr>';
+      return;
+    }
+    var countData = await responses[0].json();
+    _pacientesTotal = countData.total;
+    _pacientesData  = await responses[1].json();
     _pacientesLoaded = true;
-    renderPacStats();
-    buildHospFilter();
     renderPacTable(_pacientesData);
+    updatePacPaginacion();
   } catch(e) {
     document.getElementById('pac-tbody').innerHTML = '<tr><td colspan="9" style="color:#dc2626;padding:20px;text-align:center;">Error al cargar. Intenta de nuevo.</td></tr>';
   }
 }
 
-function renderPacStats() {
-  var d = _pacientesData;
-  document.getElementById('ps-total').textContent = d.length;
-  document.getElementById('ps-ingresados').textContent = d.filter(function(p){return p.estado_paciente==='ingresado';}).length;
-  document.getElementById('ps-estables').textContent  = d.filter(function(p){return p.estado_paciente==='estable';}).length;
-  document.getElementById('ps-graves').textContent    = d.filter(function(p){return p.estado_paciente==='grave';}).length;
-  document.getElementById('ps-criticos').textContent  = d.filter(function(p){return p.estado_paciente==='critico';}).length;
-  document.getElementById('ps-altas').textContent     = d.filter(function(p){return p.estado_paciente==='alta';}).length;
+function updatePacPaginacion() {
+  var totalPages = Math.max(1, Math.ceil(_pacientesTotal / _pacientesPorPagina));
+  var from = _pacientesTotal === 0 ? 0 : (_pacientesPage - 1) * _pacientesPorPagina + 1;
+  var to   = Math.min(_pacientesPage * _pacientesPorPagina, _pacientesTotal);
+  document.getElementById('pac-contador').textContent =
+    _pacientesTotal > 0 ? 'Mostrando ' + from + '-' + to + ' de ' + _pacientesTotal + ' pacientes' : '';
+  document.getElementById('pac-pag-info').textContent = 'Página ' + _pacientesPage + ' de ' + totalPages;
+  document.getElementById('pac-btn-prev').disabled = _pacientesPage <= 1;
+  document.getElementById('pac-btn-next').disabled = _pacientesPage >= totalPages;
+  document.getElementById('pac-paginacion').style.display = _pacientesTotal > _pacientesPorPagina ? '' : 'none';
 }
 
-function buildHospFilter() {
-  var hosps = {};
-  _pacientesData.forEach(function(p) {
-    var n = p.nombre_hospital || ('Hospital #' + p.hospital_id);
-    if (p.hospital_id || p.nombre_hospital) hosps[n] = true;
-  });
+function cambiarPagPac(dir) {
+  var totalPages = Math.max(1, Math.ceil(_pacientesTotal / _pacientesPorPagina));
+  _pacientesPage = Math.max(1, Math.min(totalPages, _pacientesPage + dir));
+  var key = sessionStorage.getItem('vr_api_key');
+  if (key) _cargarPaginaPacientes(key);
+}
+
+async function loadPacStats(key) {
+  try {
+    var results = await Promise.all([
+      fetch('/api/pacientes/count', { headers: { 'X-Api-Key': key } }).then(function(r){return r.json();}),
+      fetch('/api/pacientes/count?estado=ingresado', { headers: { 'X-Api-Key': key } }).then(function(r){return r.json();}),
+      fetch('/api/pacientes/count?estado=estable',   { headers: { 'X-Api-Key': key } }).then(function(r){return r.json();}),
+      fetch('/api/pacientes/count?estado=grave',     { headers: { 'X-Api-Key': key } }).then(function(r){return r.json();}),
+      fetch('/api/pacientes/count?estado=critico',   { headers: { 'X-Api-Key': key } }).then(function(r){return r.json();}),
+      fetch('/api/pacientes/count?estado=alta',      { headers: { 'X-Api-Key': key } }).then(function(r){return r.json();})
+    ]);
+    document.getElementById('ps-total').textContent     = results[0].total;
+    document.getElementById('ps-ingresados').textContent = results[1].total;
+    document.getElementById('ps-estables').textContent  = results[2].total;
+    document.getElementById('ps-graves').textContent    = results[3].total;
+    document.getElementById('ps-criticos').textContent  = results[4].total;
+    document.getElementById('ps-altas').textContent     = results[5].total;
+  } catch(e) {}
+}
+
+async function cargarHospitalesFiltro() {
   var sel = document.getElementById('pac-filtrar-hospital');
-  Object.keys(hosps).sort().forEach(function(n) {
-    var opt = document.createElement('option'); opt.value = n; opt.textContent = n;
-    sel.appendChild(opt);
-  });
+  if (sel.dataset.loaded) return;
+  try {
+    var res  = await fetch('/api/hospitales/');
+    var list = await res.json();
+    sel.dataset.loaded = '1';
+    list.forEach(function(h) {
+      var opt = document.createElement('option');
+      opt.value = h.id;
+      opt.textContent = h.nombre + (h.zona ? ' (' + (h.zona === 'Falcon' ? 'Falcón' : h.zona) + ')' : '');
+      sel.appendChild(opt);
+    });
+  } catch(e) {}
 }
 
 function filtrarPacientes() {
-  var nombre = document.getElementById('pac-buscar-nombre').value.toLowerCase();
-  var cedula = document.getElementById('pac-buscar-cedula').value.toLowerCase();
-  var hosp   = document.getElementById('pac-filtrar-hospital').value;
-  var estado = document.getElementById('pac-filtrar-estado').value;
-  var filtered = _pacientesData.filter(function(p) {
-    var hNom = p.nombre_hospital || ('Hospital #' + p.hospital_id) || '';
-    return (!nombre || (p.nombres_apellidos||'').toLowerCase().includes(nombre))
-        && (!cedula || (p.cedula||'').toLowerCase().includes(cedula))
-        && (!hosp   || hNom === hosp)
-        && (!estado || p.estado_paciente === estado);
-  });
-  renderPacTable(filtered);
+  clearTimeout(_pacFiltroTimer);
+  _pacFiltroTimer = setTimeout(function() {
+    _pacientesPage = 1;
+    var key = sessionStorage.getItem('vr_api_key') || getApiKey();
+    if (key) _cargarPaginaPacientes(key);
+  }, 350);
 }
 
 function renderPacTable(arr) {
@@ -1264,7 +1345,8 @@ async function cambiarEstadoPac(id, estado) {
     if (!res.ok) throw new Error();
     showToast('✓ Estado actualizado');
     var p = _pacientesData.find(function(x){return x.id===id;});
-    if (p) { p.estado_paciente = estado; renderPacStats(); }
+    if (p) { p.estado_paciente = estado; }
+    loadPacStats(key);
   } catch(e) { alert('Error al actualizar estado.'); }
 }
 
@@ -1278,14 +1360,24 @@ function closeLbFoto() {
 }
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { closeLbFoto(); closeModal('modal-hosp'); closeModal('modal-pac'); } });
 
-function exportPacientesCSV() {
-  var rows = [['ID','Hospital','Nombre','Cedula','Edad','Sexo','Estado','Procedencia','Observaciones','Reportado por','Fecha']];
-  _pacientesData.forEach(function(p) {
-    rows.push([p.id, p.nombre_hospital||'', p.nombres_apellidos||'', p.cedula||'', p.edad||'', p.sexo||'', p.estado_paciente||'', p.procedencia||'', (p.observaciones||'').replace(/\n/g,' '), p.reportado_por||'', p.created_at||'']);
-  });
-  var csv = rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
-  var blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
-  var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pacientes_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+async function exportPacientesCSV() {
+  var key = sessionStorage.getItem('vr_api_key') || getApiKey();
+  if (!key) return;
+  var filtros = _getPacFiltros();
+  var params = _pacFiltroParams(filtros);
+  params.set('skip', '0');
+  params.set('limit', '5000');
+  try {
+    var res  = await fetch('/api/pacientes/?' + params.toString(), { headers: { 'X-Api-Key': key } });
+    var data = await res.json();
+    var rows = [['ID','Hospital','Nombre','Cedula','Edad','Sexo','Estado','Procedencia','Observaciones','Reportado por','Fecha']];
+    data.forEach(function(p) {
+      rows.push([p.id, p.nombre_hospital||'', p.nombres_apellidos||'', p.cedula||'', p.edad||'', p.sexo||'', p.estado_paciente||'', p.procedencia||'', (p.observaciones||'').replace(/\n/g,' '), p.reportado_por||'', p.created_at||'']);
+    });
+    var csv = rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+    var blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pacientes_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+  } catch(e) { alert('Error al exportar. Intenta de nuevo.'); }
 }
 
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1366,7 +1458,10 @@ async function importarCSV(key) {
     } else {
       resEl.className = 'import-result ok';
       resEl.innerHTML = '✅ ' + data.importados + ' importados correctamente';
-      if (key === 'pac' && _pacientesLoaded) { _pacientesLoaded = false; loadPacientes(); }
+      if (key === 'pac' && _pacientesLoaded) {
+        var apiKey = sessionStorage.getItem('vr_api_key');
+        if (apiKey) { _pacientesPage = 1; _cargarPaginaPacientes(apiKey); loadPacStats(apiKey); }
+      }
     }
   } catch(e) {
     resEl.style.display = 'block';
@@ -1586,12 +1681,9 @@ async function eliminarPaciente(id, btn) {
       headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
     });
     if (!res.ok) throw new Error();
-    var detRow = document.getElementById('dp-' + id);
-    if (detRow) detRow.remove();
-    btn.closest('tr').remove();
-    var idx = _pacientesData.findIndex(function(x){ return x.id === id; });
-    if (idx !== -1) { _pacientesData.splice(idx, 1); renderPacStats(); }
     showToast('✅ Registro de paciente eliminado');
+    var key = sessionStorage.getItem('vr_api_key');
+    if (key) { await _cargarPaginaPacientes(key); loadPacStats(key); }
   } catch(e) {
     btn.disabled = false; btn.textContent = 'Eliminar';
     alert('Error al eliminar. Intenta de nuevo.');
@@ -1607,9 +1699,13 @@ async function eliminarTodosPacientes() {
     });
     var data = await res.json();
     if (data.ok) {
-      _pacientesData = [];
+      _pacientesData  = [];
+      _pacientesTotal = 0;
+      _pacientesPage  = 1;
       renderPacTable([]);
-      renderPacStats();
+      updatePacPaginacion();
+      var key = sessionStorage.getItem('vr_api_key');
+      if (key) loadPacStats(key);
       showToast('✅ Todos los registros eliminados (' + data.eliminados + ')');
     }
   } catch(e) { alert('Error al eliminar. Intenta de nuevo.'); }
@@ -1641,7 +1737,10 @@ async function guardarPacienteAdmin(e) {
       document.getElementById('pac-otro-wrap').style.display = 'none';
       document.getElementById('adm-tipo-ayuda-wrap').style.display = 'none';
       closeModal('modal-pac');
-      if (_pacientesLoaded) { _pacientesLoaded = false; loadPacientes(); }
+      if (_pacientesLoaded) {
+        var apiKey = sessionStorage.getItem('vr_api_key');
+        if (apiKey) { _pacientesPage = 1; _cargarPaginaPacientes(apiKey); loadPacStats(apiKey); }
+      }
     } else {
       alert('Error: ' + (data.detail || 'No se pudo registrar'));
     }
