@@ -172,6 +172,57 @@ def contar_pacientes(
         query = query.filter(models.PacienteHospitalizado.hospital_id == hospital_id)
     return {"total": query.count()}
 
+@pacientes_router.get("/matches/duplicados")
+def duplicados_pacientes(
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key)
+):
+    todos = db.query(models.PacienteHospitalizado).all()
+    results = []
+    seen: set = set()
+
+    for i, a in enumerate(todos):
+        for b in todos[i + 1:]:
+            score = 0
+            criterios: list = []
+
+            if (a.cedula and b.cedula
+                    and a.cedula.strip().upper() == b.cedula.strip().upper()):
+                score += 4
+                criterios.append("Cédula")
+
+            if (a.nombres_apellidos and b.nombres_apellidos
+                    and a.nombres_apellidos.lower() == b.nombres_apellidos.lower()):
+                score += 3
+                criterios.append("Nombre exacto")
+            elif a.nombres_apellidos and b.nombres_apellidos:
+                words_a = a.nombres_apellidos.lower().split()[:2]
+                words_b = b.nombres_apellidos.lower().split()[:2]
+                if (words_a and words_a == words_b
+                        and a.hospital_id and a.hospital_id == b.hospital_id):
+                    score += 2
+                    criterios.append("Nombre similar · Hospital")
+
+            if (a.sexo and b.sexo and a.sexo == b.sexo
+                    and a.edad and b.edad and a.edad.lower() == b.edad.lower()
+                    and a.hospital_id and a.hospital_id == b.hospital_id):
+                score += 2
+                criterios.append("Sexo · Edad · Hospital")
+
+            if score > 0:
+                pair_key = (min(a.id, b.id), max(a.id, b.id))
+                if pair_key not in seen:
+                    seen.add(pair_key)
+                    results.append({
+                        "score": score,
+                        "paciente_a": schemas.PacienteResponse.model_validate(a),
+                        "paciente_b": schemas.PacienteResponse.model_validate(b),
+                        "criterios_match": criterios,
+                    })
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return results[:30]
+
 @pacientes_router.get("/", response_model=List[schemas.PacienteResponse])
 def listar_pacientes(
     skip: int = Query(0, ge=0),

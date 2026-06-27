@@ -649,10 +649,20 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
     <h2 style="font-size:20px;font-weight:800;">Pacientes Hospitalizados</h2>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <button onclick="togglePacDuplicados()" style="padding:8px 16px;background:#d97706;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">🔍 Posibles duplicados (<span id="pac-dup-count">…</span>)</button>
       <button onclick="openNuevoPaciente()" style="padding:8px 16px;background:#1e40af;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">➕ Registrar paciente</button>
       <button onclick="exportPacientesCSV()" style="padding:8px 16px;background:#16a34a;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Exportar CSV</button>
       <button onclick="eliminarTodosPacientes()" style="padding:8px 16px;background:transparent;color:#dc2626;border:1.5px solid #dc2626;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">🗑️ Eliminar todos</button>
     </div>
+  </div>
+
+  <!-- PANEL DUPLICADOS PACIENTES -->
+  <div id="pac-dup-panel" class="matches-panel">
+    <div style="margin-bottom:16px;">
+      <h3 style="font-size:16px;font-weight:800;margin-bottom:4px;">Posibles registros duplicados — Pacientes</h3>
+      <p style="font-size:13px;color:#6b7280;">Estos registros podrían ser el mismo paciente cargado más de una vez</p>
+    </div>
+    <div id="pac-dup-content"><div class="matches-loading">Cargando duplicados…</div></div>
   </div>
 
   <div class="pac-stats-grid" id="pac-stats-grid">
@@ -1129,6 +1139,140 @@ document.querySelectorAll('.estado-form').forEach(function(form) {
     });
     document.getElementById('dup-count').textContent = visibles.length;
   } catch (e) { document.getElementById('dup-count').textContent = '?'; }
+})();
+
+/* ---- DUPLICADOS PACIENTES ---- */
+var _pacDupPanelOpen   = false;
+var _pacDupLoaded      = false;
+var _descartadosPacDup = JSON.parse(localStorage.getItem('vr_pac_dup_desc') || '[]');
+
+function togglePacDuplicados() {
+  _pacDupPanelOpen = !_pacDupPanelOpen;
+  document.getElementById('pac-dup-panel').classList.toggle('open', _pacDupPanelOpen);
+  if (_pacDupPanelOpen && !_pacDupLoaded) loadPacDuplicados();
+}
+
+async function loadPacDuplicados() {
+  var key = getApiKey();
+  if (!key) return;
+  var content = document.getElementById('pac-dup-content');
+  content.innerHTML = '<div class="matches-loading">Buscando posibles duplicados…</div>';
+  try {
+    var res = await fetch('/api/pacientes/matches/duplicados', { headers: { 'X-Api-Key': key } });
+    if (res.status === 401) {
+      sessionStorage.removeItem('vr_api_key');
+      content.innerHTML = '<p style="color:#dc2626;padding:16px;">API Key inválida. Recarga la página.</p>';
+      return;
+    }
+    var data = await res.json();
+    _pacDupLoaded = true;
+    var visibles = data.filter(function(d) {
+      var idA = Math.min(d.paciente_a.id, d.paciente_b.id);
+      var idB = Math.max(d.paciente_a.id, d.paciente_b.id);
+      return !_descartadosPacDup.includes(idA + '-' + idB);
+    });
+    document.getElementById('pac-dup-count').textContent = visibles.length;
+    if (!visibles.length) {
+      content.innerHTML = '<p style="color:#6b7280;padding:16px;text-align:center;">No se detectaron posibles duplicados.</p>';
+      return;
+    }
+    content.innerHTML = '';
+    visibles.forEach(function(d) { content.appendChild(renderPacDupPair(d)); });
+  } catch(e) {
+    content.innerHTML = '<p style="color:#dc2626;padding:16px;">Error al cargar. Intenta de nuevo.</p>';
+  }
+}
+
+function renderPacDupPair(d) {
+  var idA = Math.min(d.paciente_a.id, d.paciente_b.id);
+  var idB = Math.max(d.paciente_a.id, d.paciente_b.id);
+  var pairId = idA + '-' + idB;
+  var pA = d.paciente_a.id <= d.paciente_b.id ? d.paciente_a : d.paciente_b;
+  var pB = d.paciente_a.id <= d.paciente_b.id ? d.paciente_b : d.paciente_a;
+
+  function pacDupCard(p, label) {
+    var hosp = p.nombre_hospital || (p.hospital_id ? 'Hospital #' + p.hospital_id : '—');
+    var sexoLbl = { masculino:'♂ M', femenino:'♀ F', no_determinado:'—' }[p.sexo] || (p.sexo || '—');
+    var est = p.estado_paciente || 'ingresado';
+    return '<div class="match-card" style="background:#fffbeb;border:1px solid #fde68a;">' +
+      '<div class="match-card-hdr" style="color:#d97706;">' + label + '</div>' +
+      '<div class="match-initials" style="background:#fef3c7;color:#d97706;">' + getInitials(p.nombres_apellidos) + '</div>' +
+      '<div class="match-name">' + esc(p.nombres_apellidos || '—') + '</div>' +
+      '<div class="match-info">🪪 ' + esc(p.cedula || '—') + '</div>' +
+      '<div class="match-info">🏥 ' + esc(hosp) + '</div>' +
+      '<div class="match-info">' + esc(p.edad || '—') + ' · ' + sexoLbl + '</div>' +
+      '<div class="match-info"><span class="est-pac est-pac-' + esc(est) + '">' + esc(_ESTADO_PAC_LABELS[est] || est) + '</span></div>' +
+      (p.procedencia ? '<div class="match-info">📍 ' + esc(p.procedencia) + '</div>' : '') +
+    '</div>';
+  }
+
+  var dots = Math.min(d.score, 4);
+  var scoreStr = '●'.repeat(dots) + '○'.repeat(Math.max(0, 4 - dots)) + ' (' + d.score + ' pts)';
+  var el = document.createElement('div');
+  el.className = 'match-pair';
+  el.dataset.pairId = pairId;
+  el.innerHTML =
+    '<div class="match-cards">' +
+      pacDupCard(pA, '🟡 REGISTRO #' + pA.id) +
+      pacDupCard(pB, '🟡 REGISTRO #' + pB.id + ' (más reciente)') +
+    '</div>' +
+    '<div class="match-footer">' +
+      '<div class="match-score">' + scoreStr + '</div>' +
+      '<div class="match-criterios">Coinciden en: ' + d.criterios_match.join(' · ') + '</div>' +
+      '<div class="match-actions">' +
+        '<button class="match-btn-discard" onclick="descartarPacDup(\'' + pairId + '\',this)">✗ Descartar par</button>' +
+        '<button class="match-btn-confirm" style="background:#d97706;" onclick="eliminarPacDup(' + idB + ',\'' + pairId + '\',this)">🗑️ Eliminar registro B (más reciente)</button>' +
+      '</div>' +
+    '</div>';
+  return el;
+}
+
+function descartarPacDup(pairId, btn) {
+  _descartadosPacDup.push(pairId);
+  localStorage.setItem('vr_pac_dup_desc', JSON.stringify(_descartadosPacDup));
+  document.querySelector('[data-pair-id="' + pairId + '"]').remove();
+  actualizarContadorPacDup();
+}
+
+async function eliminarPacDup(id, pairId, btn) {
+  if (!confirm('¿Eliminar el registro #' + id + '? Esta acción no se puede deshacer.')) return;
+  btn.disabled = true; btn.textContent = 'Eliminando…';
+  try {
+    var res = await fetch('/admin/pacientes/' + id, {
+      method: 'DELETE',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
+    });
+    if (!res.ok) throw new Error();
+    document.querySelector('[data-pair-id="' + pairId + '"]').remove();
+    showToast('✓ Registro #' + id + ' eliminado');
+    actualizarContadorPacDup();
+    var key = sessionStorage.getItem('vr_api_key');
+    if (key) { _cargarPaginaPacientes(key); loadPacStats(key); }
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '🗑️ Eliminar registro B (más reciente)';
+    alert('Error al eliminar. Intenta de nuevo.');
+  }
+}
+
+function actualizarContadorPacDup() {
+  var n = document.getElementById('pac-dup-content').querySelectorAll('.match-pair').length;
+  document.getElementById('pac-dup-count').textContent = n;
+}
+
+(async function initPacDupCount() {
+  var key = sessionStorage.getItem('vr_api_key');
+  if (!key) { document.getElementById('pac-dup-count').textContent = '?'; return; }
+  try {
+    var res = await fetch('/api/pacientes/matches/duplicados', { headers: { 'X-Api-Key': key } });
+    if (!res.ok) { document.getElementById('pac-dup-count').textContent = '?'; return; }
+    var data = await res.json();
+    var visibles = data.filter(function(d) {
+      var idA = Math.min(d.paciente_a.id, d.paciente_b.id);
+      var idB = Math.max(d.paciente_a.id, d.paciente_b.id);
+      return !_descartadosPacDup.includes(idA + '-' + idB);
+    });
+    document.getElementById('pac-dup-count').textContent = visibles.length;
+  } catch(e) { document.getElementById('pac-dup-count').textContent = '?'; }
 })();
 
 /* ---- TABS ---- */
