@@ -175,9 +175,25 @@
       color: white;
       border-color: #dc2626;
     }
-    .status-btn:hover:not(.selected) {
+    .status-btn:hover:not(.selected):not(:disabled) {
       border-color: #dc2626;
       color: #f1f5f9;
+    }
+    .status-btn:disabled {
+      background: #374151;
+      color: #6b7280;
+      border-color: #374151;
+      cursor: not-allowed;
+    }
+    .status-btn.success {
+      background: #16a34a;
+      color: white;
+      border-color: #16a34a;
+    }
+    .status-btn.error-state {
+      background: #374151;
+      color: #94a3b8;
+      border-color: #374151;
     }
 
     /* ── DESCRIPCIÓN ── */
@@ -198,25 +214,6 @@
     }
     #desc-input::placeholder { color: #64748b; }
     #desc-input:focus { border-color: #dc2626; }
-
-    /* ── BOTÓN ENVIAR ── */
-    #btn-enviar {
-      width: 100%;
-      min-height: 64px;
-      background: #dc2626;
-      color: white;
-      border: none;
-      border-radius: 12px;
-      font-size: 18px;
-      font-weight: 800;
-      cursor: pointer;
-      transition: background .15s;
-      letter-spacing: .02em;
-    }
-    #btn-enviar:hover:not(:disabled) { background: #b91c1c; }
-    #btn-enviar:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
-    #btn-enviar.success { background: #16a34a; }
-    #btn-enviar.error-state { background: #7f1d1d; }
 
     /* ── FOOTER ── */
     #footer {
@@ -290,16 +287,6 @@
     </button>
   </div>
 
-  <!-- Status -->
-  <div>
-    <div class="section-label">Estado actual</div>
-    <div id="status-block">
-      <button class="status-btn selected" data-value="trabajando" onclick="selectStatus(this)">
-        🔨 Trabajando
-      </button>
-    </div>
-  </div>
-
   <!-- Descripción -->
   <div>
     <div class="section-label">Nota / Situación</div>
@@ -309,10 +296,15 @@
     ></textarea>
   </div>
 
-  <!-- Botón enviar -->
-  <button id="btn-enviar" onclick="enviarReporte()" disabled>
-    📡 ENVIAR REPORTE
-  </button>
+  <!-- Status / Enviar -->
+  <div>
+    <div class="section-label">Estado actual</div>
+    <div id="status-block">
+      <button class="status-btn selected" data-value="trabajando" onclick="enviarDesdeBoton(this)" disabled>
+        🔨 Trabajando
+      </button>
+    </div>
+  </div>
 
 </main>
 
@@ -380,7 +372,7 @@ function localize() {
 
       btn.disabled = false;
       btn.innerHTML = '🔄 Actualizar ubicación';
-      document.getElementById('btn-enviar').disabled = false;
+      document.querySelector('.status-btn[data-value="trabajando"]').disabled = false;
     },
     function(err) {
       var msg = 'No se pudo obtener GPS — intenta al aire libre';
@@ -411,11 +403,9 @@ function selectStatus(el) {
 }
 
 // ── Enviar ────────────────────────────────────────────
-async function enviarReporte() {
+async function enviarDesdeBoton(btn) {
   if (!_lat || !_lon) return;
-  var btn = document.getElementById('btn-enviar');
   btn.disabled = true;
-  btn.className = '';
   btn.textContent = 'Enviando...';
 
   var fd = new FormData();
@@ -440,27 +430,26 @@ async function enviarReporte() {
     document.getElementById('footer-ultimo').textContent = 'Último reporte: ' + hora + ' VE';
     document.getElementById('footer-contador').textContent = _contadorSesion + ' reporte' + (_contadorSesion === 1 ? '' : 's') + ' esta sesión';
 
-    btn.className = 'success';
-    btn.textContent = '✅ Reporte enviado';
+    btn.classList.add('success');
+    btn.textContent = '✅ Enviado';
     document.getElementById('desc-input').value = '';
 
     setTimeout(function() {
-      btn.className = '';
-      btn.textContent = '📡 ENVIAR REPORTE';
+      btn.classList.remove('success');
+      btn.textContent = '🔨 Trabajando';
       btn.disabled = false;
-    }, 3000);
+    }, 2000);
 
   } catch(e) {
-    btn.className = 'error-state';
-    btn.innerHTML = '❌ Error — verifica conexión &nbsp;<span style="font-size:13px;text-decoration:underline;cursor:pointer;" onclick="reintentar()">Reintentar</span>';
-  }
-}
+    btn.classList.add('error-state');
+    btn.textContent = '❌ Error — reintenta';
 
-function reintentar() {
-  var btn = document.getElementById('btn-enviar');
-  btn.className = '';
-  btn.textContent = '📡 ENVIAR REPORTE';
-  btn.disabled = false;
+    setTimeout(function() {
+      btn.classList.remove('error-state');
+      btn.textContent = '🔨 Trabajando';
+      btn.disabled = false;
+    }, 2000);
+  }
 }
 </script>
 
