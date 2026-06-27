@@ -115,6 +115,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 }
 {% endblock %}
 {% block content %}
+<meta name="csrf-token" content="{{ csrf_token }}">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
   <h2 style="font-size:20px;font-weight:800;">Panel de Reportes</h2>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -360,7 +361,10 @@ function toggleDetalle(id, btn) {
 
 function eliminarPersona(id, btn) {
   if (!confirm('¿Eliminar este registro? Esta acción no se puede deshacer.')) return;
-  fetch('/admin/personas/' + id, { method: 'DELETE' })
+  fetch('/admin/personas/' + id, {
+    method: 'DELETE',
+    headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
+  })
     .then(r => r.json())
     .then(data => { if (data.ok) btn.closest('tr').remove(); })
     .catch(() => alert('Error al eliminar. Intenta de nuevo.'));
@@ -512,10 +516,13 @@ function renderMatchPair(m) {
 async function confirmarMatch(desapId, encId, pairId, btn) {
   btn.disabled = true; btn.textContent = 'Confirmando…';
   const body = new URLSearchParams({ estado: 'encontrado' });
+  const csrfHeaders = {
+    'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content
+  };
   try {
     await Promise.all([
-      fetch('/admin/personas/' + desapId + '/estado', { method: 'POST', body }),
-      fetch('/admin/personas/' + encId   + '/estado', { method: 'POST', body }),
+      fetch('/admin/personas/' + desapId + '/estado', { method: 'POST', body, headers: csrfHeaders }),
+      fetch('/admin/personas/' + encId   + '/estado', { method: 'POST', body, headers: csrfHeaders }),
     ]);
     document.querySelector('[data-pair-id="' + pairId + '"]').remove();
     showToast('✓ Match confirmado — ambos registros marcados como encontrados');
@@ -663,7 +670,10 @@ async function eliminarDup(id, pairId, btn) {
   if (!confirm('¿Eliminar el registro #' + id + '? Esta acción no se puede deshacer.')) return;
   btn.disabled = true; btn.textContent = 'Eliminando…';
   try {
-    const res = await fetch('/admin/personas/' + id, { method: 'DELETE' });
+    const res = await fetch('/admin/personas/' + id, {
+      method: 'DELETE',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
+    });
     if (!res.ok) throw new Error();
     document.querySelector('[data-pair-id="' + pairId + '"]').remove();
     showToast('✓ Registro #' + id + ' eliminado');
@@ -678,6 +688,23 @@ function actualizarContadorDup() {
   var n = document.getElementById('dup-content').querySelectorAll('.match-pair').length;
   document.getElementById('dup-count').textContent = n;
 }
+
+/* Intercepta los forms de estado para enviar CSRF header vía fetch */
+document.querySelectorAll('.estado-form').forEach(function(form) {
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var estado = form.querySelector('select[name="estado"]').value;
+    fetch(form.action, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content
+      },
+      body: 'estado=' + encodeURIComponent(estado)
+    }).then(function() { location.reload(); })
+      .catch(function() { alert('Error al cambiar estado. Intenta de nuevo.'); });
+  });
+});
 
 /* Carga el conteo de duplicados en el botón al iniciar */
 (async function initDupCount() {

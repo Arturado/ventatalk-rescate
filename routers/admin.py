@@ -1,10 +1,11 @@
 import csv
+import hashlib
 import io
 import os
 from datetime import datetime, timezone
 
 import bcrypt
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -25,6 +26,15 @@ SESSION_MAX_AGE = 8 * 3600  # 8 horas en segundos
 def get_serializer():
     secret = os.getenv("SECRET_KEY", "change-me")
     return URLSafeTimedSerializer(secret)
+
+def generate_csrf_token(session_data: str) -> str:
+    secret = os.getenv("SECRET_KEY", "")
+    raw = f"{session_data}{secret}csrf"
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+def validate_csrf(request: Request, token: str, session_data: str) -> bool:
+    expected = generate_csrf_token(session_data)
+    return token == expected
 
 def get_current_admin(request: Request):
     token = request.cookies.get(COOKIE_NAME)
@@ -49,7 +59,8 @@ class RedirectToLogin(Exception):
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    return templates.TemplateResponse("admin/login.html", {"request": request, "error": None})
+    csrf_token = generate_csrf_token("login")
+    return templates.TemplateResponse("admin/login.html", {"request": request, "error": None, "csrf_token": csrf_token})
 
 @router.post("/login")
 @limiter.limit("5/15minutes")
@@ -57,8 +68,15 @@ async def login_post(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
+    csrf_token: str = Form(""),
     db: Session = Depends(get_db),
 ):
+    if not validate_csrf(request, csrf_token, "login"):
+        return templates.TemplateResponse(
+            "admin/login.html",
+            {"request": request, "error": "Token de seguridad inválido. Recarga la página.", "csrf_token": generate_csrf_token("login")},
+            status_code=403,
+        )
     user = db.query(models.AdminUser).filter(models.AdminUser.username == username).first()
     if user and bcrypt.checkpw(password.encode(), user.password_hash.encode()):
         token = get_serializer().dumps({"username": username})
@@ -73,7 +91,7 @@ async def login_post(
         return response
     return templates.TemplateResponse(
         "admin/login.html",
-        {"request": request, "error": "Usuario o contraseña incorrectos"},
+        {"request": request, "error": "Usuario o contraseña incorrectos", "csrf_token": generate_csrf_token("login")},
         status_code=401,
     )
 
@@ -102,6 +120,7 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
     encontrados = sum(1 for p in personas if p.estado == "encontrado")
     en_proceso = sum(1 for p in personas if p.estado == "en_proceso")
 
+    csrf_token = generate_csrf_token(admin)
     return templates.TemplateResponse("admin/dashboard.html", {
         "request": request,
         "admin": admin,
@@ -111,6 +130,7 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
         "con_foto": con_foto,
         "encontrados": encontrados,
         "en_proceso": en_proceso,
+        "csrf_token": csrf_token,
     })
 
 # --- Cambiar estado ---
@@ -120,11 +140,15 @@ async def cambiar_estado(
     persona_id: int,
     request: Request,
     estado: str = Form(...),
+    x_csrf_token: str = Header(""),
     db: Session = Depends(get_db),
 ):
     admin = get_current_admin(request)
     if not admin:
         return RedirectResponse(url="/admin/login", status_code=303)
+
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
 
     if estado not in ("desaparecido", "encontrado", "en_proceso"):
         return RedirectResponse(url="/admin/dashboard", status_code=303)
@@ -143,11 +167,15 @@ async def cambiar_estado(
 async def eliminar_persona(
     persona_id: int,
     request: Request,
+    x_csrf_token: str = Header(""),
     db: Session = Depends(get_db),
 ):
     admin = get_current_admin(request)
     if not admin:
         raise HTTPException(status_code=401, detail="No autorizado")
+
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
 
     persona = db.query(models.PersonaDesaparecida).filter(
         models.PersonaDesaparecida.id == persona_id

@@ -59,6 +59,7 @@ body { display: flex; align-items: center; justify-content: center; min-height: 
       <label for="password">Contraseña</label>
       <input type="password" id="password" name="password" autocomplete="current-password" required>
     </div>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="btn-login">Ingresar</button>
   </form>
 </div>
