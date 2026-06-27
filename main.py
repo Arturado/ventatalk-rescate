@@ -112,11 +112,15 @@ async def lifespan(app: FastAPI):
     yield
 
 
+ENV = os.getenv("ENVIRONMENT", "production")
+
 app = FastAPI(
-    title="Venezuela Rescate",
-    docs_url=None,
+    title="Venezuela Rescate API",
+    description="API de emergencias post-sismo Venezuela 2026",
+    version="1.0.0",
+    docs_url="/docs" if ENV == "development" else None,
     redoc_url=None,
-    openapi_url=None,
+    openapi_url="/openapi.json" if ENV == "development" else None,
 )
 
 app.state.limiter = limiter
