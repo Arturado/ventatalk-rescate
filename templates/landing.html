@@ -818,8 +818,10 @@
     errorEl.textContent = '';
     resultadosEl.innerHTML = '';
 
-    if (!nombre && !cedula) {
-      errorEl.textContent = 'Por favor ingresa al menos un nombre o número de cédula.';
+    const nombreOk = nombre.length >= 2;
+    const cedulaOk = cedula.length >= 4;
+    if (!nombreOk && !cedulaOk) {
+      errorEl.textContent = 'Ingresa al menos 2 caracteres para buscar.';
       return;
     }
 

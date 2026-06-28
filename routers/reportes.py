@@ -1,6 +1,5 @@
 import io, os, uuid
-from typing import Optional
-from fastapi import APIRouter, Depends, File, Form, Header, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image
 from slowapi import Limiter
@@ -132,29 +131,20 @@ async def crear_reporte(
 
 check_router = APIRouter(prefix="/api", tags=["utils"])
 
-# Auxiliar decorada: aplica rate limit 60/hour al IP cuando no hay API key válida.
-# Se llama manualmente desde buscar_personas en lugar de usar @limiter.limit en el endpoint.
-async def _buscar_noop(request: Request): pass
-_buscar_noop = limiter.limit("300/hour")(_buscar_noop)
-
 @check_router.get("/buscar")
 async def buscar_personas(
-    request: Request,
-    x_api_key: Optional[str] = Header(None),
     nombre: str = None,
     cedula: str = None,
     db: Session = Depends(get_db),
 ):
-    api_key_valid = x_api_key and x_api_key == os.getenv("API_KEY")
-    if not api_key_valid:
-        await _buscar_noop(request)
     nombre = nombre.strip() if nombre else ""
     cedula = normalize_cedula(cedula) if cedula else ""
     if not nombre and not cedula:
-        return JSONResponse(
-            status_code=400,
-            content={"detail": "Debe proporcionar al menos un parámetro: nombre o cedula"},
-        )
+        return JSONResponse(status_code=400, content={"detail": "Debe proporcionar al menos un parámetro: nombre o cedula"})
+    if nombre and len(nombre) < 2:
+        return JSONResponse(status_code=400, content={"detail": "Ingresa al menos 2 caracteres para buscar"})
+    if cedula and len(cedula) < 4:
+        return JSONResponse(status_code=400, content={"detail": "Ingresa al menos 4 caracteres para buscar por cédula"})
     q = db.query(models.PersonaDesaparecida)
     if cedula:
         if cedula.isdigit():
