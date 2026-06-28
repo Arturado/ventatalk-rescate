@@ -65,7 +65,7 @@ def compress_image(file_bytes: bytes) -> bytes:
     return output.getvalue()
 
 @router.post("/", response_model=schemas.PersonaResponse, status_code=201)
-@limiter.limit("10/hour")
+@limiter.limit("500/hour")
 async def crear_reporte(
     request: Request,
     nombres_apellidos: str = Form(...),
