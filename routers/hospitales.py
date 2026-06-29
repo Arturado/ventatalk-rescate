@@ -233,6 +233,7 @@ def listar_pacientes(
     cedula: Optional[str] = Query(None),
     estado: Optional[str] = Query(None),
     hospital_id: Optional[int] = Query(None),
+    fuente: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     _: str = Depends(verify_api_key)
 ):
@@ -245,6 +246,8 @@ def listar_pacientes(
         query = query.filter(models.PacienteHospitalizado.estado_paciente == estado)
     if hospital_id:
         query = query.filter(models.PacienteHospitalizado.hospital_id == hospital_id)
+    if fuente:
+        query = query.filter(models.PacienteHospitalizado.fuente == fuente)
     return query.order_by(models.PacienteHospitalizado.created_at.desc()).offset(skip).limit(limit).all()
 
 @pacientes_router.get("/{paciente_id}/historial", response_model=List[schemas.MovimientoResponse])

@@ -777,6 +777,13 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
       <option value="trasladado">Trasladado</option>
       <option value="fallecido">Fallecido</option>
     </select>
+    <select id="filtrar-fuente" onchange="filtrarPacientes()">
+      <option value="">Todas las fuentes</option>
+      <option value="excel">Excel consolidado</option>
+      <option value="manual">Carga manual admin</option>
+      <option value="csv">Importacion CSV</option>
+      <option value="chatbot">Chatbot</option>
+    </select>
   </div>
 
   <div class="table-wrap">
@@ -1471,7 +1478,8 @@ function _getPacFiltros() {
     nombre: document.getElementById('pac-buscar-nombre').value,
     cedula: document.getElementById('pac-buscar-cedula').value,
     hospital_id: document.getElementById('pac-filtrar-hospital').value,
-    estado: document.getElementById('pac-filtrar-estado').value
+    estado: document.getElementById('pac-filtrar-estado').value,
+    fuente: document.getElementById('filtrar-fuente').value
   };
 }
 
@@ -1481,6 +1489,7 @@ function _pacFiltroParams(filtros) {
   if (filtros.cedula)      p.set('cedula', filtros.cedula);
   if (filtros.hospital_id) p.set('hospital_id', filtros.hospital_id);
   if (filtros.estado)      p.set('estado', filtros.estado);
+  if (filtros.fuente)      p.set('fuente', filtros.fuente);
   return p;
 }
 
