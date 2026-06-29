@@ -230,7 +230,7 @@ def duplicados_pacientes(
 @pacientes_router.get("/", response_model=List[schemas.PacienteResponse])
 def listar_pacientes(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=5000),
+    limit: int = Query(100, ge=1, le=15000),
     nombre: Optional[str] = Query(None),
     cedula: Optional[str] = Query(None),
     estado: Optional[str] = Query(None),
