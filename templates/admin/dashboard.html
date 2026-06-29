@@ -1672,9 +1672,69 @@ async function importarExcel() {
   var btn    = document.getElementById('btn-import-excel');
   var resEl  = document.getElementById('import-result-excel');
   var progEl = document.getElementById('excel-progress');
-  btn.disabled = true; btn.textContent = 'Procesando excel... esto puede tomar unos segundos';
+  var progBar = progEl.querySelector('.import-progress-bar');
+
+  btn.disabled = true; btn.textContent = 'Procesando excel...';
   resEl.style.display = 'none';
   progEl.classList.add('running');
+  progBar.style.width = '0%';
+  progBar.style.animation = 'prog-ind 1.5s ease-in-out infinite';
+
+  var jobId = null;
+  var pollingInterval = null;
+  var timeoutId = null;
+
+  function stopPolling() {
+    if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null; }
+    if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+  }
+
+  function showResult(data) {
+    stopPolling();
+    progEl.classList.remove('running');
+    resEl.style.display = 'block';
+    resEl.className = data.errores > 0 ? 'import-result partial' : 'import-result ok';
+    resEl.innerHTML =
+      '✅ ' + data.importados.toLocaleString() + ' nuevos &nbsp;·&nbsp; ' +
+      '🔄 ' + data.actualizados.toLocaleString() + ' actualizados &nbsp;·&nbsp; ' +
+      '📍 ' + data.movimientos_detectados + ' movimientos detectados' +
+      (data.errores ? ' &nbsp;·&nbsp; ⚠️ ' + data.errores + ' errores' : '') +
+      '<br><small style="color:#6b7280;">Total procesadas: ' + data.total_procesadas + ' · Batch: ' + esc(data.batch_date) + '</small>';
+    if (_pacientesLoaded) {
+      var apiKey = sessionStorage.getItem('vr_api_key');
+      if (apiKey) { _pacientesPage = 1; _cargarPaginaPacientes(apiKey); loadPacStats(apiKey); }
+    }
+    btn.disabled = false; btn.textContent = 'Importar Excel';
+  }
+
+  function showError(msg) {
+    stopPolling();
+    progEl.classList.remove('running');
+    resEl.style.display = 'block';
+    resEl.className = 'import-result err';
+    resEl.innerHTML = '❌ ' + esc(msg);
+    btn.disabled = false; btn.textContent = 'Importar Excel';
+  }
+
+  async function pollJob() {
+    try {
+      var r = await fetch('/admin/import/jobs/' + jobId);
+      if (!r.ok) { showError('Error al consultar el estado del proceso.'); return; }
+      var job = await r.json();
+      if (job.progress > 0) {
+        progBar.style.animation = 'none';
+        progBar.style.width = job.progress + '%';
+      }
+      if (job.status === 'done') {
+        showResult(job.result);
+      } else if (job.status === 'error') {
+        showError('Error: ' + job.error);
+      }
+    } catch(e) {
+      showError('Error de conexión al consultar el estado.');
+    }
+  }
+
   var fd = new FormData();
   fd.append('file', file);
   fd.append('batch_date_str', batchDate);
@@ -1685,31 +1745,28 @@ async function importarExcel() {
       body: fd
     });
     var data = await res.json();
-    progEl.classList.remove('running');
-    resEl.style.display = 'block';
     if (!res.ok) {
-      resEl.className = 'import-result err';
-      resEl.innerHTML = '❌ ' + esc(data.detail || 'Error al importar');
-    } else {
-      resEl.className = data.errores > 0 ? 'import-result partial' : 'import-result ok';
-      resEl.innerHTML =
-        '✅ ' + data.importados.toLocaleString() + ' nuevos &nbsp;·&nbsp; ' +
-        '🔄 ' + data.actualizados.toLocaleString() + ' actualizados &nbsp;·&nbsp; ' +
-        '📍 ' + data.movimientos_detectados + ' movimientos detectados' +
-        (data.errores ? ' &nbsp;·&nbsp; ⚠️ ' + data.errores + ' errores' : '') +
-        '<br><small style="color:#6b7280;">Total procesadas: ' + data.total_procesadas + ' · Batch: ' + esc(data.batch_date) + '</small>';
-      if (_pacientesLoaded) {
-        var apiKey = sessionStorage.getItem('vr_api_key');
-        if (apiKey) { _pacientesPage = 1; _cargarPaginaPacientes(apiKey); loadPacStats(apiKey); }
-      }
+      showError(data.detail || 'Error al iniciar la importación');
+      return;
     }
+    jobId = data.job_id;
+
+    // Polling cada 2 segundos
+    pollingInterval = setInterval(pollJob, 2000);
+
+    // Timeout de seguridad: 10 minutos
+    timeoutId = setTimeout(function() {
+      stopPolling();
+      progEl.classList.remove('running');
+      resEl.style.display = 'block';
+      resEl.className = 'import-result partial';
+      resEl.innerHTML = '⏱️ El proceso está tardando más de lo esperado. Verifica en la tabla si los datos fueron importados.';
+      btn.disabled = false; btn.textContent = 'Importar Excel';
+    }, 10 * 60 * 1000);
+
   } catch(e) {
-    progEl.classList.remove('running');
-    resEl.style.display = 'block';
-    resEl.className = 'import-result err';
-    resEl.innerHTML = '❌ Error de conexión. Intenta de nuevo.';
+    showError('Error de conexión. Intenta de nuevo.');
   }
-  btn.disabled = false; btn.textContent = 'Importar Excel';
 }
 
 async function verHistorialPac(id, containerEl, btn) {

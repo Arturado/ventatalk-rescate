@@ -3,6 +3,7 @@ import hashlib
 import io
 import os
 import re
+import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -21,7 +22,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import models
-from database import get_db
+from database import SessionLocal, get_db
 
 BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
 UPLOAD_DIR = "uploads/capturas"
@@ -32,6 +33,15 @@ templates = Jinja2Templates(directory="templates")
 
 COOKIE_NAME = "rescate_session"
 SESSION_MAX_AGE = 8 * 3600  # 8 horas en segundos
+
+# Job store en memoria (se limpia al reiniciar el container)
+_jobs: dict = {}
+# Estructura de cada job:
+# { "status": "pending|running|done|error",
+#   "progress": 0-100,
+#   "result": None | {...},
+#   "error": None | str,
+#   "created_at": datetime }
 
 def get_serializer():
     secret = os.getenv("SECRET_KEY", "change-me")
@@ -594,13 +604,162 @@ def normalizar_hospital(nombre: str) -> str:
 _EXCEL_SHEET = "🔍 BUSCAR PACIENTES"
 
 
+def _procesar_excel(job_id: str, file_bytes: bytes, batch_date_str: str, username: str):
+    db = SessionLocal()
+    try:
+        _jobs[job_id]["status"] = "running"
+
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+        except Exception as exc:
+            _jobs[job_id].update({"status": "error", "error": f"No se pudo leer el archivo Excel: {exc}"})
+            return
+
+        if _EXCEL_SHEET not in wb.sheetnames:
+            _jobs[job_id].update({"status": "error", "error": f"No se encontró la hoja '{_EXCEL_SHEET}'"})
+            return
+
+        ws = wb[_EXCEL_SHEET]
+
+        def _str(val):
+            if val is None:
+                return None
+            if isinstance(val, float) and val.is_integer():
+                return str(int(val))
+            s = str(val).strip()
+            return s if s else None
+
+        # Recopilar filas con datos para poder calcular progreso
+        data_rows = []
+        for row_num, row in enumerate(ws.iter_rows(min_row=5, values_only=True), start=5):
+            nombre_raw = row[2] if len(row) > 2 else None
+            if nombre_raw and str(nombre_raw).strip():
+                data_rows.append((row_num, row))
+
+        total = len(data_rows)
+        nuevos = 0
+        actualizados = 0
+        movimientos = 0
+        errores = 0
+        errores_detalle: list[str] = []
+
+        for i, (row_num, row) in enumerate(data_rows, start=1):
+            nombre_raw = str(row[2]).strip()
+
+            try:
+                if "/" in nombre_raw:
+                    idx = nombre_raw.index("/")
+                    nombre_principal = nombre_raw[:idx].strip()
+                    variantes = nombre_raw[idx + 1:].strip() or None
+                else:
+                    nombre_principal = nombre_raw
+                    variantes = None
+
+                if not nombre_principal:
+                    continue
+
+                hospital = normalizar_hospital(_str(row[1] if len(row) > 1 else None))
+                edad = limpiar_numero_excel(row[3] if len(row) > 3 else None)
+                cedula_raw = limpiar_numero_excel(row[4] if len(row) > 4 else None)
+                cedula = normalizar_cedula(cedula_raw) if cedula_raw is not None else None
+                if cedula == "":
+                    cedula = None
+                telefono = limpiar_numero_excel(row[5] if len(row) > 5 else None)
+                direccion = _str(row[6] if len(row) > 6 else None)
+                observaciones = _str(row[7] if len(row) > 7 else None)
+                estado = parse_estado_from_observaciones(observaciones or "")
+
+                paciente = None
+                if cedula:
+                    paciente = db.query(models.PacienteHospitalizado).filter(
+                        models.PacienteHospitalizado.cedula == cedula
+                    ).first()
+
+                if paciente is None:
+                    paciente = db.query(models.PacienteHospitalizado).filter(
+                        func.lower(models.PacienteHospitalizado.nombres_apellidos) == nombre_principal.lower()
+                    ).first()
+
+                if paciente:
+                    if paciente.nombre_hospital != hospital or paciente.estado_paciente != estado:
+                        mov = models.PacienteMovimiento(
+                            paciente_id=paciente.id,
+                            hospital_anterior=paciente.nombre_hospital,
+                            hospital_nuevo=hospital,
+                            estado_anterior=paciente.estado_paciente,
+                            estado_nuevo=estado,
+                            batch_date_anterior=paciente.batch_date,
+                            batch_date_nuevo=batch_date_str,
+                        )
+                        db.add(mov)
+                        movimientos += 1
+
+                    paciente.nombre_hospital = hospital
+                    paciente.estado_paciente = estado
+                    paciente.batch_date = batch_date_str
+                    if cedula and not paciente.cedula:
+                        paciente.cedula = cedula
+                    if variantes:
+                        paciente.nombre_variantes = variantes
+                    if telefono:
+                        paciente.telefono = telefono
+                    if observaciones:
+                        paciente.observaciones = observaciones
+                    paciente.fuente = "excel"
+                    actualizados += 1
+                else:
+                    nuevo = models.PacienteHospitalizado(
+                        nombres_apellidos=nombre_principal,
+                        nombre_variantes=variantes,
+                        nombre_hospital=hospital,
+                        edad=edad,
+                        cedula=cedula,
+                        telefono=telefono,
+                        procedencia=direccion,
+                        observaciones=observaciones,
+                        estado_paciente=estado,
+                        batch_date=batch_date_str,
+                        fuente="excel",
+                    )
+                    db.add(nuevo)
+                    nuevos += 1
+
+                if i % 100 == 0:
+                    db.commit()
+                    if total > 0:
+                        _jobs[job_id]["progress"] = int((i / total) * 100)
+
+            except Exception as exc:
+                errores += 1
+                errores_detalle.append(f"Fila {row_num}: {exc}")
+
+        db.commit()
+        _jobs[job_id].update({
+            "status": "done",
+            "progress": 100,
+            "result": {
+                "importados": nuevos,
+                "actualizados": actualizados,
+                "movimientos_detectados": movimientos,
+                "errores": errores,
+                "total_procesadas": total,
+                "batch_date": batch_date_str,
+            },
+        })
+
+    except Exception as exc:
+        _jobs[job_id].update({"status": "error", "error": str(exc)})
+
+    finally:
+        db.close()
+
+
 @router.post("/import/excel-pacientes")
 async def import_excel_pacientes(
     request: Request,
     file: UploadFile = File(...),
     batch_date_str: str = Form(...),
     x_csrf_token: str = Header(""),
-    db: Session = Depends(get_db),
 ):
     admin = get_current_admin(request)
     if not admin:
@@ -612,136 +771,39 @@ async def import_excel_pacientes(
     if not (fname.endswith(".xlsx") or fname.endswith(".xls")):
         raise HTTPException(status_code=400, detail="El archivo debe ser .xlsx o .xls")
 
-    content = await file.read()
-    try:
-        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"No se pudo leer el archivo Excel: {exc}")
+    file_bytes = await file.read()
 
-    if _EXCEL_SHEET not in wb.sheetnames:
-        raise HTTPException(status_code=400, detail=f"No se encontró la hoja '{_EXCEL_SHEET}'")
+    job_id = str(uuid.uuid4())[:8]
+    _jobs[job_id] = {
+        "status": "pending",
+        "progress": 0,
+        "result": None,
+        "error": None,
+        "created_at": datetime.now(),
+    }
 
-    ws = wb[_EXCEL_SHEET]
+    threading.Thread(
+        target=_procesar_excel,
+        args=(job_id, file_bytes, batch_date_str, admin),
+        daemon=True,
+    ).start()
 
-    nuevos = 0
-    actualizados = 0
-    movimientos = 0
-    errores = 0
-    total = 0
-    errores_detalle: list[str] = []
+    return {"job_id": job_id, "status": "pending"}
 
-    # Columnas (0-indexed): 0=N°, 1=HOSPITAL, 2=APELLIDOS Y NOMBRES, 3=EDAD,
-    #                        4=CÉDULA/ID, 5=TELÉFONO, 6=DIRECCIÓN, 7=OBSERVACIONES
-    for row_num, row in enumerate(ws.iter_rows(min_row=5, values_only=True), start=5):
-        nombre_raw = row[2] if len(row) > 2 else None
-        if not nombre_raw:
-            continue
-        nombre_raw = str(nombre_raw).strip()
-        if not nombre_raw:
-            continue
 
-        total += 1
+@router.get("/import/jobs/{job_id}")
+async def get_import_job(job_id: str, request: Request):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
 
-        try:
-            if "/" in nombre_raw:
-                idx = nombre_raw.index("/")
-                nombre_principal = nombre_raw[:idx].strip()
-                variantes = nombre_raw[idx + 1:].strip() or None
-            else:
-                nombre_principal = nombre_raw
-                variantes = None
-
-            if not nombre_principal:
-                continue
-
-            def _str(val):
-                if val is None:
-                    return None
-                if isinstance(val, float) and val.is_integer():
-                    return str(int(val))
-                s = str(val).strip()
-                return s if s else None
-
-            hospital = normalizar_hospital(_str(row[1] if len(row) > 1 else None))
-            edad = limpiar_numero_excel(row[3] if len(row) > 3 else None)
-            cedula_raw = limpiar_numero_excel(row[4] if len(row) > 4 else None)
-            cedula = normalizar_cedula(cedula_raw) if cedula_raw is not None else None
-            if cedula == "":
-                cedula = None
-            telefono = limpiar_numero_excel(row[5] if len(row) > 5 else None)
-            direccion = _str(row[6] if len(row) > 6 else None)
-            observaciones = _str(row[7] if len(row) > 7 else None)
-            estado = parse_estado_from_observaciones(observaciones or "")
-
-            paciente = None
-            if cedula:
-                paciente = db.query(models.PacienteHospitalizado).filter(
-                    models.PacienteHospitalizado.cedula == cedula
-                ).first()
-
-            if paciente is None:
-                paciente = db.query(models.PacienteHospitalizado).filter(
-                    func.lower(models.PacienteHospitalizado.nombres_apellidos) == nombre_principal.lower()
-                ).first()
-
-            if paciente:
-                if paciente.nombre_hospital != hospital or paciente.estado_paciente != estado:
-                    mov = models.PacienteMovimiento(
-                        paciente_id=paciente.id,
-                        hospital_anterior=paciente.nombre_hospital,
-                        hospital_nuevo=hospital,
-                        estado_anterior=paciente.estado_paciente,
-                        estado_nuevo=estado,
-                        batch_date_anterior=paciente.batch_date,
-                        batch_date_nuevo=batch_date_str,
-                    )
-                    db.add(mov)
-                    movimientos += 1
-
-                paciente.nombre_hospital = hospital
-                paciente.estado_paciente = estado
-                paciente.batch_date = batch_date_str
-                if cedula and not paciente.cedula:
-                    paciente.cedula = cedula
-                if variantes:
-                    paciente.nombre_variantes = variantes
-                if telefono:
-                    paciente.telefono = telefono
-                if observaciones:
-                    paciente.observaciones = observaciones
-                paciente.fuente = "excel"
-                actualizados += 1
-            else:
-                nuevo = models.PacienteHospitalizado(
-                    nombres_apellidos=nombre_principal,
-                    nombre_variantes=variantes,
-                    nombre_hospital=hospital,
-                    edad=edad,
-                    cedula=cedula,
-                    telefono=telefono,
-                    procedencia=direccion,
-                    observaciones=observaciones,
-                    estado_paciente=estado,
-                    batch_date=batch_date_str,
-                    fuente="excel",
-                )
-                db.add(nuevo)
-                nuevos += 1
-
-            if (nuevos + actualizados) % 100 == 0 and (nuevos + actualizados) > 0:
-                db.commit()
-
-        except Exception as exc:
-            errores += 1
-            errores_detalle.append(f"Fila {row_num}: {exc}")
-
-    db.commit()
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job no encontrado")
 
     return {
-        "importados": nuevos,
-        "actualizados": actualizados,
-        "movimientos_detectados": movimientos,
-        "errores": errores,
-        "total_procesadas": total,
-        "batch_date": batch_date_str,
+        "status": job["status"],
+        "progress": job["progress"],
+        "result": job["result"],
+        "error": job["error"],
     }
