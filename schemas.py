@@ -170,6 +170,45 @@ class CentroAcopioConReporteResponse(BaseModel):
     total_reportes_hoy: int = 0
     model_config = {"from_attributes": True}
 
+class PersonaUpdate(BaseModel):
+    nombres_apellidos: Optional[str] = None
+    cedula: Optional[str] = None
+    ultima_ubicacion: Optional[str] = None
+    descripcion: Optional[str] = None
+    numero_contacto: Optional[str] = None
+    estado: Optional[str] = None
+    tipo_reporte: Optional[str] = None
+    estado_clinico: Optional[str] = None
+    sexo: Optional[str] = None
+    edad_aproximada: Optional[str] = None
+    contextura: Optional[str] = None
+    cabello: Optional[str] = None
+    ropa_aproximada: Optional[str] = None
+    quien_ayudo: Optional[str] = None
+    contacto_quien_ayudo: Optional[str] = None
+    numero_contacto_2: Optional[str] = None
+    sin_documentos: Optional[bool] = None
+    tipo_reportante: Optional[str] = None
+
+class PacienteUpdate(BaseModel):
+    nombres_apellidos: Optional[str] = None
+    cedula: Optional[str] = None
+    nombre_hospital: Optional[str] = None
+    hospital_id: Optional[int] = None
+    edad: Optional[str] = None
+    sexo: Optional[str] = None
+    procedencia: Optional[str] = None
+    parentesco: Optional[str] = None
+    observaciones: Optional[str] = None
+    datos_adicionales: Optional[str] = None
+    estado_paciente: Optional[str] = None
+    necesita_ayuda: Optional[bool] = None
+    tipo_ayuda: Optional[str] = None
+    reportado_por: Optional[str] = None
+
+class EstadoPersonaUpdate(BaseModel):
+    estado: str
+
 class CentroSolicitudResponse(BaseModel):
     id: int
     nombre: str

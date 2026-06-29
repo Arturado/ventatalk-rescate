@@ -265,6 +265,35 @@ def historial_paciente(
     )
     return movimientos
 
+@pacientes_router.patch("/{paciente_id}", response_model=schemas.PacienteResponse)
+def editar_paciente(
+    paciente_id: int,
+    data: schemas.PacienteUpdate,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    paciente = db.query(models.PacienteHospitalizado).filter(models.PacienteHospitalizado.id == paciente_id).first()
+    if not paciente:
+        raise HTTPException(status_code=404, detail="No encontrado")
+    for campo, valor in data.model_dump(exclude_unset=True).items():
+        setattr(paciente, campo, valor)
+    db.commit()
+    db.refresh(paciente)
+    return paciente
+
+@pacientes_router.delete("/{paciente_id}")
+def eliminar_paciente(
+    paciente_id: int,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    paciente = db.query(models.PacienteHospitalizado).filter(models.PacienteHospitalizado.id == paciente_id).first()
+    if not paciente:
+        raise HTTPException(status_code=404, detail="No encontrado")
+    db.delete(paciente)
+    db.commit()
+    return {"ok": True, "id": paciente_id}
+
 @pacientes_router.patch("/{paciente_id}/estado")
 def actualizar_estado_paciente(
     paciente_id: int,

@@ -55,6 +55,53 @@ def obtener_persona(persona_id: int, db: Session = Depends(get_db), _: str = Dep
         raise HTTPException(status_code=404, detail="No encontrado")
     return persona
 
+@router.patch("/{persona_id}", response_model=schemas.PersonaResponse)
+def editar_persona(
+    persona_id: int,
+    data: schemas.PersonaUpdate,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    persona = db.query(models.PersonaDesaparecida).filter(models.PersonaDesaparecida.id == persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="No encontrado")
+    for campo, valor in data.model_dump(exclude_unset=True).items():
+        setattr(persona, campo, valor)
+    db.commit()
+    db.refresh(persona)
+    return persona
+
+@router.delete("/{persona_id}")
+def eliminar_persona(
+    persona_id: int,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    persona = db.query(models.PersonaDesaparecida).filter(models.PersonaDesaparecida.id == persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="No encontrado")
+    db.delete(persona)
+    db.commit()
+    return {"ok": True, "id": persona_id}
+
+@router.post("/{persona_id}/estado", response_model=schemas.PersonaResponse)
+def cambiar_estado_persona(
+    persona_id: int,
+    data: schemas.EstadoPersonaUpdate,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    estados_validos = {"desaparecido", "encontrado", "en_proceso"}
+    if data.estado not in estados_validos:
+        raise HTTPException(status_code=422, detail=f"Estado inválido. Valores permitidos: {', '.join(estados_validos)}")
+    persona = db.query(models.PersonaDesaparecida).filter(models.PersonaDesaparecida.id == persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="No encontrado")
+    persona.estado = data.estado
+    db.commit()
+    db.refresh(persona)
+    return persona
+
 
 @matches_router.get("/posibles")
 @limiter.limit("30/hour")
