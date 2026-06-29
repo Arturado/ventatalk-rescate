@@ -553,6 +553,28 @@ def normalizar_cedula(valor) -> str:
     return str(valor).strip().upper()
 
 
+HOSPITAL_ALIASES = {
+    "Periférico de Catia": "Hospital Periférico de Catia",
+    "H. Jose Maria Vargas La Guaira": "Hospital José María Vargas (La Guaira)",
+    "Hospital Militar Universitario Dr. Carlos Arvelo": "Hospital Militar Dr. Carlos Arvelo",
+    "Hospital Ana Francisca Pérez de": "Hospital Ana Francisca Pérez de León",
+    "Hospital Dr. José Gregorio Hernández": "Hospital Dr. José Gregorio Hernández",
+    "Hospital Ricardo Baquero González": "Hospital Ricardo Baquero González",
+    "Otros / Sin Clasificar": "Otros - Sin Clasificar",
+    "Parque Alí Primera (Parque del Oeste)": "Parque Alí Primera-Oeste",
+    "Rescatados — Alcaldía de Chacao": "Rescatados Alcaldía Chacao",
+    "IVSS Hospital General Estadal de Misiones": "Hosp. Estadal Misiones IVSS",
+    "Hospital General de Lídice (Dr. Jesús Yerena)": "H. General de Lidice",
+}
+
+
+def normalizar_hospital(nombre: str) -> str:
+    if not nombre:
+        return nombre
+    nombre = nombre.strip()
+    return HOSPITAL_ALIASES.get(nombre, nombre)
+
+
 # --- Importar Excel de pacientes ---
 
 _EXCEL_SHEET = "🔍 BUSCAR PACIENTES"
@@ -626,7 +648,7 @@ async def import_excel_pacientes(
                 s = str(val).strip()
                 return s if s else None
 
-            hospital = _str(row[1] if len(row) > 1 else None)
+            hospital = normalizar_hospital(_str(row[1] if len(row) > 1 else None))
             edad = _str(row[3] if len(row) > 3 else None)
             cedula_raw = row[4] if len(row) > 4 else None
             cedula = normalizar_cedula(cedula_raw) if cedula_raw is not None else None
