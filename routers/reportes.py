@@ -1,8 +1,7 @@
-import io, os, uuid
+import os, uuid
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
-from PIL import Image
-from services.images import read_limited
+from services.images import read_limited, compress_image
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import or_
@@ -13,7 +12,6 @@ from database import get_db
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/reportes", tags=["reportes"])
 UPLOAD_DIR = "uploads/fotos"
-MAX_SIZE_KB = 500
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
 
@@ -46,26 +44,6 @@ async def save_photo(foto: UploadFile):
     with open(os.path.join(UPLOAD_DIR, filename), "wb") as f:
         f.write(compressed)
     return f"{BASE_URL}/uploads/fotos/{filename}"
-
-def compress_image(file_bytes: bytes) -> bytes:
-    img = Image.open(io.BytesIO(file_bytes))
-    if img.mode in ("RGBA", "P", "LA"):
-        bg = Image.new("RGB", img.size, (255, 255, 255))
-        if img.mode == "P":
-            img = img.convert("RGBA")
-        bg.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
-        img = bg
-    elif img.mode != "RGB":
-        img = img.convert("RGB")
-    img.thumbnail((2000, 2000), Image.LANCZOS)
-    quality = 85
-    while quality >= 20:
-        output = io.BytesIO()
-        img.save(output, format="JPEG", quality=quality, optimize=True)
-        if output.tell() <= MAX_SIZE_KB * 1024:
-            break
-        quality -= 10
-    return output.getvalue()
 
 @router.post("/", response_model=schemas.PersonaResponse, status_code=201)
 @limiter.limit("500/hour")
