@@ -124,3 +124,26 @@ def historial_centro(
     return db.query(models.AcopioReporte).filter(
         models.AcopioReporte.centro_id == centro_id
     ).order_by(desc(models.AcopioReporte.created_at)).limit(limit).all()
+
+@router.post("/solicitar-centro", status_code=201)
+@limiter.limit("10/hour")
+async def solicitar_centro(
+    request: Request,
+    nombre: str = Form(...),
+    direccion: Optional[str] = Form(None),
+    zona: Optional[str] = Form(None),
+    reportado_por: Optional[str] = Form(None),
+    notas: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+):
+    """Público — solicitar agregar un centro de acopio nuevo"""
+    solicitud = models.CentroAcopioSolicitud(
+        nombre=nombre,
+        direccion=direccion or None,
+        zona=zona or None,
+        reportado_por=reportado_por or None,
+        notas=notas or None,
+    )
+    db.add(solicitud)
+    db.commit()
+    return {"ok": True, "mensaje": "Tu solicitud fue recibida. El equipo la revisará y agregará el centro a la brevedad."}

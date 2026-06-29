@@ -851,9 +851,19 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <a href="/acopio" target="_blank" style="padding:8px 16px;background:#374151;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;">🔗 Ver página pública</a>
       <button onclick="openModal('modal-centro')" style="padding:8px 16px;background:#16a34a;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">➕ Nuevo centro</button>
+      <button id="btn-solicitudes-aco" onclick="toggleSolicitudesPanel()" style="padding:8px 16px;background:#7c3aed;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">🔔 Solicitudes pendientes (<span id="sol-aco-count">…</span>)</button>
       <span id="aco-refresh-label" style="font-size:12px;color:#6b7280;">Actualiza en <span id="aco-countdown">60</span>s</span>
       <button onclick="loadAcopio()" style="padding:8px 14px;background:#dc2626;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">🔄 Actualizar</button>
     </div>
+  </div>
+
+  <!-- Panel solicitudes de centros -->
+  <div id="solicitudes-panel" style="display:none;background:white;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);padding:24px;margin-bottom:24px;">
+    <div style="margin-bottom:16px;">
+      <h3 style="font-size:16px;font-weight:800;margin-bottom:4px;">Centros nuevos reportados por el campo</h3>
+      <p style="font-size:13px;color:#6b7280;">Solicitudes recibidas desde la app pública — revisa y aprueba o rechaza.</p>
+    </div>
+    <div id="solicitudes-content"><p style="color:#6b7280;font-size:14px;text-align:center;padding:20px;">Cargando...</p></div>
   </div>
 
   <div class="aco-stats-grid">
@@ -2392,6 +2402,116 @@ function startAcoRefresh() {
 function stopAcoRefresh() {
   if (_acoRefreshTimer) { clearInterval(_acoRefreshTimer); _acoRefreshTimer = null; }
 }
+
+/* ---- SOLICITUDES CENTROS ACOPIO ---- */
+var _solPanelOpen = false;
+
+function toggleSolicitudesPanel() {
+  _solPanelOpen = !_solPanelOpen;
+  document.getElementById('solicitudes-panel').style.display = _solPanelOpen ? '' : 'none';
+  if (_solPanelOpen) loadSolicitudesAcopio();
+}
+
+async function loadSolicitudesAcopio() {
+  var content = document.getElementById('solicitudes-content');
+  content.innerHTML = '<p style="color:#6b7280;font-size:14px;text-align:center;padding:20px;">Cargando...</p>';
+  try {
+    var res = await fetch('/admin/acopio/solicitudes');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    updateSolCount(data.length);
+    if (!data.length) {
+      content.innerHTML = '<p style="color:#6b7280;font-size:14px;text-align:center;padding:20px;">No hay solicitudes pendientes.</p>';
+      return;
+    }
+    content.innerHTML = data.map(renderSolicitudCard).join('');
+  } catch(e) {
+    content.innerHTML = '<p style="color:#dc2626;font-size:14px;padding:16px;">Error al cargar. Intenta de nuevo.</p>';
+  }
+}
+
+function renderSolicitudCard(s) {
+  var fecha = s.created_at ? fmtDate(s.created_at) : '—';
+  return '<div id="sol-card-' + s.id + '" style="border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:12px;">' +
+    '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">' +
+      '<div>' +
+        '<div style="font-size:15px;font-weight:700;color:#111;margin-bottom:4px;">' + esc(s.nombre) + '</div>' +
+        (s.zona ? '<div style="font-size:13px;color:#6b7280;margin-bottom:2px;">📍 ' + esc(s.zona) + '</div>' : '') +
+        (s.direccion ? '<div style="font-size:13px;color:#6b7280;margin-bottom:2px;">' + esc(s.direccion) + '</div>' : '') +
+        (s.reportado_por ? '<div style="font-size:13px;color:#6b7280;margin-bottom:2px;">👤 ' + esc(s.reportado_por) + '</div>' : '') +
+        '<div style="font-size:11px;color:#9ca3af;">🕐 ' + fecha + '</div>' +
+        (s.notas ? '<div style="font-size:13px;color:#374151;margin-top:6px;padding:8px 10px;background:#f9fafb;border-radius:6px;">' + esc(s.notas) + '</div>' : '') +
+      '</div>' +
+      '<div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;">' +
+        '<button onclick="aprobarSolicitudAco(' + s.id + ',this)" style="padding:7px 14px;background:#16a34a;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">✅ Aprobar y crear centro</button>' +
+        '<button onclick="rechazarSolicitudAco(' + s.id + ',this)" style="padding:7px 14px;background:transparent;color:#dc2626;border:1.5px solid #dc2626;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">❌ Rechazar</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+async function aprobarSolicitudAco(id, btn) {
+  if (!confirm('¿Aprobar esta solicitud y crear el centro?')) return;
+  btn.disabled = true; btn.textContent = 'Aprobando...';
+  try {
+    var res = await fetch('/admin/acopio/solicitudes/' + id + '/aprobar', {
+      method: 'POST',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
+    });
+    if (!res.ok) throw new Error();
+    var data = await res.json();
+    document.getElementById('sol-card-' + id).remove();
+    showToast('✅ Centro creado y activado (ID: ' + data.centro_id + ')');
+    actualizarContadorSol();
+    if (_acopioLoaded) loadAcopio();
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '✅ Aprobar y crear centro';
+    alert('Error al aprobar. Intenta de nuevo.');
+  }
+}
+
+async function rechazarSolicitudAco(id, btn) {
+  if (!confirm('¿Rechazar esta solicitud?')) return;
+  btn.disabled = true; btn.textContent = 'Rechazando...';
+  try {
+    var res = await fetch('/admin/acopio/solicitudes/' + id + '/rechazar', {
+      method: 'POST',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
+    });
+    if (!res.ok) throw new Error();
+    document.getElementById('sol-card-' + id).remove();
+    showToast('✓ Solicitud rechazada');
+    actualizarContadorSol();
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '❌ Rechazar';
+    alert('Error al rechazar. Intenta de nuevo.');
+  }
+}
+
+function actualizarContadorSol() {
+  var n = document.querySelectorAll('[id^="sol-card-"]').length;
+  updateSolCount(n);
+  if (!n) {
+    document.getElementById('solicitudes-content').innerHTML =
+      '<p style="color:#6b7280;font-size:14px;text-align:center;padding:20px;">No hay solicitudes pendientes.</p>';
+  }
+}
+
+function updateSolCount(n) {
+  var span = document.getElementById('sol-aco-count');
+  if (span) span.textContent = n;
+  var btn = document.getElementById('btn-solicitudes-aco');
+  if (btn) btn.style.animation = n > 0 ? 'blink 1.5s ease-in-out infinite' : '';
+}
+
+(async function initSolCount() {
+  try {
+    var res = await fetch('/admin/acopio/solicitudes');
+    if (!res.ok) return;
+    var data = await res.json();
+    updateSolCount(data.length);
+  } catch(e) {}
+})();
 
 /* ---- Init ---- */
 (function() {

@@ -17,10 +17,11 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy import func
+from sqlalchemy import func, desc as sqldesc
 from sqlalchemy.orm import Session
 
 import models
+import schemas as _schemas
 from database import SessionLocal, get_db
 from services.images import read_limited, compress_image_async
 from cache import _hospitales_cache, cache_clear
@@ -875,5 +876,72 @@ async def eliminar_acopio_reporte(
     if not reporte:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
     db.delete(reporte)
+    db.commit()
+    return {"ok": True}
+
+
+# --- Solicitudes de centros de acopio ---
+
+@router.get("/acopio/solicitudes")
+async def listar_solicitudes_acopio(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    solicitudes = db.query(models.CentroAcopioSolicitud).filter(
+        models.CentroAcopioSolicitud.estado == "pendiente"
+    ).order_by(sqldesc(models.CentroAcopioSolicitud.created_at)).all()
+    return [_schemas.CentroSolicitudResponse.model_validate(s) for s in solicitudes]
+
+
+@router.post("/acopio/solicitudes/{solicitud_id}/aprobar")
+async def aprobar_solicitud_acopio(
+    solicitud_id: int,
+    request: Request,
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+    solicitud = db.query(models.CentroAcopioSolicitud).filter(
+        models.CentroAcopioSolicitud.id == solicitud_id
+    ).first()
+    if not solicitud:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+    centro = models.CentroAcopio(
+        nombre=solicitud.nombre,
+        zona=solicitud.zona or None,
+        direccion=solicitud.direccion or None,
+    )
+    db.add(centro)
+    solicitud.estado = "aprobado"
+    db.commit()
+    db.refresh(centro)
+    return {"ok": True, "centro_id": centro.id}
+
+
+@router.post("/acopio/solicitudes/{solicitud_id}/rechazar")
+async def rechazar_solicitud_acopio(
+    solicitud_id: int,
+    request: Request,
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+    solicitud = db.query(models.CentroAcopioSolicitud).filter(
+        models.CentroAcopioSolicitud.id == solicitud_id
+    ).first()
+    if not solicitud:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+    solicitud.estado = "rechazado"
     db.commit()
     return {"ok": True}

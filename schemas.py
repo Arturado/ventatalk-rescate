@@ -169,3 +169,23 @@ class CentroAcopioConReporteResponse(BaseModel):
     ultimo_reporte: Optional[AcopioReporteResponse] = None
     total_reportes_hoy: int = 0
     model_config = {"from_attributes": True}
+
+class CentroSolicitudResponse(BaseModel):
+    id: int
+    nombre: str
+    direccion: Optional[str] = None
+    zona: Optional[str] = None
+    reportado_por: Optional[str] = None
+    notas: Optional[str] = None
+    estado: str
+    created_at: datetime
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, value: datetime) -> str:
+        from datetime import timezone, timedelta
+        VE_TZ = timezone(timedelta(hours=-4))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(VE_TZ).isoformat()
+
+    model_config = {"from_attributes": True}

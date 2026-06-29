@@ -133,3 +133,15 @@ class AcopioReporte(Base):
     # Quien reporta
     reportado_por = Column(String(200), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class CentroAcopioSolicitud(Base):
+    __tablename__ = "centros_acopio_solicitudes"
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(200), nullable=False)
+    direccion = Column(String(500), nullable=True)
+    zona = Column(String(100), nullable=True)
+    reportado_por = Column(String(200), nullable=True)
+    notas = Column(Text, nullable=True)
+    estado = Column(String(20), nullable=False, default="pendiente")
+    # valores: "pendiente", "aprobado", "rechazado"
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

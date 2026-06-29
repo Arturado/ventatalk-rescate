@@ -136,6 +136,63 @@
       .hdr-title { font-size: 15px; }
       .hdr-sub { display: none; }
     }
+
+    /* BUSCADOR */
+    .search-wrap { max-width:1200px; margin:0 auto; padding:14px 20px 4px; }
+    .search-input {
+      width:100%; max-width:500px; padding:10px 14px;
+      border:1.5px solid #d1d5db; border-radius:10px;
+      font-size:14px; color:#111; outline:none;
+      transition:border-color .15s; background:#fff;
+    }
+    .search-input:focus { border-color:#dc2626; }
+
+    /* BOTÓN NO ENCUENTRO MI CENTRO */
+    .btn-no-centro {
+      display:block; margin:20px auto 0;
+      padding:10px 22px;
+      border:2px solid #dc2626; border-radius:10px;
+      background:transparent; color:#dc2626;
+      font-size:14px; font-weight:700; cursor:pointer;
+      transition:all .15s;
+    }
+    .btn-no-centro:hover { background:#dc2626; color:white; }
+
+    /* MODAL SOLICITUD */
+    .sol-modal-bd {
+      display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,.55); z-index:200;
+      align-items:flex-start; justify-content:center;
+      padding:40px 16px 80px; overflow-y:auto;
+    }
+    .sol-modal-bd.open { display:flex; }
+    .sol-modal {
+      background:#fff; border-radius:16px; padding:24px;
+      width:100%; max-width:480px;
+      box-shadow:0 20px 60px rgba(0,0,0,.2);
+    }
+    .sol-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+    .sol-title { font-size:16px; font-weight:800; }
+    .sol-x { border:none; background:transparent; font-size:24px; cursor:pointer; color:#9ca3af; line-height:1; padding:0 4px; }
+    .sol-x:hover { color:#111; }
+    .sol-fg { margin-bottom:12px; }
+    .sol-fg label { display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:5px; }
+    .sol-fg input, .sol-fg select, .sol-fg textarea {
+      width:100%; padding:9px 12px; border:1.5px solid #d1d5db;
+      border-radius:7px; font-size:14px; outline:none; color:#111;
+      transition:border-color .15s; box-sizing:border-box; background:#fff;
+    }
+    .sol-fg input:focus, .sol-fg select:focus, .sol-fg textarea:focus { border-color:#dc2626; }
+    .sol-fg textarea { resize:vertical; min-height:70px; font-family:inherit; }
+    .sol-btn {
+      width:100%; padding:12px; background:#dc2626;
+      color:white; border:none; border-radius:8px;
+      font-size:15px; font-weight:700; cursor:pointer;
+      margin-top:6px; transition:background .15s;
+    }
+    .sol-btn:hover { background:#b91c1c; }
+    .sol-btn:disabled { background:#9ca3af; cursor:not-allowed; }
+    .sol-success { text-align:center; padding:20px 0; color:#15803d; font-weight:700; font-size:15px; line-height:1.6; }
   </style>
 </head>
 <body>
@@ -156,6 +213,12 @@
   </div>
 </header>
 
+<div class="search-wrap">
+  <input type="text" id="buscador-centro" class="search-input"
+    placeholder="🔍 Buscar centro de acopio..."
+    oninput="buscarCentro(this.value)">
+</div>
+
 <div class="pills-wrap">
   <button class="pill active" data-zona="" onclick="filtrarZona(this)">Todas</button>
   <button class="pill" data-zona="Caracas - Libertador" onclick="filtrarZona(this)">Libertador</button>
@@ -170,11 +233,13 @@
   <div id="grid" class="grid">
     <div class="state-msg"><div class="spinner"></div><br>Cargando centros...</div>
   </div>
+  <button class="btn-no-centro" onclick="openSolModal()">📍 No encuentro mi centro — Reportarlo</button>
 </div>
 
 <script>
 var _data = [];
 var _zonaFiltro = '';
+var _busqueda = '';
 
 function semaforo(ultimoReporte) {
   if (!ultimoReporte) return { cls: 'badge-gray', txt: '⚫ Sin reporte' };
@@ -257,14 +322,27 @@ function renderCard(item) {
 function renderGrid() {
   var grid = document.getElementById('grid');
   var items = _data.filter(function(item) {
+    if (_busqueda) {
+      var n = (item.centro.nombre || '').toLowerCase();
+      var d = (item.centro.direccion || '').toLowerCase();
+      return n.indexOf(_busqueda) !== -1 || d.indexOf(_busqueda) !== -1;
+    }
     if (!_zonaFiltro) return true;
     return (item.centro.zona || '').toLowerCase().indexOf(_zonaFiltro.toLowerCase()) !== -1;
   });
   if (!items.length) {
-    grid.innerHTML = '<div class="state-msg">Sin centros en esta zona.</div>';
+    grid.innerHTML = _busqueda
+      ? '<div class="state-msg">No encontramos "<strong>' + esc(_busqueda) + '</strong>" en ningún centro.<br><br>' +
+        '<button onclick="openSolModal()" class="btn-no-centro" style="margin-top:0;">📍 Reportar este centro</button></div>'
+      : '<div class="state-msg">Sin centros en esta zona.</div>';
     return;
   }
   grid.innerHTML = items.map(renderCard).join('');
+}
+
+function buscarCentro(val) {
+  _busqueda = val.trim().toLowerCase();
+  renderGrid();
 }
 
 function filtrarZona(btn) {
@@ -293,6 +371,87 @@ async function loadData() {
 
 loadData();
 setInterval(loadData, 60000);
+
+/* ── Modal solicitud centro ── */
+function openSolModal() {
+  document.getElementById('sol-modal-content').innerHTML = _getSolFormHtml();
+  document.getElementById('sol-modal-bd').classList.add('open');
+}
+
+function closeSolModal() {
+  document.getElementById('sol-modal-bd').classList.remove('open');
+}
+
+function _getSolFormHtml() {
+  return '<div class="sol-fg"><label>Nombre del centro *</label>' +
+    '<input type="text" id="sol-nombre" required placeholder="Escuela Bolivariana, Parque..."></div>' +
+    '<div class="sol-fg"><label>Zona</label><select id="sol-zona">' +
+    '<option value="">— No especificada —</option>' +
+    '<option>Caracas - Libertador</option><option>Caracas - Chacao</option>' +
+    '<option>Caracas - Sucre</option><option>Caracas - Baruta</option>' +
+    '<option>Vargas</option><option>Miranda</option><option>Otra</option>' +
+    '</select></div>' +
+    '<div class="sol-fg"><label>Dirección</label>' +
+    '<input type="text" id="sol-direccion" placeholder="Av. Principal, Parroquia..."></div>' +
+    '<div class="sol-fg"><label>Tu nombre o contacto <span style="font-weight:400;color:#9ca3af;">(opcional)</span></label>' +
+    '<input type="text" id="sol-contacto" placeholder="Nombre o número"></div>' +
+    '<div class="sol-fg"><label>Notas adicionales <span style="font-weight:400;color:#9ca3af;">(opcional)</span></label>' +
+    '<textarea id="sol-notas" placeholder="Cualquier info útil: capacidad, referencia, etc."></textarea></div>' +
+    '<div id="sol-error" style="display:none;color:#dc2626;font-size:13px;font-weight:600;margin-bottom:8px;"></div>' +
+    '<button class="sol-btn" id="sol-submit-btn" onclick="submitSolicitud()">Enviar solicitud</button>';
+}
+
+async function submitSolicitud() {
+  var nombre = (document.getElementById('sol-nombre').value || '').trim();
+  var errEl = document.getElementById('sol-error');
+  errEl.style.display = 'none';
+  if (!nombre) {
+    errEl.textContent = 'El nombre del centro es obligatorio.';
+    errEl.style.display = 'block';
+    return;
+  }
+  var btn = document.getElementById('sol-submit-btn');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  var fd = new FormData();
+  fd.append('nombre', nombre);
+  var zona = document.getElementById('sol-zona').value;
+  if (zona) fd.append('zona', zona);
+  var dir = (document.getElementById('sol-direccion').value || '').trim();
+  if (dir) fd.append('direccion', dir);
+  var contacto = (document.getElementById('sol-contacto').value || '').trim();
+  if (contacto) fd.append('reportado_por', contacto);
+  var notas = (document.getElementById('sol-notas').value || '').trim();
+  if (notas) fd.append('notas', notas);
+  try {
+    var res = await fetch('/api/acopio/solicitar-centro', { method: 'POST', body: fd });
+    if (!res.ok) {
+      var d = await res.json().catch(function(){return {};});
+      throw new Error(d.detail || 'Error del servidor');
+    }
+    document.getElementById('sol-modal-content').innerHTML =
+      '<div class="sol-success">✅ Solicitud enviada.<br>El equipo la revisará pronto.</div>' +
+      '<button onclick="closeSolModal()" style="width:100%;padding:10px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-top:8px;">Cerrar</button>';
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Enviar solicitud';
+    errEl.textContent = '❌ ' + (e.message || 'Error — verifica tu conexión');
+    errEl.style.display = 'block';
+  }
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeSolModal();
+});
 </script>
+
+<!-- Modal: Reportar centro nuevo -->
+<div class="sol-modal-bd" id="sol-modal-bd" onclick="if(event.target===this)closeSolModal()">
+  <div class="sol-modal">
+    <div class="sol-hdr">
+      <div class="sol-title">📍 Reportar centro nuevo</div>
+      <button class="sol-x" onclick="closeSolModal()">×</button>
+    </div>
+    <div id="sol-modal-content"></div>
+  </div>
+</div>
 </body>
 </html>
