@@ -513,12 +513,11 @@
         el.innerHTML = '<div style="border-left:2px solid #e5e7eb;padding-left:14px;">' +
           data.map(function(m) {
             var batch = m.batch_date_nuevo || m.batch_date_anterior || '—';
-            var fechaDet = m.created_at ? new Date(m.created_at).toLocaleDateString('es-VE', { timeZone:'America/Caracas', day:'numeric', month:'short', year:'numeric' }) : '—';
             return '<div style="position:relative;margin-bottom:12px;">' +
               '<div style="position:absolute;left:-19px;top:0;font-size:12px;">🏥</div>' +
               '<div style="font-size:13px;font-weight:600;color:#374151;">[' + esc(batch) + '] ' + esc(m.hospital_anterior||'—') + ' → ' + esc(m.hospital_nuevo||'—') + '</div>' +
               '<div style="font-size:12px;color:#6b7280;">Estado: ' + esc(m.estado_anterior||'—') + ' → ' + esc(m.estado_nuevo||'—') + '</div>' +
-              '<div style="font-size:11px;color:#9ca3af;">Detectado: ' + fechaDet + '</div>' +
+              (m.batch_date_nuevo ? '<div style="font-size:11px;color:#9ca3af;">Registrado en batch: ' + esc(m.batch_date_nuevo) + '</div>' : '') +
             '</div>';
           }).join('') +
         '</div>';

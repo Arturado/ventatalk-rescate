@@ -1737,7 +1737,7 @@ async function verHistorialPac(id, containerEl, btn) {
         return '<div class="pac-hist-item">' +
           '<div style="font-size:12px;font-weight:600;color:#374151;">['+esc(batch)+'] '+esc(m.hospital_anterior||'—')+' → '+esc(m.hospital_nuevo||'—')+'</div>' +
           '<div style="font-size:11px;color:#6b7280;">Estado: '+esc(m.estado_anterior||'—')+' → '+esc(m.estado_nuevo||'—')+'</div>' +
-          '<div style="font-size:11px;color:#9ca3af;">Detectado: '+fmtDate(m.created_at)+'</div>' +
+          (m.batch_date_nuevo ? '<div style="font-size:11px;color:#9ca3af;">Registrado en batch: '+esc(m.batch_date_nuevo)+'</div>' : '') +
         '</div>';
       }).join('') +
     '</div>';
