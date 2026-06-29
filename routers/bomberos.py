@@ -1,21 +1,15 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Form, Request
+from fastapi import APIRouter, Depends, Query, Form, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
 from typing import List, Optional
 from database import get_db
-import models, schemas, os
+import models, schemas
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from dependencies import verify_api_key
 
 router = APIRouter(prefix="/api/bomberos", tags=["bomberos"])
 limiter = Limiter(key_func=get_remote_address)
-
-
-def verify_api_key(x_api_key: str = Header(...)):
-    expected = os.getenv("API_KEY")
-    if not expected or x_api_key != expected:
-        raise HTTPException(status_code=401, detail="API Key inválida")
-    return x_api_key
 
 
 @router.post("/reporte", response_model=schemas.BomberoReporteResponse, status_code=201)

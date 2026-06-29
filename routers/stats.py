@@ -1,22 +1,16 @@
-import os
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import func, case
 from sqlalchemy.orm import Session
 import models
 from database import get_db
+from dependencies import verify_api_key
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 public_router = APIRouter(prefix="/api/stats", tags=["stats"])
-
-def verify_api_key(x_api_key: str = Header(...)):
-    expected = os.getenv("API_KEY")
-    if not expected or x_api_key != expected:
-        raise HTTPException(status_code=401, detail="API Key invalida")
-    return x_api_key
 
 @router.get("/")
 def get_stats(db: Session = Depends(get_db), _: str = Depends(verify_api_key)):

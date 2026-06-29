@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from database import get_db
 import models, schemas, os, uuid
 from services.images import read_limited, compress_image_async
+from dependencies import verify_api_key
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -15,12 +16,6 @@ pacientes_router = APIRouter(prefix="/api/pacientes", tags=["pacientes"])
 BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
 UPLOAD_DIR = "uploads/capturas"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-def verify_api_key(x_api_key: str = Header(...)):
-    expected = os.getenv("API_KEY")
-    if not expected or x_api_key != expected:
-        raise HTTPException(status_code=401, detail="API Key inválida")
-    return x_api_key
 
 # ── Hospitales ────────────────────────────────────────────────
 

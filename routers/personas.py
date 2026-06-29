@@ -1,21 +1,15 @@
-import os
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 import models, schemas
 from database import get_db
+from dependencies import verify_api_key
 
 router = APIRouter(prefix="/api/personas", tags=["personas"])
 matches_router = APIRouter(prefix="/api/matches", tags=["matches"])
 limiter = Limiter(key_func=get_remote_address)
-
-def verify_api_key(x_api_key: str = Header(...)):
-    expected = os.getenv("API_KEY")
-    if not expected or x_api_key != expected:
-        raise HTTPException(status_code=401, detail="API Key invalida")
-    return x_api_key
 
 @router.get("/", response_model=List[schemas.PersonaResponse])
 def listar_personas(
