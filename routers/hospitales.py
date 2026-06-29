@@ -236,9 +236,7 @@ def listar_pacientes(
     db: Session = Depends(get_db),
     _: str = Depends(verify_api_key)
 ):
-    query = db.query(models.PacienteHospitalizado).filter(
-        models.PacienteHospitalizado.estado_paciente != "fallecido"
-    )
+    query = db.query(models.PacienteHospitalizado)
     if nombre:
         query = query.filter(models.PacienteHospitalizado.nombres_apellidos.ilike(f"%{nombre}%"))
     if cedula:
