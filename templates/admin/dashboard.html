@@ -900,6 +900,19 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   <img id="lb-foto-img" src="" alt="Captura">
 </div>
 
+<!-- Modal: Historial de Reportes de Acopio -->
+<div id="modal-aco-hist" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1001;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;" onclick="if(event.target===this)closeAcopioHistorialModal()">
+  <div style="background:#fff;border-radius:16px;padding:28px;width:90vw;max-width:900px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0;">
+      <div id="aco-hist-modal-title" style="font-size:17px;font-weight:800;"></div>
+      <button onclick="closeAcopioHistorialModal()" style="border:none;background:transparent;font-size:24px;cursor:pointer;color:#9ca3af;line-height:1;padding:0 4px;">×</button>
+    </div>
+    <div id="aco-hist-modal-body" style="overflow-y:auto;overflow-x:auto;flex:1;">
+      <p style="color:#6b7280;text-align:center;padding:32px;">Cargando...</p>
+    </div>
+  </div>
+</div>
+
 <script>
 function fmtDate(iso) {
   const d = new Date(iso);
@@ -1657,7 +1670,7 @@ function closeLbFoto() {
   document.getElementById('lb-foto').classList.remove('open');
   document.getElementById('lb-foto-img').src = '';
 }
-document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { closeLbFoto(); closeModal('modal-hosp'); closeModal('modal-pac'); closeModal('modal-centro'); } });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { closeLbFoto(); closeModal('modal-hosp'); closeModal('modal-pac'); closeModal('modal-centro'); closeAcopioHistorialModal(); } });
 
 async function exportPacientesCSV() {
   var key = sessionStorage.getItem('vr_api_key') || getApiKey();
@@ -2261,70 +2274,74 @@ function renderAcopioTable(arr) {
       '<td style="text-align:center;">' + hoy + '</td>' +
       '<td>' +
         '<div style="display:flex;gap:4px;flex-wrap:wrap;">' +
-          '<button onclick="toggleAcopioHistorial(' + c.id + ',this)" style="font-size:11px;padding:4px 8px;background:#374151;color:white;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">📋 Historial</button>' +
+          '<button data-cid="' + c.id + '" onclick="copiarLinkCentro(this.dataset.cid,this)" style="font-size:11px;padding:4px 8px;background:#0369a1;color:white;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">🔗 Copiar link</button>' +
+          '<button data-cid="' + c.id + '" data-cnombre="' + esc(c.nombre) + '" onclick="openAcopioHistorialModal(this.dataset.cid,this.dataset.cnombre)" style="font-size:11px;padding:4px 8px;background:#374151;color:white;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">📋 Historial</button>' +
           '<button onclick="desactivarCentro(' + c.id + ',this)" style="font-size:11px;padding:4px 8px;background:#ef4444;color:white;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">Desactivar</button>' +
         '</div>' +
-      '</td>' +
-    '</tr>' +
-    '<tr id="aco-hist-' + c.id + '" class="aco-hist-row" style="display:none;">' +
-      '<td colspan="9" style="background:#f8faff;padding:10px 16px;">' +
-        '<div id="aco-hist-content-' + c.id + '">Cargando historial...</div>' +
       '</td>' +
     '</tr>';
   }).join('');
 }
 
-async function toggleAcopioHistorial(centroId, btn) {
-  var row = document.getElementById('aco-hist-' + centroId);
-  if (row.style.display !== 'none') {
-    row.style.display = 'none';
-    btn.textContent = '📋 Historial';
-    return;
-  }
-  row.style.display = '';
-  btn.textContent = '▲ Cerrar';
+function openAcopioHistorialModal(centroId, centroNombre) {
+  document.getElementById('aco-hist-modal-title').textContent = '📋 Historial — ' + centroNombre;
+  document.getElementById('aco-hist-modal-body').innerHTML = '<p style="color:#6b7280;text-align:center;padding:32px;">Cargando...</p>';
+  document.getElementById('modal-aco-hist').style.display = 'flex';
+  _loadAcopioHistorialModal(centroId);
+}
 
+function closeAcopioHistorialModal() {
+  document.getElementById('modal-aco-hist').style.display = 'none';
+}
+
+async function _loadAcopioHistorialModal(centroId) {
   var key = getApiKey(); if (!key) return;
-  var content = document.getElementById('aco-hist-content-' + centroId);
-  content.innerHTML = '<span style="color:#6b7280;font-size:12px;">Cargando...</span>';
+  var body = document.getElementById('aco-hist-modal-body');
   try {
-    var res = await fetch('/api/acopio/reportes/' + centroId + '/historial?limit=5', {
+    var res = await fetch('/api/acopio/reportes/' + centroId + '/historial?limit=50', {
       headers: { 'X-Api-Key': key }
     });
-    if (res.status === 401) { sessionStorage.removeItem('vr_api_key'); content.innerHTML = '<span style="color:#dc2626;">API Key inválida.</span>'; return; }
+    if (res.status === 401) { sessionStorage.removeItem('vr_api_key'); body.innerHTML = '<p style="color:#dc2626;padding:16px;">API Key inválida.</p>'; return; }
     var data = await res.json();
-    if (!data.length) { content.innerHTML = '<span style="color:#9ca3af;font-size:12px;">Sin reportes aún.</span>'; return; }
+    if (!data.length) { body.innerHTML = '<p style="color:#9ca3af;text-align:center;padding:32px;">Sin reportes aún.</p>'; return; }
     var csrf = document.querySelector('meta[name="csrf-token"]').content;
-    content.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
-      '<thead><tr style="color:#6b7280;text-align:left;">' +
-        '<th style="padding:4px 8px;">Hora</th>' +
-        '<th style="padding:4px 8px;">Población</th>' +
-        '<th style="padding:4px 8px;">Necesitan</th>' +
-        '<th style="padding:4px 8px;">NO necesitan</th>' +
-        '<th style="padding:4px 8px;">Notas</th>' +
-        '<th style="padding:4px 8px;">Reportado por</th>' +
-        '<th style="padding:4px 8px;"></th>' +
+    body.innerHTML = '<div style="overflow-x:auto;">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:700px;">' +
+      '<thead><tr style="background:#16a34a;color:white;">' +
+        '<th style="padding:8px 12px;text-align:left;white-space:nowrap;">Hora</th>' +
+        '<th style="padding:8px 12px;text-align:left;white-space:nowrap;">Población</th>' +
+        '<th style="padding:8px 12px;text-align:left;">Necesitan</th>' +
+        '<th style="padding:8px 12px;text-align:left;">NO necesitan</th>' +
+        '<th style="padding:8px 12px;text-align:left;">Notas</th>' +
+        '<th style="padding:8px 12px;text-align:left;">Reportado por</th>' +
+        '<th style="padding:8px 12px;"></th>' +
       '</tr></thead><tbody>' +
       data.map(function(r) {
         var total = (r.hombres||0)+(r.mujeres||0)+(r.ninos||0)+(r.lactantes||0);
         var popStr = 'Total:' + total + ' (H:' + (r.hombres||0) + ' M:' + (r.mujeres||0) + ' N:' + (r.ninos||0) + ' L:' + (r.lactantes||0) + ')';
-        var nec = acoJuntarItems(r.necesitan, r.necesitan_extra).join(', ') || '—';
-        var noNec = acoJuntarItems(r.no_necesitan, r.no_necesitan_extra).join(', ') || '—';
+        var necMain = r.necesitan ? r.necesitan.split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
+        var necExtra = r.necesitan_extra ? r.necesitan_extra.trim() : '';
+        var necCell = necMain.length ? esc(necMain.join(', ')) : '—';
+        if (necExtra) necCell += '<br><em style="color:#9ca3af;">+ ' + esc(necExtra) + '</em>';
+        var noNecMain = r.no_necesitan ? r.no_necesitan.split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
+        var noNecExtra = r.no_necesitan_extra ? r.no_necesitan_extra.trim() : '';
+        var noNecCell = noNecMain.length ? esc(noNecMain.join(', ')) : '—';
+        if (noNecExtra) noNecCell += '<br><em style="color:#9ca3af;">+ ' + esc(noNecExtra) + '</em>';
         return '<tr style="border-top:1px solid #e5e7eb;">' +
-          '<td style="padding:4px 8px;white-space:nowrap;">' + fmtDate(r.created_at) + '</td>' +
-          '<td style="padding:4px 8px;white-space:nowrap;">' + esc(popStr) + '</td>' +
-          '<td style="padding:4px 8px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(nec) + '">' + esc(nec) + '</td>' +
-          '<td style="padding:4px 8px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(noNec) + '">' + esc(noNec) + '</td>' +
-          '<td style="padding:4px 8px;max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(r.notas||'') + '">' + esc(r.notas||'—') + '</td>' +
-          '<td style="padding:4px 8px;">' + esc(r.reportado_por||'—') + '</td>' +
-          '<td style="padding:4px 8px;">' +
-            '<button onclick="eliminarAcopioReporte(' + r.id + ',\'' + csrf + '\',this)" style="font-size:10px;padding:3px 7px;background:#ef4444;color:white;border:none;border-radius:4px;cursor:pointer;">🗑</button>' +
+          '<td style="padding:8px 12px;white-space:nowrap;vertical-align:top;">' + fmtDate(r.created_at) + '</td>' +
+          '<td style="padding:8px 12px;white-space:nowrap;vertical-align:top;">' + esc(popStr) + '</td>' +
+          '<td style="padding:8px 12px;vertical-align:top;word-break:break-word;min-width:130px;">' + necCell + '</td>' +
+          '<td style="padding:8px 12px;vertical-align:top;word-break:break-word;min-width:130px;">' + noNecCell + '</td>' +
+          '<td style="padding:8px 12px;vertical-align:top;word-break:break-word;min-width:130px;">' + esc(r.notas||'—') + '</td>' +
+          '<td style="padding:8px 12px;vertical-align:top;white-space:nowrap;">' + esc(r.reportado_por||'—') + '</td>' +
+          '<td style="padding:8px 12px;vertical-align:top;">' +
+            '<button onclick="eliminarAcopioReporte(' + r.id + ',\'' + csrf + '\',this)" style="font-size:11px;padding:3px 7px;background:#ef4444;color:white;border:none;border-radius:4px;cursor:pointer;">🗑</button>' +
           '</td>' +
         '</tr>';
       }).join('') +
-    '</tbody></table>';
+      '</tbody></table></div>';
   } catch(e) {
-    content.innerHTML = '<span style="color:#dc2626;font-size:12px;">Error al cargar historial.</span>';
+    body.innerHTML = '<p style="color:#dc2626;padding:16px;">Error al cargar historial.</p>';
   }
 }
 
@@ -2386,6 +2403,28 @@ async function guardarCentro(e) {
     }
   } catch(e) { alert('Error de conexión.'); }
   btn.disabled = false; btn.textContent = 'Guardar centro';
+}
+
+async function copiarLinkCentro(centroId, btn) {
+  var url = 'https://rescate.ventatalk.com/acopio/reportar/' + centroId;
+  var original = btn.textContent;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      var inp = document.createElement('input');
+      inp.value = url;
+      inp.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+      document.body.appendChild(inp);
+      inp.select();
+      document.execCommand('copy');
+      document.body.removeChild(inp);
+    }
+    btn.textContent = '✅ Copiado';
+    setTimeout(function() { btn.textContent = original; }, 2000);
+  } catch(e) {
+    alert('No se pudo copiar. URL: ' + url);
+  }
 }
 
 function startAcoRefresh() {
