@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 import models
 from database import SessionLocal, get_db
-from services.images import read_limited, compress_image
+from services.images import read_limited, compress_image_async
 
 BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
 UPLOAD_DIR = "uploads/capturas"
@@ -456,7 +456,7 @@ async def nuevo_paciente_admin(
         file_bytes = await read_limited(foto_captura)
         if file_bytes is None:
             raise HTTPException(status_code=413, detail="Archivo demasiado grande (máx 10MB)")
-        compressed = compress_image(file_bytes)
+        compressed = await compress_image_async(file_bytes)
         if compressed:
             filename = f"cap_{uuid.uuid4()}.jpg"
             with open(os.path.join(UPLOAD_DIR, filename), "wb") as f:

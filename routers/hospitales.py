@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from database import get_db
 import models, schemas, os, uuid
-from services.images import read_limited, compress_image
+from services.images import read_limited, compress_image_async
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -71,7 +71,7 @@ async def crear_paciente(
         file_bytes = await read_limited(foto_captura)
         if file_bytes is None:
             raise HTTPException(status_code=413, detail="Archivo demasiado grande (máx 10MB)")
-        compressed = compress_image(file_bytes)
+        compressed = await compress_image_async(file_bytes)
         if compressed:
             filename = f"cap_{uuid.uuid4()}.jpg"
             with open(os.path.join(UPLOAD_DIR, filename), "wb") as f:

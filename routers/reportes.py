@@ -1,7 +1,7 @@
 import os, uuid
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
-from services.images import read_limited, compress_image
+from services.images import read_limited, compress_image_async
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import or_
@@ -35,7 +35,7 @@ async def save_photo(foto: UploadFile):
     if file_bytes is None:
         raise HTTPException(status_code=413, detail="Archivo demasiado grande (máx 10MB)")
     try:
-        compressed = compress_image(file_bytes)
+        compressed = await compress_image_async(file_bytes)
     except Exception:
         return None
     if not compressed:

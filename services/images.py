@@ -57,3 +57,9 @@ def compress_image(file_bytes: bytes, max_kb: int = MAX_OUTPUT_KB) -> bytes | No
         return output.getvalue()
     except Exception:
         return None
+
+
+async def compress_image_async(file_bytes: bytes) -> bytes | None:
+    """Versión async — ejecuta PIL en thread pool para no bloquear el event loop."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(_executor, compress_image, file_bytes)
