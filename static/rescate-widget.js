@@ -303,6 +303,7 @@
       fd.append('estado_paciente', formData.estado_paciente || 'ingresado');
       if (formData.observaciones) fd.append('observaciones', formData.observaciones);
       if (formData._contacto_pac) fd.append('reportado_por', formData._contacto_pac);
+      fd.append('fuente', 'chatbot');
       const res = await fetch(API_URL + '/api/pacientes/', { method: 'POST', body: fd });
       if (!res.ok) throw new Error();
       msgs.innerHTML = ''; inputArea.innerHTML = ''; bar.style.width = '100%';
