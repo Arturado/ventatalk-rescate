@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from database import get_db
@@ -21,9 +21,10 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.get("/", response_model=List[schemas.HospitalResponse])
 def listar_hospitales(
-    zona: Optional[str] = Query(None),
-    tipo: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
+    zona: Optional[str] = None,
+    tipo: Optional[str] = None,
+    db: Session = Depends(get_db),
+    response: Response = None,
 ):
     # Público, sin API key
     query = db.query(models.Hospital).filter(models.Hospital.activo == True)
@@ -31,6 +32,7 @@ def listar_hospitales(
         query = query.filter(models.Hospital.zona.ilike(f"%{zona}%"))
     if tipo:
         query = query.filter(models.Hospital.tipo == tipo)
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=60"
     return query.order_by(models.Hospital.zona, models.Hospital.nombre).all()
 
 @router.get("/{hospital_id}", response_model=schemas.HospitalResponse)
