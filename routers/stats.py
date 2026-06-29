@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 import models
 from database import get_db
 from dependencies import verify_api_key
+from cache import _stats_cache, cache_get, cache_set
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/stats", tags=["stats"])
@@ -14,6 +15,10 @@ public_router = APIRouter(prefix="/api/stats", tags=["stats"])
 
 @router.get("/")
 def get_stats(db: Session = Depends(get_db), _: str = Depends(verify_api_key)):
+    cached = cache_get(_stats_cache, "stats_privado")
+    if cached is not None:
+        return cached
+
     hoy = datetime.now(timezone.utc).date()
 
     result = db.query(
@@ -58,7 +63,7 @@ def get_stats(db: Session = Depends(get_db), _: str = Depends(verify_api_key)):
         for i in range(6, -1, -1)
     ]
 
-    return {
+    payload = {
         "total": result.total,
         "hoy": result.hoy,
         "con_foto": result.con_foto,
@@ -73,11 +78,16 @@ def get_stats(db: Session = Depends(get_db), _: str = Depends(verify_api_key)):
         },
         "ultimos_7_dias": ultimos_7,
     }
+    cache_set(_stats_cache, "stats_privado", payload)
+    return payload
 
 
 @public_router.get("/publico")
 @limiter.limit("30/hour")
 def get_stats_publico(request: Request, db: Session = Depends(get_db)):
+    cached = cache_get(_stats_cache, "stats_publico")
+    if cached is not None:
+        return cached
 
     # Una sola query para personas — SQLite devuelve números, no filas
     result = db.query(
@@ -98,10 +108,12 @@ def get_stats_publico(request: Request, db: Session = Depends(get_db)):
         func.count(models.PacienteHospitalizado.id)
     ).scalar()
 
-    return {
+    payload = {
         "total": result.total,
         "desaparecidos": result.desaparecidos,
         "encontrados": result.encontrados,
         "encontrados_vivos": result.encontrados_vivos,
         "pacientes_hospitalizados": pacientes,
     }
+    cache_set(_stats_cache, "stats_publico", payload)
+    return payload

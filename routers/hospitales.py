@@ -5,6 +5,7 @@ from database import get_db
 import models, schemas, os, uuid
 from services.images import read_limited, compress_image_async
 from dependencies import verify_api_key
+from cache import _hospitales_cache, cache_get, cache_set
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -26,14 +27,20 @@ def listar_hospitales(
     db: Session = Depends(get_db),
     response: Response = None,
 ):
-    # Público, sin API key
+    key = f"hospitales:{zona}:{tipo}"
+    cached = cache_get(_hospitales_cache, key)
+    if cached is not None:
+        return cached
+
     query = db.query(models.Hospital).filter(models.Hospital.activo == True)
     if zona:
         query = query.filter(models.Hospital.zona.ilike(f"%{zona}%"))
     if tipo:
         query = query.filter(models.Hospital.tipo == tipo)
     response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=60"
-    return query.order_by(models.Hospital.zona, models.Hospital.nombre).all()
+    result = query.order_by(models.Hospital.zona, models.Hospital.nombre).all()
+    cache_set(_hospitales_cache, key, result)
+    return result
 
 @router.get("/{hospital_id}", response_model=schemas.HospitalResponse)
 def obtener_hospital(hospital_id: int, db: Session = Depends(get_db)):

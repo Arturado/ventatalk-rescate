@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 import models
 from database import SessionLocal, get_db
 from services.images import read_limited, compress_image_async
+from cache import _hospitales_cache, cache_clear
 
 BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
 UPLOAD_DIR = "uploads/capturas"
@@ -418,6 +419,7 @@ async def nuevo_hospital(
     )
     db.add(hospital)
     db.commit()
+    cache_clear(_hospitales_cache)
     db.refresh(hospital)
     return {"ok": True, "id": hospital.id, "nombre": hospital.nombre}
 
