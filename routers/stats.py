@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import func, case
 from sqlalchemy.orm import Session
 import models
 from database import get_db
@@ -19,36 +20,63 @@ def verify_api_key(x_api_key: str = Header(...)):
 
 @router.get("/")
 def get_stats(db: Session = Depends(get_db), _: str = Depends(verify_api_key)):
-    todas = db.query(models.PersonaDesaparecida).all()
     hoy = datetime.now(timezone.utc).date()
 
-    total = len(todas)
-    hoy_count = sum(1 for p in todas if p.created_at and p.created_at.date() == hoy)
-    con_foto = sum(1 for p in todas if p.foto_url)
+    result = db.query(
+        func.count().label("total"),
+        func.count(case(
+            (func.date(models.PersonaDesaparecida.created_at) == hoy.isoformat(), 1)
+        )).label("hoy"),
+        func.count(models.PersonaDesaparecida.foto_url).label("con_foto"),
+        func.count(case(
+            (models.PersonaDesaparecida.estado == "desaparecido", 1)
+        )).label("estado_desaparecido"),
+        func.count(case(
+            (models.PersonaDesaparecida.estado == "encontrado", 1)
+        )).label("estado_encontrado"),
+        func.count(case(
+            (models.PersonaDesaparecida.estado == "en_proceso", 1)
+        )).label("estado_en_proceso"),
+        func.count(case(
+            (models.PersonaDesaparecida.tipo_reporte == "desaparecido", 1)
+        )).label("tipo_desaparecido"),
+        func.count(case(
+            (models.PersonaDesaparecida.tipo_reporte == "encontrado_vivo", 1)
+        )).label("tipo_encontrado_vivo"),
+    ).one()
 
-    por_estado = {"desaparecido": 0, "encontrado": 0, "en_proceso": 0}
-    for p in todas:
-        if p.estado in por_estado:
-            por_estado[p.estado] += 1
-
-    por_tipo = {"desaparecido": 0, "encontrado_vivo": 0}
-    for p in todas:
-        t = getattr(p, "tipo_reporte", "desaparecido") or "desaparecido"
-        if t in por_tipo:
-            por_tipo[t] += 1
-
-    ultimos_7 = []
-    for i in range(6, -1, -1):
-        dia = hoy - timedelta(days=i)
-        cantidad = sum(1 for p in todas if p.created_at and p.created_at.date() == dia)
-        ultimos_7.append({"fecha": dia.isoformat(), "cantidad": cantidad})
+    cutoff = hoy - timedelta(days=6)
+    rows = (
+        db.query(
+            func.date(models.PersonaDesaparecida.created_at).label("dia"),
+            func.count().label("cantidad"),
+        )
+        .filter(func.date(models.PersonaDesaparecida.created_at) >= cutoff.isoformat())
+        .group_by(func.date(models.PersonaDesaparecida.created_at))
+        .all()
+    )
+    counts_by_day = {r.dia: r.cantidad for r in rows}
+    ultimos_7 = [
+        {
+            "fecha": (hoy - timedelta(days=i)).isoformat(),
+            "cantidad": counts_by_day.get((hoy - timedelta(days=i)).isoformat(), 0),
+        }
+        for i in range(6, -1, -1)
+    ]
 
     return {
-        "total": total,
-        "hoy": hoy_count,
-        "con_foto": con_foto,
-        "por_estado": por_estado,
-        "por_tipo": por_tipo,
+        "total": result.total,
+        "hoy": result.hoy,
+        "con_foto": result.con_foto,
+        "por_estado": {
+            "desaparecido": result.estado_desaparecido,
+            "encontrado": result.estado_encontrado,
+            "en_proceso": result.estado_en_proceso,
+        },
+        "por_tipo": {
+            "desaparecido": result.tipo_desaparecido,
+            "encontrado_vivo": result.tipo_encontrado_vivo,
+        },
         "ultimos_7_dias": ultimos_7,
     }
 
@@ -56,18 +84,30 @@ def get_stats(db: Session = Depends(get_db), _: str = Depends(verify_api_key)):
 @public_router.get("/publico")
 @limiter.limit("30/hour")
 def get_stats_publico(request: Request, db: Session = Depends(get_db)):
-    todas = db.query(models.PersonaDesaparecida).all()
-    total = len(todas)
-    desaparecidos = sum(1 for p in todas if p.estado == "desaparecido")
-    encontrados = sum(1 for p in todas if p.estado == "encontrado")
-    encontrados_vivos = sum(
-        1 for p in todas if getattr(p, "tipo_reporte", None) == "encontrado_vivo"
-    )
-    pacientes_hospitalizados = db.query(models.PacienteHospitalizado).count()
+
+    # Una sola query para personas — SQLite devuelve números, no filas
+    result = db.query(
+        func.count().label("total"),
+        func.count(case(
+            (models.PersonaDesaparecida.estado == "desaparecido", 1)
+        )).label("desaparecidos"),
+        func.count(case(
+            (models.PersonaDesaparecida.estado == "encontrado", 1)
+        )).label("encontrados"),
+        func.count(case(
+            (models.PersonaDesaparecida.tipo_reporte == "encontrado_vivo", 1)
+        )).label("encontrados_vivos"),
+    ).one()
+
+    # Count de pacientes — una sola query
+    pacientes = db.query(
+        func.count(models.PacienteHospitalizado.id)
+    ).scalar()
+
     return {
-        "total": total,
-        "desaparecidos": desaparecidos,
-        "encontrados": encontrados,
-        "encontrados_vivos": encontrados_vivos,
-        "pacientes_hospitalizados": pacientes_hospitalizados,
+        "total": result.total,
+        "desaparecidos": result.desaparecidos,
+        "encontrados": result.encontrados,
+        "encontrados_vivos": result.encontrados_vivos,
+        "pacientes_hospitalizados": pacientes,
     }
