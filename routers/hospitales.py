@@ -5,6 +5,7 @@ from database import get_db
 import models, schemas, os, uuid
 from PIL import Image
 import io
+from services.images import read_limited
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -69,7 +70,9 @@ async def crear_paciente(
 ):
     foto_url = None
     if foto_captura and foto_captura.filename:
-        file_bytes = await foto_captura.read()
+        file_bytes = await read_limited(foto_captura)
+        if file_bytes is None:
+            raise HTTPException(status_code=413, detail="Archivo demasiado grande (máx 10MB)")
         try:
             img = Image.open(io.BytesIO(file_bytes))
             if img.mode not in ("RGB",):

@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 import models
 from database import SessionLocal, get_db
+from services.images import read_limited
 
 BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
 UPLOAD_DIR = "uploads/capturas"
@@ -453,7 +454,9 @@ async def nuevo_paciente_admin(
 
     foto_url = None
     if foto_captura and foto_captura.filename:
-        file_bytes = await foto_captura.read()
+        file_bytes = await read_limited(foto_captura)
+        if file_bytes is None:
+            raise HTTPException(status_code=413, detail="Archivo demasiado grande (máx 10MB)")
         try:
             img = Image.open(io.BytesIO(file_bytes))
             if img.mode not in ("RGB",):
@@ -771,7 +774,9 @@ async def import_excel_pacientes(
     if not (fname.endswith(".xlsx") or fname.endswith(".xls")):
         raise HTTPException(status_code=400, detail="El archivo debe ser .xlsx o .xls")
 
-    file_bytes = await file.read()
+    file_bytes = await read_limited(file)
+    if file_bytes is None:
+        raise HTTPException(status_code=413, detail="Archivo demasiado grande (máx 10MB)")
 
     job_id = str(uuid.uuid4())[:8]
     _jobs[job_id] = {

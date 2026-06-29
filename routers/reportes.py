@@ -1,7 +1,8 @@
 import io, os, uuid
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image
+from services.images import read_limited
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import or_
@@ -32,7 +33,9 @@ def normalize_contacto(value: str) -> str:
 async def save_photo(foto: UploadFile):
     if not foto or not foto.filename:
         return None
-    file_bytes = await foto.read()
+    file_bytes = await read_limited(foto)
+    if file_bytes is None:
+        raise HTTPException(status_code=413, detail="Archivo demasiado grande (máx 10MB)")
     try:
         compressed = compress_image(file_bytes)
     except Exception:
