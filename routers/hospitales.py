@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from database import get_db
 import models, schemas, os, uuid
 from PIL import Image
 import io
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/api/hospitales", tags=["hospitales"])
 pacientes_router = APIRouter(prefix="/api/pacientes", tags=["pacientes"])
@@ -244,6 +248,21 @@ def listar_pacientes(
     if hospital_id:
         query = query.filter(models.PacienteHospitalizado.hospital_id == hospital_id)
     return query.order_by(models.PacienteHospitalizado.created_at.desc()).offset(skip).limit(limit).all()
+
+@pacientes_router.get("/{paciente_id}/historial", response_model=List[schemas.MovimientoResponse])
+@limiter.limit("30/hour")
+def historial_paciente(
+    paciente_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    movimientos = (
+        db.query(models.PacienteMovimiento)
+        .filter(models.PacienteMovimiento.paciente_id == paciente_id)
+        .order_by(models.PacienteMovimiento.created_at.asc())
+        .all()
+    )
+    return movimientos
 
 @pacientes_router.patch("/{paciente_id}/estado")
 def actualizar_estado_paciente(

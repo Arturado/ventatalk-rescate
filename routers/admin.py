@@ -2,9 +2,12 @@ import csv
 import hashlib
 import io
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+
+import openpyxl
 
 import bcrypt
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
@@ -14,6 +17,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from PIL import Image
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import models
@@ -518,3 +522,190 @@ async def eliminar_paciente(
     db.delete(paciente)
     db.commit()
     return {"ok": True}
+
+
+# --- Helpers para importación Excel ---
+
+def parse_estado_from_observaciones(obs: str) -> str:
+    if "ESTADO EN CONFLICTO" in obs.upper():
+        return "ingresado"
+    obs_lower = obs.lower()
+    if "fallecid" in obs_lower:
+        return "fallecido"
+    if re.search(r'\balta\b', obs_lower):
+        return "alta"
+    if "traslad" in obs_lower:
+        return "trasladado"
+    if "grave" in obs_lower:
+        return "grave"
+    if "critico" in obs_lower or "crítico" in obs_lower:
+        return "critico"
+    if "estable" in obs_lower:
+        return "estable"
+    if "internado" in obs_lower or "ingresado" in obs_lower:
+        return "ingresado"
+    return "ingresado"
+
+
+def normalizar_cedula(valor) -> str:
+    if isinstance(valor, float) and valor.is_integer():
+        valor = int(valor)
+    return str(valor).strip().upper()
+
+
+# --- Importar Excel de pacientes ---
+
+_EXCEL_SHEET = "🔍 BUSCAR PACIENTES"
+
+
+@router.post("/import/excel-pacientes")
+async def import_excel_pacientes(
+    request: Request,
+    file: UploadFile = File(...),
+    batch_date_str: str = Form(...),
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+
+    fname = (file.filename or "").lower()
+    if not (fname.endswith(".xlsx") or fname.endswith(".xls")):
+        raise HTTPException(status_code=400, detail="El archivo debe ser .xlsx o .xls")
+
+    content = await file.read()
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"No se pudo leer el archivo Excel: {exc}")
+
+    if _EXCEL_SHEET not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"No se encontró la hoja '{_EXCEL_SHEET}'")
+
+    ws = wb[_EXCEL_SHEET]
+
+    nuevos = 0
+    actualizados = 0
+    movimientos = 0
+    errores = 0
+    total = 0
+    errores_detalle: list[str] = []
+
+    # Columnas (0-indexed): 0=N°, 1=HOSPITAL, 2=APELLIDOS Y NOMBRES, 3=EDAD,
+    #                        4=CÉDULA/ID, 5=TELÉFONO, 6=DIRECCIÓN, 7=OBSERVACIONES
+    for row_num, row in enumerate(ws.iter_rows(min_row=5, values_only=True), start=5):
+        nombre_raw = row[2] if len(row) > 2 else None
+        if not nombre_raw:
+            continue
+        nombre_raw = str(nombre_raw).strip()
+        if not nombre_raw:
+            continue
+
+        total += 1
+
+        try:
+            if "/" in nombre_raw:
+                idx = nombre_raw.index("/")
+                nombre_principal = nombre_raw[:idx].strip()
+                variantes = nombre_raw[idx + 1:].strip() or None
+            else:
+                nombre_principal = nombre_raw
+                variantes = None
+
+            if not nombre_principal:
+                continue
+
+            def _str(val):
+                if val is None:
+                    return None
+                if isinstance(val, float) and val.is_integer():
+                    return str(int(val))
+                s = str(val).strip()
+                return s if s else None
+
+            hospital = _str(row[1] if len(row) > 1 else None)
+            edad = _str(row[3] if len(row) > 3 else None)
+            cedula_raw = row[4] if len(row) > 4 else None
+            cedula = normalizar_cedula(cedula_raw) if cedula_raw is not None else None
+            if cedula == "":
+                cedula = None
+            telefono = _str(row[5] if len(row) > 5 else None)
+            direccion = _str(row[6] if len(row) > 6 else None)
+            observaciones = _str(row[7] if len(row) > 7 else None)
+            estado = parse_estado_from_observaciones(observaciones or "")
+
+            paciente = None
+            if cedula:
+                paciente = db.query(models.PacienteHospitalizado).filter(
+                    models.PacienteHospitalizado.cedula == cedula
+                ).first()
+
+            if paciente is None:
+                paciente = db.query(models.PacienteHospitalizado).filter(
+                    func.lower(models.PacienteHospitalizado.nombres_apellidos) == nombre_principal.lower()
+                ).first()
+
+            if paciente:
+                if paciente.nombre_hospital != hospital or paciente.estado_paciente != estado:
+                    mov = models.PacienteMovimiento(
+                        paciente_id=paciente.id,
+                        hospital_anterior=paciente.nombre_hospital,
+                        hospital_nuevo=hospital,
+                        estado_anterior=paciente.estado_paciente,
+                        estado_nuevo=estado,
+                        batch_date_anterior=paciente.batch_date,
+                        batch_date_nuevo=batch_date_str,
+                    )
+                    db.add(mov)
+                    movimientos += 1
+
+                paciente.nombre_hospital = hospital
+                paciente.estado_paciente = estado
+                paciente.batch_date = batch_date_str
+                if cedula and not paciente.cedula:
+                    paciente.cedula = cedula
+                if variantes:
+                    paciente.nombre_variantes = variantes
+                if telefono:
+                    paciente.telefono = telefono
+                if observaciones:
+                    paciente.observaciones = observaciones
+                paciente.fuente = "excel"
+                actualizados += 1
+            else:
+                nuevo = models.PacienteHospitalizado(
+                    nombres_apellidos=nombre_principal,
+                    nombre_variantes=variantes,
+                    nombre_hospital=hospital,
+                    edad=edad,
+                    cedula=cedula,
+                    telefono=telefono,
+                    procedencia=direccion,
+                    observaciones=observaciones,
+                    estado_paciente=estado,
+                    batch_date=batch_date_str,
+                    fuente="excel",
+                )
+                db.add(nuevo)
+                nuevos += 1
+
+            if (nuevos + actualizados) % 100 == 0 and (nuevos + actualizados) > 0:
+                db.commit()
+
+        except Exception as exc:
+            errores += 1
+            errores_detalle.append(f"Fila {row_num}: {exc}")
+
+    db.commit()
+
+    return {
+        "importados": nuevos,
+        "actualizados": actualizados,
+        "movimientos_detectados": movimientos,
+        "errores": errores,
+        "total_procesadas": total,
+        "batch_date": batch_date_str,
+    }

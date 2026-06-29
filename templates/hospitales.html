@@ -245,9 +245,21 @@
 
 <a href="/hospitales/reportar" class="fab">📋 Reportar paciente</a>
 
+<!-- Modal detalle de paciente -->
+<div id="pac-modal-bg" onclick="cerrarPacDetalle()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:999;align-items:flex-start;justify-content:center;padding:28px 16px;overflow-y:auto;">
+  <div onclick="event.stopPropagation()" style="background:#fff;border-radius:16px;padding:24px;width:100%;max-width:580px;box-shadow:0 20px 60px rgba(0,0,0,.25);max-height:85vh;overflow-y:auto;position:relative;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px;">
+      <div id="pac-modal-title" style="font-size:17px;font-weight:800;line-height:1.3;"></div>
+      <button onclick="cerrarPacDetalle()" style="border:none;background:transparent;font-size:24px;cursor:pointer;color:#9ca3af;line-height:1;flex-shrink:0;">×</button>
+    </div>
+    <div id="pac-modal-body"></div>
+  </div>
+</div>
+
 <script>
   var _todos_hospitales = [];
   var _hosp_by_id = {};
+  var _pac_by_id  = {};
   var _zona_activa = '';
 
   var ZONA_COLORS = {
@@ -365,6 +377,7 @@
   }
 
   function renderPacCard(p) {
+    _pac_by_id[p.id] = p;
     var hosp = p.hospital_id ? (_hosp_by_id[p.hospital_id] ? _hosp_by_id[p.hospital_id].nombre : null) : null;
     var hospDisplay = hosp || p.nombre_hospital || 'Hospital no especificado';
     var metaItems = [];
@@ -373,12 +386,13 @@
     if (p.procedencia) metaItems.push('📍 ' + esc(p.procedencia));
     var fecha = p.created_at ? new Date(p.created_at).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
-    return '<div class="pac-card">' +
+    return '<div class="pac-card" style="cursor:pointer;" onclick="openPacDetalle(' + p.id + ')">' +
       '<div class="pac-name">' + esc(p.nombres_apellidos) + '</div>' +
       '<div class="pac-hospital">🏥 ' + esc(hospDisplay) + '</div>' +
       (metaItems.length ? '<div class="pac-meta">' + metaItems.join(' &nbsp;·&nbsp; ') + '</div>' : '') +
       (p.observaciones ? '<div class="pac-obs">' + esc(p.observaciones) + '</div>' : '') +
       '<div class="pac-footer">' + estadoBadge(p.estado_paciente || 'ingresado') + '<span class="pac-date">' + fecha + '</span></div>' +
+      '<div style="font-size:11px;color:#1e40af;text-align:right;margin-top:4px;">Ver detalle →</div>' +
     '</div>';
   }
 
@@ -434,6 +448,92 @@
   loadHospitales();
   loadRecientes();
   startRecientesPolling();
+
+  /* ---- Detalle de paciente ---- */
+
+  function openPacDetalle(id) {
+    var p = _pac_by_id[id];
+    if (!p) return;
+    var hosp = p.hospital_id ? (_hosp_by_id[p.hospital_id] ? _hosp_by_id[p.hospital_id].nombre : null) : null;
+    var hospDisplay = hosp || p.nombre_hospital || 'Hospital no especificado';
+    var estadoLabel = { ingresado:'Ingresado', estable:'Estable', grave:'Grave', critico:'Crítico', alta:'De Alta', trasladado:'Trasladado', fallecido:'Fallecido' }[p.estado_paciente] || p.estado_paciente;
+
+    document.getElementById('pac-modal-title').textContent = p.nombres_apellidos;
+
+    var html = '<div style="font-size:14px;color:#1e40af;font-weight:600;margin-bottom:8px;">🏥 ' + esc(hospDisplay) + '</div>';
+    html += '<div style="margin-bottom:10px;"><span class="est-badge est-' + esc(p.estado_paciente||'ingresado') + '">' + esc(estadoLabel) + '</span></div>';
+
+    var metaParts = [];
+    if (p.cedula) metaParts.push('🪪 ' + esc(p.cedula));
+    if (p.edad)   metaParts.push('🎂 ' + esc(p.edad));
+    if (p.sexo)   metaParts.push(p.sexo === 'masculino' ? '♂ Masculino' : p.sexo === 'femenino' ? '♀ Femenino' : p.sexo);
+    if (metaParts.length) html += '<div style="font-size:13px;color:#6b7280;margin-bottom:10px;">' + metaParts.join(' &nbsp;·&nbsp; ') + '</div>';
+
+    if (p.nombre_variantes) {
+      html += '<div style="font-size:13px;color:#9ca3af;font-style:italic;margin-bottom:8px;">También registrado como: ' + esc(p.nombre_variantes) + '</div>';
+    }
+    if (p.telefono) {
+      html += '<div style="margin-bottom:8px;"><a href="tel:' + esc(p.telefono) + '" style="color:#1e40af;font-weight:600;font-size:14px;text-decoration:none;">📞 ' + esc(p.telefono) + '</a></div>';
+    }
+    if (p.procedencia) {
+      html += '<div style="font-size:13px;color:#6b7280;margin-bottom:8px;">📍 Procedencia: ' + esc(p.procedencia) + '</div>';
+    }
+
+    if (p.observaciones) {
+      var obs = p.observaciones;
+      var obsShort = obs.length > 200 ? obs.slice(0, 200) + '…' : obs;
+      html += '<div style="margin-bottom:12px;">' +
+        '<div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;">Observaciones</div>' +
+        '<div id="obs-short-' + id + '" style="font-size:13px;color:#6b7280;">' + esc(obsShort) + '</div>' +
+        (obs.length > 200
+          ? '<div id="obs-long-' + id + '" style="display:none;font-size:13px;color:#6b7280;">' + esc(obs) + '</div>' +
+            '<button onclick="document.getElementById(\'obs-short-' + id + '\').style.display=\'none\';document.getElementById(\'obs-long-' + id + '\').style.display=\'\';this.remove();" style="background:none;border:none;color:#1e40af;font-size:12px;cursor:pointer;padding:2px 0;margin-top:2px;">Ver más</button>'
+          : '') +
+      '</div>';
+    }
+
+    html += '<div style="margin-top:14px;border-top:1px solid #f0f0f0;padding-top:14px;">' +
+      '<div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Historial de ubicaciones</div>' +
+      '<div id="pac-hist-modal-' + id + '"><div style="color:#9ca3af;font-size:13px;">Cargando...</div></div>' +
+    '</div>';
+
+    document.getElementById('pac-modal-body').innerHTML = html;
+    var modal = document.getElementById('pac-modal-bg');
+    modal.style.display = 'flex';
+
+    fetch('/api/pacientes/' + id + '/historial')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var el = document.getElementById('pac-hist-modal-' + id);
+        if (!el) return;
+        if (!data.length) {
+          el.innerHTML = '<div style="color:#9ca3af;font-size:13px;">Sin cambios de ubicación registrados.</div>';
+          return;
+        }
+        el.innerHTML = '<div style="border-left:2px solid #e5e7eb;padding-left:14px;">' +
+          data.map(function(m) {
+            var batch = m.batch_date_nuevo || m.batch_date_anterior || '—';
+            var fechaDet = m.created_at ? new Date(m.created_at).toLocaleDateString('es-VE', { timeZone:'America/Caracas', day:'numeric', month:'short', year:'numeric' }) : '—';
+            return '<div style="position:relative;margin-bottom:12px;">' +
+              '<div style="position:absolute;left:-19px;top:0;font-size:12px;">🏥</div>' +
+              '<div style="font-size:13px;font-weight:600;color:#374151;">[' + esc(batch) + '] ' + esc(m.hospital_anterior||'—') + ' → ' + esc(m.hospital_nuevo||'—') + '</div>' +
+              '<div style="font-size:12px;color:#6b7280;">Estado: ' + esc(m.estado_anterior||'—') + ' → ' + esc(m.estado_nuevo||'—') + '</div>' +
+              '<div style="font-size:11px;color:#9ca3af;">Detectado: ' + fechaDet + '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>';
+      })
+      .catch(function() {
+        var el = document.getElementById('pac-hist-modal-' + id);
+        if (el) el.innerHTML = '<div style="color:#dc2626;font-size:13px;">Error al cargar historial.</div>';
+      });
+  }
+
+  function cerrarPacDetalle() {
+    document.getElementById('pac-modal-bg').style.display = 'none';
+  }
+
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') cerrarPacDetalle(); });
 </script>
 </body>
 </html>

@@ -76,6 +76,10 @@ class PacienteHospitalizado(Base):
     necesita_ayuda = Column(Boolean, nullable=False, default=False)
     tipo_ayuda = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    telefono = Column(String(30), nullable=True)
+    nombre_variantes = Column(Text, nullable=True)
+    batch_date = Column(String(20), nullable=True)
+    fuente = Column(String(30), nullable=True, default="manual")
 
 class BomberoReporte(Base):
     __tablename__ = "bombero_reportes"
@@ -86,4 +90,16 @@ class BomberoReporte(Base):
     precision_metros = Column(String(20), nullable=True)
     status = Column(String(30), nullable=False, default="trabajando")
     descripcion = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class PacienteMovimiento(Base):
+    __tablename__ = "paciente_movimientos"
+    id = Column(Integer, primary_key=True, index=True)
+    paciente_id = Column(Integer, nullable=False, index=True)
+    hospital_anterior = Column(String(200), nullable=True)
+    hospital_nuevo = Column(String(200), nullable=True)
+    estado_anterior = Column(String(30), nullable=True)
+    estado_nuevo = Column(String(30), nullable=True)
+    batch_date_anterior = Column(String(20), nullable=True)
+    batch_date_nuevo = Column(String(20), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

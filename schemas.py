@@ -65,6 +65,10 @@ class PacienteResponse(BaseModel):
     necesita_ayuda: bool = False
     tipo_ayuda: Optional[str] = None
     created_at: datetime
+    telefono: Optional[str] = None
+    nombre_variantes: Optional[str] = None
+    batch_date: Optional[str] = None
+    fuente: Optional[str] = None
 
     @field_serializer('created_at')
     def serialize_created_at(self, value: datetime) -> str:
@@ -84,6 +88,27 @@ class BomberoReporteResponse(BaseModel):
     precision_metros: Optional[str] = None
     status: str
     descripcion: Optional[str] = None
+    created_at: datetime
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, value: datetime) -> str:
+        from datetime import timezone, timedelta
+        VE_TZ = timezone(timedelta(hours=-4))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(VE_TZ).isoformat()
+
+    model_config = {"from_attributes": True}
+
+class MovimientoResponse(BaseModel):
+    id: int
+    paciente_id: int
+    hospital_anterior: Optional[str] = None
+    hospital_nuevo: Optional[str] = None
+    estado_anterior: Optional[str] = None
+    estado_nuevo: Optional[str] = None
+    batch_date_anterior: Optional[str] = None
+    batch_date_nuevo: Optional[str] = None
     created_at: datetime
 
     @field_serializer('created_at')
