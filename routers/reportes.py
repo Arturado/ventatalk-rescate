@@ -46,7 +46,7 @@ async def save_photo(foto: UploadFile):
     return f"{BASE_URL}/uploads/fotos/{filename}"
 
 @router.post("/", response_model=schemas.PersonaResponse, status_code=201)
-@limiter.limit("500/hour")
+@limiter.limit("1000/hour")
 async def crear_reporte(
     request: Request,
     nombres_apellidos: str = Form(...),
