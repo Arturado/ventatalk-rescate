@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Reporte de Acopio — Venezuela Rescate</title>
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100dvh; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a; color: #f1f5f9;
+      display: flex; flex-direction: column;
+    }
+
+    /* HEADER */
+    #hdr {
+      position: sticky; top: 0; z-index: 10;
+      background: #0f172a; border-bottom: 1px solid #1e293b;
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      flex-shrink: 0;
+    }
+    #hdr-title {
+      font-size: 14px; font-weight: 700; color: #f1f5f9;
+      display: flex; align-items: center; gap: 8px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #conn-badge {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600;
+      padding: 4px 10px; border-radius: 20px;
+      background: #1e293b; flex-shrink: 0; transition: all .2s;
+    }
+    #conn-dot { width: 8px; height: 8px; border-radius: 50%; background: #16a34a; flex-shrink: 0; }
+    #conn-badge.offline #conn-dot { background: #dc2626; }
+    #conn-badge.offline #conn-text { color: #fca5a5; }
+
+    /* MAIN */
+    #main { flex: 1; padding: 16px; max-width: 600px; width: 100%; margin: 0 auto; }
+
+    /* SECTION */
+    .section {
+      background: #1e293b; border-radius: 14px;
+      border: 1px solid #334155;
+      padding: 16px 16px 18px;
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-size: 14px; font-weight: 700; color: #f1f5f9;
+      margin-bottom: 14px; padding-bottom: 10px;
+      border-bottom: 1px solid #334155;
+    }
+
+    /* POPULATION INPUTS */
+    .pop-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    }
+    .pop-field label {
+      display: block; font-size: 12px; font-weight: 600;
+      color: #94a3b8; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .pop-input {
+      width: 100%; min-height: 56px;
+      background: #0f172a; border: 1.5px solid #334155;
+      border-radius: 10px; padding: 10px 14px;
+      font-size: 22px; font-weight: 700; color: #f1f5f9;
+      text-align: center; outline: none;
+      -webkit-appearance: none; appearance: none;
+      transition: border-color .15s;
+    }
+    .pop-input:focus { border-color: #dc2626; }
+
+    /* CHECKBOXES */
+    .cb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .cb-item {
+      display: flex; align-items: flex-start; gap: 8px;
+      background: #0f172a; border: 1.5px solid #334155;
+      border-radius: 8px; padding: 10px 10px;
+      cursor: pointer; transition: border-color .15s;
+      user-select: none;
+    }
+    .cb-item:hover { border-color: #475569; }
+    .cb-item.checked { border-color: #dc2626; background: #3b0a0a; }
+    .cb-item.checked-green { border-color: #16a34a; background: #052e16; }
+    .cb-item input[type="checkbox"] {
+      width: 18px; height: 18px; flex-shrink: 0;
+      cursor: pointer; margin-top: 1px;
+      accent-color: #dc2626;
+    }
+    .cb-item.checked-green input[type="checkbox"] { accent-color: #16a34a; }
+    .cb-label { font-size: 13px; color: #cbd5e1; line-height: 1.3; }
+
+    /* CUSTOM ITEMS */
+    .custom-input-row {
+      display: flex; gap: 8px; margin-top: 12px;
+    }
+    .custom-input {
+      flex: 1; background: #0f172a; border: 1.5px solid #334155;
+      border-radius: 8px; padding: 10px 12px;
+      font-size: 14px; color: #f1f5f9; outline: none;
+      transition: border-color .15s;
+    }
+    .custom-input::placeholder { color: #475569; }
+    .custom-input:focus { border-color: #dc2626; }
+    .btn-add {
+      width: 44px; height: 44px; flex-shrink: 0;
+      background: #dc2626; color: white; border: none;
+      border-radius: 8px; font-size: 22px; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: background .15s;
+    }
+    .btn-add:hover { background: #b91c1c; }
+    .chips-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: #334155; border-radius: 20px;
+      padding: 4px 10px; font-size: 12px; font-weight: 600; color: #f1f5f9;
+    }
+    .chip-x {
+      background: transparent; border: none; color: #94a3b8;
+      cursor: pointer; font-size: 14px; line-height: 1;
+      padding: 0 2px; flex-shrink: 0; transition: color .15s;
+    }
+    .chip-x:hover { color: #f1f5f9; }
+
+    /* NOTES */
+    #notas-input {
+      width: 100%; min-height: 80px;
+      background: #0f172a; border: 1.5px solid #334155;
+      border-radius: 10px; padding: 12px 14px;
+      font-size: 15px; color: #f1f5f9;
+      outline: none; resize: vertical;
+      font-family: inherit; line-height: 1.5;
+      transition: border-color .15s;
+    }
+    #notas-input::placeholder { color: #475569; }
+    #notas-input:focus { border-color: #dc2626; }
+
+    /* REPORTER */
+    #reporter-input {
+      width: 100%;
+      background: #0f172a; border: 1.5px solid #334155;
+      border-radius: 10px; padding: 12px 14px;
+      font-size: 15px; color: #f1f5f9;
+      outline: none; transition: border-color .15s;
+    }
+    #reporter-input::placeholder { color: #475569; }
+    #reporter-input:focus { border-color: #dc2626; }
+    .field-hint { font-size: 11px; color: #475569; margin-top: 6px; }
+
+    /* SUBMIT */
+    #btn-submit {
+      width: 100%; min-height: 56px;
+      background: #dc2626; color: white; border: none;
+      border-radius: 12px; font-size: 17px; font-weight: 800;
+      cursor: pointer; margin-bottom: 32px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: background .15s;
+    }
+    #btn-submit:hover { background: #b91c1c; }
+    #btn-submit:disabled { background: #7f1d1d; color: #fca5a5; cursor: not-allowed; }
+
+    /* SUCCESS */
+    .success-screen {
+      text-align: center; padding: 40px 20px;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 16px;
+    }
+    .success-icon { font-size: 64px; }
+    .success-title { font-size: 22px; font-weight: 800; color: #4ade80; }
+    .success-msg { font-size: 15px; color: #94a3b8; max-width: 300px; line-height: 1.5; }
+    .btn-nuevo {
+      width: 100%; max-width: 340px; padding: 15px;
+      background: #16a34a; color: white; border: none;
+      border-radius: 12px; font-size: 16px; font-weight: 700;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-nuevo:hover { background: #15803d; }
+
+    /* ERROR */
+    .error-msg {
+      background: #3b0a0a; border: 1px solid #7f1d1d;
+      border-radius: 10px; padding: 12px 16px;
+      color: #fca5a5; font-size: 14px; font-weight: 600;
+      margin-bottom: 12px; display: none;
+    }
+
+    /* SPINNER */
+    .spinner-inline {
+      width: 20px; height: 20px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-top-color: white; border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 400px) {
+      .cb-grid { grid-template-columns: 1fr; }
+      .pop-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header id="hdr">
+  <div id="hdr-title">📦 Cargando centro...</div>
+  <div id="conn-badge">
+    <div id="conn-dot"></div>
+    <span id="conn-text">En línea</span>
+  </div>
+</header>
+
+<main id="main">
+  <div class="error-msg" id="error-msg"></div>
+  <div id="form-content"></div>
+</main>
+
+<script>
+var CENTRO_ID = {{ centro_id }};
+var _extraNec = [];
+var _extraNoNec = [];
+
+var ITEMS = [
+  'Agua potable',
+  'Alimentos no perecederos',
+  'Fórmula láctea/leche',
+  'Comida preparada',
+  'Tiendas de campaña',
+  'Colchonetas / catres',
+  'Frazadas / sábanas',
+  'Lonas / plásticos',
+  'Medicamentos básicos',
+  'Botiquín primeros auxilios',
+  'Pañales',
+  'Artículos de higiene personal',
+  'Toallas sanitarias',
+  'Ropa (adultos)',
+  'Ropa (niños)',
+  'Calzado',
+  'Linternas/velas/pilas',
+  'Cargadores / poder eléctrico'
+];
+
+/* ── Conexión ── */
+function updateConn() {
+  var b = document.getElementById('conn-badge');
+  var t = document.getElementById('conn-text');
+  if (navigator.onLine) { b.classList.remove('offline'); t.textContent = 'En línea'; }
+  else { b.classList.add('offline'); t.textContent = 'Sin señal'; }
+}
+window.addEventListener('online',  updateConn);
+window.addEventListener('offline', updateConn);
+updateConn();
+
+/* ── Cargar nombre del centro ── */
+async function loadCentro() {
+  try {
+    var res = await fetch('/api/acopio/centros/' + CENTRO_ID);
+    if (!res.ok) throw new Error();
+    var c = await res.json();
+    document.getElementById('hdr-title').textContent = '📦 ' + c.nombre;
+    document.title = c.nombre + ' — Reporte';
+  } catch(e) {
+    document.getElementById('hdr-title').textContent = '📦 Centro #' + CENTRO_ID;
+  }
+}
+
+/* ── Render formulario ── */
+function buildCheckboxes(prefix, isNec) {
+  var colorCls = isNec ? 'checked-green' : 'checked';
+  return ITEMS.map(function(item, i) {
+    var id = prefix + '_cb_' + i;
+    return '<label class="cb-item" id="' + id + '-wrap" onclick="toggleCb(\'' + id + '\', this, \'' + colorCls + '\')">' +
+      '<input type="checkbox" id="' + id + '" onclick="event.stopPropagation()">' +
+      '<span class="cb-label">' + esc(item) + '</span>' +
+    '</label>';
+  }).join('');
+}
+
+function toggleCb(id, wrap, cls) {
+  var cb = document.getElementById(id);
+  cb.checked = !cb.checked;
+  if (cb.checked) wrap.classList.add(cls);
+  else wrap.classList.remove(cls);
+}
+
+function renderChips(prefix) {
+  var arr = prefix === 'nec' ? _extraNec : _extraNoNec;
+  var container = document.getElementById(prefix + '-chips');
+  if (!container) return;
+  container.innerHTML = arr.map(function(item, i) {
+    return '<span class="chip">' + esc(item) +
+      '<button class="chip-x" onclick="removeChip(\'' + prefix + '\',' + i + ')">×</button>' +
+    '</span>';
+  }).join('');
+}
+
+function addChip(prefix) {
+  var input = document.getElementById(prefix + '-extra-input');
+  var val = (input.value || '').trim();
+  if (!val) return;
+  if (prefix === 'nec') _extraNec.push(val);
+  else _extraNoNec.push(val);
+  input.value = '';
+  renderChips(prefix);
+}
+
+function removeChip(prefix, idx) {
+  if (prefix === 'nec') _extraNec.splice(idx, 1);
+  else _extraNoNec.splice(idx, 1);
+  renderChips(prefix);
+}
+
+function necSection(prefix, title, isNec) {
+  return '<div class="section">' +
+    '<div class="section-title">' + title + '</div>' +
+    '<div class="cb-grid">' + buildCheckboxes(prefix, isNec) + '</div>' +
+    '<div class="custom-input-row">' +
+      '<input class="custom-input" id="' + prefix + '-extra-input" type="text" placeholder="Agregar item..." ' +
+        'onkeydown="if(event.key===\'Enter\'){event.preventDefault();addChip(\'' + prefix + '\');}">' +
+      '<button class="btn-add" onclick="addChip(\'' + prefix + '\')">+</button>' +
+    '</div>' +
+    '<div class="chips-wrap" id="' + prefix + '-chips"></div>' +
+  '</div>';
+}
+
+function buildForm() {
+  var savedReporter = localStorage.getItem('aco_reportado_por') || '';
+
+  document.getElementById('form-content').innerHTML =
+    /* SECCIÓN 1 — Población */
+    '<div class="section">' +
+      '<div class="section-title">👥 Población actual</div>' +
+      '<div class="pop-grid">' +
+        '<div class="pop-field"><label>👨 Hombres</label><input class="pop-input" id="hombres" type="number" inputmode="numeric" min="0" value="0"></div>' +
+        '<div class="pop-field"><label>👩 Mujeres</label><input class="pop-input" id="mujeres" type="number" inputmode="numeric" min="0" value="0"></div>' +
+        '<div class="pop-field"><label>👶 Niños</label><input class="pop-input" id="ninos" type="number" inputmode="numeric" min="0" value="0"></div>' +
+        '<div class="pop-field"><label>🍼 Lactantes</label><input class="pop-input" id="lactantes" type="number" inputmode="numeric" min="0" value="0"></div>' +
+      '</div>' +
+    '</div>' +
+
+    /* SECCIÓN 2 — ¿Qué necesitan? */
+    necSection('nec', '✅ ¿Qué necesitan?', true) +
+
+    /* SECCIÓN 3 — ¿Qué NO necesitan? */
+    necSection('nonec', '❌ ¿Qué NO necesitan?', false) +
+
+    /* SECCIÓN 4 — Notas */
+    '<div class="section">' +
+      '<div class="section-title">📝 Notas adicionales</div>' +
+      '<textarea id="notas-input" placeholder="Situación general, novedades, observaciones..."></textarea>' +
+    '</div>' +
+
+    /* SECCIÓN 5 — Quien reporta */
+    '<div class="section">' +
+      '<div class="section-title">👤 Quien reporta</div>' +
+      '<input id="reporter-input" type="text" placeholder="Tu nombre o cargo (opcional)" value="' + esc(savedReporter) + '">' +
+      '<p class="field-hint">Se guarda en este dispositivo para la próxima vez.</p>' +
+    '</div>' +
+
+    '<button id="btn-submit" onclick="submitForm()">📡 ENVIAR REPORTE</button>';
+
+  /* Persistir nombre de reportante */
+  document.getElementById('reporter-input').addEventListener('input', function() {
+    localStorage.setItem('aco_reportado_por', this.value.trim());
+  });
+}
+
+/* ── Submit ── */
+async function submitForm() {
+  var btn = document.getElementById('btn-submit');
+  var errEl = document.getElementById('error-msg');
+  errEl.style.display = 'none';
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner-inline"></div> Enviando...';
+
+  /* Recolectar checkboxes necesitan */
+  var necesitan = ITEMS.filter(function(_, i) {
+    return document.getElementById('nec_cb_' + i) && document.getElementById('nec_cb_' + i).checked;
+  }).join(',');
+
+  /* Recolectar checkboxes no necesitan */
+  var noNecesitan = ITEMS.filter(function(_, i) {
+    return document.getElementById('nonec_cb_' + i) && document.getElementById('nonec_cb_' + i).checked;
+  }).join(',');
+
+  var fd = new FormData();
+  fd.append('centro_id', CENTRO_ID);
+  fd.append('hombres',   parseInt(document.getElementById('hombres').value)   || 0);
+  fd.append('mujeres',   parseInt(document.getElementById('mujeres').value)   || 0);
+  fd.append('ninos',     parseInt(document.getElementById('ninos').value)     || 0);
+  fd.append('lactantes', parseInt(document.getElementById('lactantes').value) || 0);
+  if (necesitan)           fd.append('necesitan', necesitan);
+  if (noNecesitan)         fd.append('no_necesitan', noNecesitan);
+  if (_extraNec.length)    fd.append('necesitan_extra', _extraNec.join(','));
+  if (_extraNoNec.length)  fd.append('no_necesitan_extra', _extraNoNec.join(','));
+  var notas = document.getElementById('notas-input').value.trim();
+  if (notas) fd.append('notas', notas);
+  var rep = document.getElementById('reporter-input').value.trim();
+  if (rep) fd.append('reportado_por', rep);
+
+  try {
+    var res = await fetch('/api/acopio/reportes', { method: 'POST', body: fd });
+    if (!res.ok) {
+      var d = await res.json().catch(function(){return {};});
+      throw new Error(d.detail || 'Error del servidor');
+    }
+    showSuccess();
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = '📡 ENVIAR REPORTE';
+    errEl.textContent = '❌ ' + (e.message || 'Error — verifica conexión');
+    errEl.style.display = 'block';
+    errEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function showSuccess() {
+  _extraNec = [];
+  _extraNoNec = [];
+  document.getElementById('form-content').innerHTML =
+    '<div class="success-screen">' +
+      '<div class="success-icon">✅</div>' +
+      '<div class="success-title">Reporte enviado</div>' +
+      '<div class="success-msg">Gracias por mantener actualizado el centro. La información ayuda a coordinar la ayuda.</div>' +
+      '<button class="btn-nuevo" onclick="reiniciarForm()">Hacer otro reporte</button>' +
+      '<a href="/acopio" style="margin-top:6px;font-size:13px;color:#475569;text-decoration:none;">← Ver estado de todos los centros</a>' +
+    '</div>';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function reiniciarForm() {
+  buildForm();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── Init ── */
+loadCentro();
+buildForm();
+</script>
+</body>
+</html>

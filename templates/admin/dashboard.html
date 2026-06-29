@@ -108,6 +108,21 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 
 /* Bomberos tab */
 .dash-tab.active-fire { color:#dc2626; border-bottom-color:#dc2626; }
+
+/* Acopio tab */
+.dash-tab.active-green { color:#16a34a; border-bottom-color:#16a34a; }
+.aco-stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:22px; }
+.aco-stat { background:#fff; border-radius:10px; padding:16px 14px; box-shadow:0 1px 4px rgba(0,0,0,.07); border-left:4px solid #16a34a; }
+.aco-stat.blue { border-left-color:#1e40af; }
+.aco-stat.red  { border-left-color:#dc2626; }
+.aco-stat .num { font-size:26px; font-weight:800; color:#111; }
+.aco-stat .label { font-size:11px; color:#6b7280; margin-top:4px; text-transform:uppercase; letter-spacing:.04em; }
+.aco-sem { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; }
+.aco-sem-verde  { background:#dcfce7; color:#15803d; }
+.aco-sem-amarillo { background:#fefce8; color:#a16207; }
+.aco-sem-rojo   { background:#fef2f2; color:#dc2626; }
+.aco-sem-gris   { background:#f3f4f6; color:#6b7280; }
+.aco-hist-row td { background:#f8faff; font-size:12px; }
 .bom-stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:22px; }
 .bom-stat { background:#fff; border-radius:10px; padding:16px 14px; box-shadow:0 1px 4px rgba(0,0,0,.07); border-left:4px solid #dc2626; }
 .bom-stat.green { border-left-color:#16a34a; }
@@ -356,6 +371,40 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   </div>
 </div>
 
+<!-- Modal: Nuevo Centro de Acopio -->
+<div class="adm-modal-bd" id="modal-centro" onclick="if(event.target===this)closeModal('modal-centro')">
+  <div class="adm-modal">
+    <div class="adm-modal-hdr">
+      <div class="adm-modal-title">📦 Nuevo centro de acopio</div>
+      <button class="adm-modal-x" onclick="closeModal('modal-centro')">×</button>
+    </div>
+    <form id="form-centro" onsubmit="guardarCentro(event)">
+      <div class="fg">
+        <label>Nombre *</label>
+        <input type="text" name="nombre" required placeholder="Parque Alí Primera...">
+      </div>
+      <div class="fg">
+        <label>Zona</label>
+        <select name="zona">
+          <option value="">— No especificada —</option>
+          <option>Caracas - Libertador</option>
+          <option>Caracas - Chacao</option>
+          <option>Caracas - Sucre</option>
+          <option>Caracas - Baruta</option>
+          <option>Vargas</option>
+          <option>Miranda</option>
+          <option value="Otra">Otra</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Dirección</label>
+        <input type="text" name="direccion" placeholder="Av. Principal, Caracas">
+      </div>
+      <button type="submit" class="adm-save-btn" id="btn-guardar-centro">Guardar centro</button>
+    </form>
+  </div>
+</div>
+
 <!-- Modal: Nuevo Paciente -->
 <div class="adm-modal-bd" id="modal-pac" onclick="if(event.target===this)closeModal('modal-pac')">
   <div class="adm-modal">
@@ -452,6 +501,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   <button class="dash-tab active" id="tab-personas" onclick="switchTab('personas')">👥 Personas Desaparecidas</button>
   <button class="dash-tab" id="tab-pacientes" onclick="switchTab('pacientes')">🏥 Pacientes Hospitalizados</button>
   <button class="dash-tab" id="tab-bomberos" onclick="switchTab('bomberos')">🚒 Bomberos en Campo <span id="bom-apoyo-indicator"></span></button>
+  <button class="dash-tab" id="tab-acopio" onclick="switchTab('acopio')">📦 Centros de Acopio</button>
 </div>
 
 <!-- Pane: Personas Desaparecidas -->
@@ -793,6 +843,46 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
     </table>
   </div>
 </div><!-- /#pane-bomberos -->
+
+<!-- Pane: Centros de Acopio -->
+<div id="pane-acopio" style="display:none">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+    <h2 style="font-size:20px;font-weight:800;">Centros de Acopio</h2>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <a href="/acopio" target="_blank" style="padding:8px 16px;background:#374151;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;">🔗 Ver página pública</a>
+      <button onclick="openModal('modal-centro')" style="padding:8px 16px;background:#16a34a;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">➕ Nuevo centro</button>
+      <span id="aco-refresh-label" style="font-size:12px;color:#6b7280;">Actualiza en <span id="aco-countdown">60</span>s</span>
+      <button onclick="loadAcopio()" style="padding:8px 14px;background:#dc2626;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">🔄 Actualizar</button>
+    </div>
+  </div>
+
+  <div class="aco-stats-grid">
+    <div class="aco-stat"><div class="num" id="as-activos">—</div><div class="label">Centros activos</div></div>
+    <div class="aco-stat blue"><div class="num" id="as-hoy">—</div><div class="label">Reportes hoy</div></div>
+    <div class="aco-stat red"><div class="num" id="as-sin-reporte">—</div><div class="label">Sin reporte hoy</div></div>
+  </div>
+
+  <div class="table-wrap">
+    <table id="tabla-acopio" style="min-width:900px;">
+      <thead style="background:#16a34a;">
+        <tr>
+          <th>#</th>
+          <th>Centro</th>
+          <th>Zona</th>
+          <th>Población</th>
+          <th>Necesitan</th>
+          <th>Último reporte</th>
+          <th>Estado</th>
+          <th>Hoy</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="aco-tbody">
+        <tr><td colspan="9" style="text-align:center;color:#6b7280;padding:40px;">Cargando centros...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div><!-- /#pane-acopio -->
 
 <!-- Lightbox foto captura -->
 <div class="lb-foto" id="lb-foto" onclick="if(event.target===this)closeLbFoto()">
@@ -1330,15 +1420,23 @@ function switchTab(tab) {
   document.getElementById('pane-personas').style.display  = tab === 'personas'  ? '' : 'none';
   document.getElementById('pane-pacientes').style.display = tab === 'pacientes' ? '' : 'none';
   document.getElementById('pane-bomberos').style.display  = tab === 'bomberos'  ? '' : 'none';
+  document.getElementById('pane-acopio').style.display    = tab === 'acopio'    ? '' : 'none';
   document.getElementById('tab-personas').className  = 'dash-tab' + (tab === 'personas'  ? ' active' : '');
   document.getElementById('tab-pacientes').className = 'dash-tab' + (tab === 'pacientes' ? ' active-blue' : '');
   document.getElementById('tab-bomberos').className  = 'dash-tab' + (tab === 'bomberos'  ? ' active-fire' : '');
+  document.getElementById('tab-acopio').className    = 'dash-tab' + (tab === 'acopio'    ? ' active-green' : '');
   if (tab === 'pacientes' && !_pacientesLoaded) loadPacientes();
   if (tab === 'bomberos') {
     if (!_bomberosLoaded) loadBomberos();
     startBomRefresh();
   } else {
     stopBomRefresh();
+  }
+  if (tab === 'acopio') {
+    if (!_acopioLoaded) loadAcopio();
+    startAcoRefresh();
+  } else {
+    stopAcoRefresh();
   }
 }
 
@@ -1549,7 +1647,7 @@ function closeLbFoto() {
   document.getElementById('lb-foto').classList.remove('open');
   document.getElementById('lb-foto-img').src = '';
 }
-document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { closeLbFoto(); closeModal('modal-hosp'); closeModal('modal-pac'); } });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { closeLbFoto(); closeModal('modal-hosp'); closeModal('modal-pac'); closeModal('modal-centro'); } });
 
 async function exportPacientesCSV() {
   var key = sessionStorage.getItem('vr_api_key') || getApiKey();
@@ -2078,6 +2176,221 @@ async function guardarPacienteAdmin(e) {
     }
   } catch(e) { alert('Error de conexión.'); }
   btn.disabled = false; btn.textContent = 'Registrar paciente';
+}
+
+/* ---- ACOPIO ---- */
+var _acopioLoaded = false;
+var _acopioData   = [];
+var _acoRefreshTimer = null;
+var _acoCountdown = 60;
+
+function acoSemaforo(ultimoReporte) {
+  if (!ultimoReporte) return { cls: 'aco-sem-gris', txt: '⚫ Sin reporte' };
+  var diffMin = (Date.now() - new Date(ultimoReporte.created_at).getTime()) / 60000;
+  if (diffMin < 120) return { cls: 'aco-sem-verde',    txt: '🟢 ' + tiempoRelativo(ultimoReporte.created_at) };
+  if (diffMin < 360) return { cls: 'aco-sem-amarillo', txt: '🟡 ' + tiempoRelativo(ultimoReporte.created_at) };
+  return { cls: 'aco-sem-rojo', txt: '🔴 ' + tiempoRelativo(ultimoReporte.created_at) };
+}
+
+function acoJuntarItems(a, b) {
+  var items = [];
+  if (a) items = items.concat(a.split(',').map(function(s){return s.trim();}).filter(Boolean));
+  if (b) items = items.concat(b.split(',').map(function(s){return s.trim();}).filter(Boolean));
+  return items;
+}
+
+async function loadAcopio() {
+  _acoCountdown = 60;
+  var cdEl = document.getElementById('aco-countdown');
+  if (cdEl) cdEl.textContent = '60';
+  try {
+    var res = await fetch('/api/acopio/estado');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _acopioData = await res.json();
+    _acopioLoaded = true;
+    renderAcopioStats();
+    renderAcopioTable(_acopioData);
+  } catch(e) {
+    document.getElementById('aco-tbody').innerHTML =
+      '<tr><td colspan="9" style="color:#dc2626;text-align:center;padding:24px;">Error al cargar. Intenta de nuevo.</td></tr>';
+  }
+}
+
+function renderAcopioStats() {
+  var activos = _acopioData.length;
+  var sinReporte = _acopioData.filter(function(d){ return !d.ultimo_reporte; }).length;
+  var totalHoy = _acopioData.reduce(function(acc, d){ return acc + (d.total_reportes_hoy || 0); }, 0);
+  document.getElementById('as-activos').textContent    = activos;
+  document.getElementById('as-hoy').textContent        = totalHoy;
+  document.getElementById('as-sin-reporte').textContent = sinReporte;
+}
+
+function renderAcopioTable(arr) {
+  var tbody = document.getElementById('aco-tbody');
+  if (!arr.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#6b7280;padding:32px;">Sin centros activos.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = arr.map(function(item) {
+    var c = item.centro;
+    var r = item.ultimo_reporte;
+    var hoy = item.total_reportes_hoy || 0;
+    var sem = acoSemaforo(r);
+    var total = r ? ((r.hombres||0)+(r.mujeres||0)+(r.ninos||0)+(r.lactantes||0)) : '—';
+    var nec = r ? acoJuntarItems(r.necesitan, r.necesitan_extra) : [];
+    var necTxt = nec.length ? esc(nec.slice(0,3).join(', ')) + (nec.length > 3 ? '…' : '') : '—';
+
+    return '<tr data-acid="' + c.id + '">' +
+      '<td>' + c.id + '</td>' +
+      '<td><strong>' + esc(c.nombre) + '</strong>' + (c.direccion ? '<br><span style="font-size:11px;color:#9ca3af;">' + esc(c.direccion) + '</span>' : '') + '</td>' +
+      '<td style="white-space:nowrap;">' + esc(c.zona||'—') + '</td>' +
+      '<td style="text-align:center;font-weight:700;">' + total + '</td>' +
+      '<td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + (r ? esc(acoJuntarItems(r.necesitan, r.necesitan_extra).join(', ')) : '') + '">' + necTxt + '</td>' +
+      '<td style="white-space:nowrap;font-size:12px;">' + (r ? fmtDate(r.created_at) : '—') + '</td>' +
+      '<td><span class="aco-sem ' + sem.cls + '">' + sem.txt + '</span></td>' +
+      '<td style="text-align:center;">' + hoy + '</td>' +
+      '<td>' +
+        '<div style="display:flex;gap:4px;flex-wrap:wrap;">' +
+          '<button onclick="toggleAcopioHistorial(' + c.id + ',this)" style="font-size:11px;padding:4px 8px;background:#374151;color:white;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">📋 Historial</button>' +
+          '<button onclick="desactivarCentro(' + c.id + ',this)" style="font-size:11px;padding:4px 8px;background:#ef4444;color:white;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">Desactivar</button>' +
+        '</div>' +
+      '</td>' +
+    '</tr>' +
+    '<tr id="aco-hist-' + c.id + '" class="aco-hist-row" style="display:none;">' +
+      '<td colspan="9" style="background:#f8faff;padding:10px 16px;">' +
+        '<div id="aco-hist-content-' + c.id + '">Cargando historial...</div>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+async function toggleAcopioHistorial(centroId, btn) {
+  var row = document.getElementById('aco-hist-' + centroId);
+  if (row.style.display !== 'none') {
+    row.style.display = 'none';
+    btn.textContent = '📋 Historial';
+    return;
+  }
+  row.style.display = '';
+  btn.textContent = '▲ Cerrar';
+
+  var key = getApiKey(); if (!key) return;
+  var content = document.getElementById('aco-hist-content-' + centroId);
+  content.innerHTML = '<span style="color:#6b7280;font-size:12px;">Cargando...</span>';
+  try {
+    var res = await fetch('/api/acopio/reportes/' + centroId + '/historial?limit=5', {
+      headers: { 'X-Api-Key': key }
+    });
+    if (res.status === 401) { sessionStorage.removeItem('vr_api_key'); content.innerHTML = '<span style="color:#dc2626;">API Key inválida.</span>'; return; }
+    var data = await res.json();
+    if (!data.length) { content.innerHTML = '<span style="color:#9ca3af;font-size:12px;">Sin reportes aún.</span>'; return; }
+    var csrf = document.querySelector('meta[name="csrf-token"]').content;
+    content.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+      '<thead><tr style="color:#6b7280;text-align:left;">' +
+        '<th style="padding:4px 8px;">Hora</th>' +
+        '<th style="padding:4px 8px;">Población</th>' +
+        '<th style="padding:4px 8px;">Necesitan</th>' +
+        '<th style="padding:4px 8px;">NO necesitan</th>' +
+        '<th style="padding:4px 8px;">Notas</th>' +
+        '<th style="padding:4px 8px;">Reportado por</th>' +
+        '<th style="padding:4px 8px;"></th>' +
+      '</tr></thead><tbody>' +
+      data.map(function(r) {
+        var total = (r.hombres||0)+(r.mujeres||0)+(r.ninos||0)+(r.lactantes||0);
+        var popStr = 'Total:' + total + ' (H:' + (r.hombres||0) + ' M:' + (r.mujeres||0) + ' N:' + (r.ninos||0) + ' L:' + (r.lactantes||0) + ')';
+        var nec = acoJuntarItems(r.necesitan, r.necesitan_extra).join(', ') || '—';
+        var noNec = acoJuntarItems(r.no_necesitan, r.no_necesitan_extra).join(', ') || '—';
+        return '<tr style="border-top:1px solid #e5e7eb;">' +
+          '<td style="padding:4px 8px;white-space:nowrap;">' + fmtDate(r.created_at) + '</td>' +
+          '<td style="padding:4px 8px;white-space:nowrap;">' + esc(popStr) + '</td>' +
+          '<td style="padding:4px 8px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(nec) + '">' + esc(nec) + '</td>' +
+          '<td style="padding:4px 8px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(noNec) + '">' + esc(noNec) + '</td>' +
+          '<td style="padding:4px 8px;max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(r.notas||'') + '">' + esc(r.notas||'—') + '</td>' +
+          '<td style="padding:4px 8px;">' + esc(r.reportado_por||'—') + '</td>' +
+          '<td style="padding:4px 8px;">' +
+            '<button onclick="eliminarAcopioReporte(' + r.id + ',\'' + csrf + '\',this)" style="font-size:10px;padding:3px 7px;background:#ef4444;color:white;border:none;border-radius:4px;cursor:pointer;">🗑</button>' +
+          '</td>' +
+        '</tr>';
+      }).join('') +
+    '</tbody></table>';
+  } catch(e) {
+    content.innerHTML = '<span style="color:#dc2626;font-size:12px;">Error al cargar historial.</span>';
+  }
+}
+
+async function eliminarAcopioReporte(reporteId, csrf, btn) {
+  if (!confirm('¿Eliminar este reporte de acopio?')) return;
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    var res = await fetch('/admin/acopio/reportes/' + reporteId, {
+      method: 'DELETE',
+      headers: { 'X-Csrf-Token': csrf }
+    });
+    if (!res.ok) throw new Error();
+    btn.closest('tr').remove();
+    showToast('✓ Reporte eliminado');
+    loadAcopio();
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '🗑';
+    alert('Error al eliminar. Intenta de nuevo.');
+  }
+}
+
+async function desactivarCentro(centroId, btn) {
+  if (!confirm('¿Desactivar este centro? Dejará de aparecer en la lista pública.')) return;
+  btn.disabled = true; btn.textContent = 'Desactivando...';
+  try {
+    var res = await fetch('/admin/acopio/centros/' + centroId, {
+      method: 'DELETE',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
+    });
+    if (!res.ok) throw new Error();
+    showToast('✓ Centro desactivado');
+    loadAcopio();
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Desactivar';
+    alert('Error al desactivar. Intenta de nuevo.');
+  }
+}
+
+async function guardarCentro(e) {
+  e.preventDefault();
+  var form = document.getElementById('form-centro');
+  var btn  = document.getElementById('btn-guardar-centro');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  var fd = new FormData(form);
+  try {
+    var res  = await fetch('/admin/acopio/centros/nuevo', {
+      method: 'POST',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content },
+      body: fd
+    });
+    var data = await res.json();
+    if (data.ok) {
+      showToast('✅ Centro "' + data.nombre + '" creado');
+      form.reset();
+      closeModal('modal-centro');
+      loadAcopio();
+    } else {
+      alert('Error: ' + (data.detail || 'No se pudo guardar'));
+    }
+  } catch(e) { alert('Error de conexión.'); }
+  btn.disabled = false; btn.textContent = 'Guardar centro';
+}
+
+function startAcoRefresh() {
+  stopAcoRefresh();
+  _acoCountdown = 60;
+  _acoRefreshTimer = setInterval(function() {
+    _acoCountdown--;
+    var el = document.getElementById('aco-countdown');
+    if (el) el.textContent = _acoCountdown;
+    if (_acoCountdown <= 0) { loadAcopio(); _acoCountdown = 60; }
+  }, 1000);
+}
+
+function stopAcoRefresh() {
+  if (_acoRefreshTimer) { clearInterval(_acoRefreshTimer); _acoRefreshTimer = null; }
 }
 
 /* ---- Init ---- */

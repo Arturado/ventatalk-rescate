@@ -19,6 +19,7 @@ from routers.admin import router as admin_router
 from routers.stats import router as stats_router, public_router as stats_public_router
 from routers.hospitales import router as hospitales_router, pacientes_router
 from routers.bomberos import router as bomberos_router
+from routers.acopio import router as acopio_router
 from sqlalchemy import text as sql_text
 
 templates = Jinja2Templates(directory="templates")
@@ -39,6 +40,41 @@ def seed_admin_users(db: Session):
             hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
             db.add(models.AdminUser(username=username, password_hash=hashed))
     db.commit()
+
+
+def seed_centros_acopio(db: Session):
+    count = db.execute(sql_text("SELECT COUNT(*) FROM centros_acopio")).scalar()
+    if count > 0:
+        return
+
+    centros_acopio_data = [
+        # Chacao / Sucre
+        {"nombre": "Parque Alí Primera / Parque del Oeste", "direccion": "Catia / Gato Negro", "zona": "Caracas - Libertador"},
+        {"nombre": "Parque Francisco de Miranda / Parque del Este", "direccion": "Municipio Sucre", "zona": "Caracas - Sucre"},
+        {"nombre": "Plaza Altamira", "direccion": "Municipio Chacao", "zona": "Caracas - Chacao"},
+        {"nombre": "Plaza Bolívar de Chacao", "direccion": "Municipio Chacao", "zona": "Caracas - Chacao"},
+        {"nombre": "El Coliseo de Petare / Coliseo La Urbina", "direccion": "Prolongación Av. El Samán, Urb. La Urbina", "zona": "Caracas - Sucre"},
+        {"nombre": "Plaza los Museos", "direccion": "Caracas", "zona": "Caracas - Libertador"},
+        # Municipio Libertador
+        {"nombre": "Complejo Cultural Guayana Esequiba", "direccion": "Parroquia San Bernardino", "zona": "Caracas - Libertador"},
+        {"nombre": "Estadio Chato Candela", "direccion": "Parroquia 23 de Enero", "zona": "Caracas - Libertador"},
+        {"nombre": "Liceo Andrés Bello", "direccion": "Av. México", "zona": "Caracas - Libertador"},
+        {"nombre": "Sede Instituto Nacional de Deportes (IND)", "direccion": "Parroquia El Paraíso", "zona": "Caracas - Libertador"},
+        {"nombre": "Sede Ipostel (Centro Postal de Caracas)", "direccion": "Parroquia San Juan", "zona": "Caracas - Libertador"},
+        {"nombre": "Liceo Miguel Antonio Caro", "direccion": "Av. Sucre esq. Calle Real de Los Frailes, Catia", "zona": "Caracas - Libertador"},
+        {"nombre": "Instalaciones adyacentes Parque Alí Primera", "direccion": "Catia", "zona": "Caracas - Libertador"},
+        {"nombre": "U.E.N. Francisco Pimentel", "direccion": "Av. Sur 4, esq. Mamey a Dolores, Parroquia Santa Teresa", "zona": "Caracas - Libertador"},
+        {"nombre": "U.E.N. Gran Colombia", "direccion": "Av. Roosevelt con Av. Ayacucho, Los Cármenes, Parroquia Santa Rosalía", "zona": "Caracas - Libertador"},
+        {"nombre": "U.E.N. Luís Hurtado Higuera", "direccion": "Calle El Colegio, Urb. Luis Hurtado Higuera, El Junquito Km 12", "zona": "Caracas - Libertador"},
+        {"nombre": "Plaza Mausoleo", "direccion": "Final Av. Panteón", "zona": "Caracas - Libertador"},
+        {"nombre": "Escuela República de Bolivia", "direccion": "La Pastora", "zona": "Caracas - Libertador"},
+        {"nombre": "Polideportivo La Trinidad", "direccion": "La Trinidad, Caracas", "zona": "Caracas - Baruta"},
+    ]
+
+    for c in centros_acopio_data:
+        db.add(models.CentroAcopio(**c))
+    db.commit()
+    print(f"Seed: {len(centros_acopio_data)} centros de acopio insertados")
 
 
 def seed_hospitales(db: Session):
@@ -107,6 +143,7 @@ async def lifespan(app: FastAPI):
     try:
         seed_admin_users(db)
         seed_hospitales(db)
+        seed_centros_acopio(db)
     finally:
         db.close()
     yield
@@ -170,6 +207,7 @@ app.include_router(stats_public_router)
 app.include_router(hospitales_router)
 app.include_router(pacientes_router)
 app.include_router(bomberos_router)
+app.include_router(acopio_router)
 app.include_router(admin_router)
 
 
@@ -196,6 +234,17 @@ async def hospitales_reportar_page(request: Request):
 @app.get("/bombero", response_class=HTMLResponse)
 async def bombero_page(request: Request):
     return templates.TemplateResponse("bombero.html", {"request": request})
+
+
+@app.get("/acopio")
+async def acopio_page(request: Request):
+    return templates.TemplateResponse("acopio.html", {"request": request})
+
+
+@app.get("/acopio/reportar/{centro_id}")
+async def acopio_reportar_page(centro_id: int, request: Request):
+    return templates.TemplateResponse("acopio_reportar.html",
+        {"request": request, "centro_id": centro_id})
 
 
 @app.get("/health", tags=["sistema"])

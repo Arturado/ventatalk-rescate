@@ -103,3 +103,33 @@ class PacienteMovimiento(Base):
     batch_date_anterior = Column(String(20), nullable=True)
     batch_date_nuevo = Column(String(20), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class CentroAcopio(Base):
+    __tablename__ = "centros_acopio"
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(200), nullable=False, index=True)
+    direccion = Column(String(500), nullable=True)
+    zona = Column(String(100), nullable=True)
+    activo = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class AcopioReporte(Base):
+    __tablename__ = "acopio_reportes"
+    id = Column(Integer, primary_key=True, index=True)
+    centro_id = Column(Integer, nullable=False, index=True)
+    # Población
+    hombres = Column(Integer, nullable=True, default=0)
+    mujeres = Column(Integer, nullable=True, default=0)
+    ninos = Column(Integer, nullable=True, default=0)
+    lactantes = Column(Integer, nullable=True, default=0)
+    # Necesidades — lista separada por comas de items seleccionados
+    necesitan = Column(Text, nullable=True)
+    no_necesitan = Column(Text, nullable=True)
+    # Items adicionales escritos manualmente
+    necesitan_extra = Column(Text, nullable=True)
+    no_necesitan_extra = Column(Text, nullable=True)
+    # Notas libres
+    notas = Column(Text, nullable=True)
+    # Quien reporta
+    reportado_por = Column(String(200), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

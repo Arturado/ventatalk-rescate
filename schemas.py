@@ -120,3 +120,52 @@ class MovimientoResponse(BaseModel):
         return value.astimezone(VE_TZ).isoformat()
 
     model_config = {"from_attributes": True}
+
+class CentroAcopioResponse(BaseModel):
+    id: int
+    nombre: str
+    direccion: Optional[str] = None
+    zona: Optional[str] = None
+    activo: bool
+    created_at: datetime
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, value: datetime) -> str:
+        from datetime import timezone, timedelta
+        VE_TZ = timezone(timedelta(hours=-4))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(VE_TZ).isoformat()
+
+    model_config = {"from_attributes": True}
+
+class AcopioReporteResponse(BaseModel):
+    id: int
+    centro_id: int
+    hombres: Optional[int] = 0
+    mujeres: Optional[int] = 0
+    ninos: Optional[int] = 0
+    lactantes: Optional[int] = 0
+    necesitan: Optional[str] = None
+    no_necesitan: Optional[str] = None
+    necesitan_extra: Optional[str] = None
+    no_necesitan_extra: Optional[str] = None
+    notas: Optional[str] = None
+    reportado_por: Optional[str] = None
+    created_at: datetime
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, value: datetime) -> str:
+        from datetime import timezone, timedelta
+        VE_TZ = timezone(timedelta(hours=-4))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(VE_TZ).isoformat()
+
+    model_config = {"from_attributes": True}
+
+class CentroAcopioConReporteResponse(BaseModel):
+    centro: CentroAcopioResponse
+    ultimo_reporte: Optional[AcopioReporteResponse] = None
+    total_reportes_hoy: int = 0
+    model_config = {"from_attributes": True}

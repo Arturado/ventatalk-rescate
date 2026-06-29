@@ -806,3 +806,74 @@ async def get_import_job(job_id: str, request: Request):
         "result": job["result"],
         "error": job["error"],
     }
+
+
+# --- Centros de acopio ---
+
+@router.post("/acopio/centros/nuevo")
+async def nuevo_centro_acopio(
+    request: Request,
+    nombre: str = Form(...),
+    zona: Optional[str] = Form(None),
+    direccion: Optional[str] = Form(None),
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+    centro = models.CentroAcopio(
+        nombre=nombre,
+        zona=zona or None,
+        direccion=direccion or None,
+    )
+    db.add(centro)
+    db.commit()
+    db.refresh(centro)
+    return {"ok": True, "id": centro.id, "nombre": centro.nombre}
+
+
+@router.delete("/acopio/centros/{centro_id}")
+async def desactivar_centro_acopio(
+    centro_id: int,
+    request: Request,
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+    centro = db.query(models.CentroAcopio).filter(
+        models.CentroAcopio.id == centro_id
+    ).first()
+    if not centro:
+        raise HTTPException(status_code=404, detail="Centro no encontrado")
+    centro.activo = False
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/acopio/reportes/{reporte_id}")
+async def eliminar_acopio_reporte(
+    reporte_id: int,
+    request: Request,
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+    reporte = db.query(models.AcopioReporte).filter(
+        models.AcopioReporte.id == reporte_id
+    ).first()
+    if not reporte:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+    db.delete(reporte)
+    db.commit()
+    return {"ok": True}
