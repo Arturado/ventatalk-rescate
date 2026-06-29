@@ -547,10 +547,24 @@ def parse_estado_from_observaciones(obs: str) -> str:
     return "ingresado"
 
 
+def limpiar_numero_excel(valor) -> str:
+    if valor is None:
+        return None
+    s = str(valor).strip()
+    if s in ('', 'None', 'nan', '\xa0'):
+        return None
+    if s.endswith('.0'):
+        s = s[:-2]
+    return s
+
+
 def normalizar_cedula(valor) -> str:
     if isinstance(valor, float) and valor.is_integer():
         valor = int(valor)
-    return str(valor).strip().upper()
+    v = str(valor).strip().upper()
+    if v.endswith('.0'):
+        v = v[:-2]
+    return v
 
 
 HOSPITAL_ALIASES = {
@@ -649,12 +663,12 @@ async def import_excel_pacientes(
                 return s if s else None
 
             hospital = normalizar_hospital(_str(row[1] if len(row) > 1 else None))
-            edad = _str(row[3] if len(row) > 3 else None)
-            cedula_raw = row[4] if len(row) > 4 else None
+            edad = limpiar_numero_excel(row[3] if len(row) > 3 else None)
+            cedula_raw = limpiar_numero_excel(row[4] if len(row) > 4 else None)
             cedula = normalizar_cedula(cedula_raw) if cedula_raw is not None else None
             if cedula == "":
                 cedula = None
-            telefono = _str(row[5] if len(row) > 5 else None)
+            telefono = limpiar_numero_excel(row[5] if len(row) > 5 else None)
             direccion = _str(row[6] if len(row) > 6 else None)
             observaciones = _str(row[7] if len(row) > 7 else None)
             estado = parse_estado_from_observaciones(observaciones or "")
