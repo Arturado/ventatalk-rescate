@@ -13,12 +13,16 @@ _executor = ThreadPoolExecutor(max_workers=2)
 
 async def read_limited(upload: UploadFile, max_bytes: int = MAX_UPLOAD_BYTES) -> bytes | None:
     """
-    Lee el upload en chunks. Retorna None si supera el límite
-    sin haber cargado el archivo completo en memoria.
+    Lee el upload en chunks de 64KB.
+    Retorna None si supera el límite sin cargar el archivo completo en memoria.
     """
     chunks = []
-    total  = 0
-    async for chunk in upload:
+    total = 0
+    chunk_size = 64 * 1024  # 64KB por chunk
+    while True:
+        chunk = await upload.read(chunk_size)
+        if not chunk:
+            break
         total += len(chunk)
         if total > max_bytes:
             return None
