@@ -209,6 +209,24 @@ class PacienteUpdate(BaseModel):
 class EstadoPersonaUpdate(BaseModel):
     estado: str
 
+class CentroAcopioUpdate(BaseModel):
+    nombre: Optional[str] = None
+    direccion: Optional[str] = None
+    zona: Optional[str] = None
+    activo: Optional[bool] = None
+
+class AcopioReporteUpdate(BaseModel):
+    hombres: Optional[int] = None
+    mujeres: Optional[int] = None
+    ninos: Optional[int] = None
+    lactantes: Optional[int] = None
+    necesitan: Optional[str] = None
+    no_necesitan: Optional[str] = None
+    necesitan_extra: Optional[str] = None
+    no_necesitan_extra: Optional[str] = None
+    notas: Optional[str] = None
+    reportado_por: Optional[str] = None
+
 class CentroSolicitudResponse(BaseModel):
     id: int
     nombre: str

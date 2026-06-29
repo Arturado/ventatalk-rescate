@@ -125,6 +125,64 @@ def historial_centro(
         models.AcopioReporte.centro_id == centro_id
     ).order_by(desc(models.AcopioReporte.created_at)).limit(limit).all()
 
+@router.patch("/centros/{centro_id}", response_model=schemas.CentroAcopioResponse)
+def editar_centro(
+    centro_id: int,
+    data: schemas.CentroAcopioUpdate,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
+    if not centro:
+        raise HTTPException(status_code=404, detail="Centro no encontrado")
+    for campo, valor in data.model_dump(exclude_unset=True).items():
+        setattr(centro, campo, valor)
+    db.commit()
+    db.refresh(centro)
+    return centro
+
+@router.delete("/centros/{centro_id}")
+def desactivar_centro(
+    centro_id: int,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
+    if not centro:
+        raise HTTPException(status_code=404, detail="Centro no encontrado")
+    centro.activo = False
+    db.commit()
+    return {"ok": True, "id": centro_id}
+
+@router.patch("/reportes/{reporte_id}", response_model=schemas.AcopioReporteResponse)
+def editar_reporte(
+    reporte_id: int,
+    data: schemas.AcopioReporteUpdate,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    reporte = db.query(models.AcopioReporte).filter(models.AcopioReporte.id == reporte_id).first()
+    if not reporte:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+    for campo, valor in data.model_dump(exclude_unset=True).items():
+        setattr(reporte, campo, valor)
+    db.commit()
+    db.refresh(reporte)
+    return reporte
+
+@router.delete("/reportes/{reporte_id}")
+def eliminar_reporte(
+    reporte_id: int,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    reporte = db.query(models.AcopioReporte).filter(models.AcopioReporte.id == reporte_id).first()
+    if not reporte:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+    db.delete(reporte)
+    db.commit()
+    return {"ok": True, "id": reporte_id}
+
 @router.post("/solicitar-centro", status_code=201)
 @limiter.limit("10/hour")
 async def solicitar_centro(
