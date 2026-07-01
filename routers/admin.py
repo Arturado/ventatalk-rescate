@@ -1041,12 +1041,24 @@ async def listar_notificaciones_localizado(
         persona = db.query(models.PersonaDesaparecida).filter(
             models.PersonaDesaparecida.id == n.persona_id
         ).first()
+        es_reporte_nuevo = bool(persona and persona.tipo_reporte == "encontrado_vivo")
         result.append({
             "notificacion": _schemas.NotificacionLocalizadoResponse.model_validate(n),
+            "es_reporte_nuevo": es_reporte_nuevo,
             "persona": {
                 "id": persona.id,
                 "nombres_apellidos": persona.nombres_apellidos,
                 "cedula": persona.cedula,
+                "ultima_ubicacion": persona.ultima_ubicacion,
+                "descripcion": persona.descripcion,
+                "sexo": persona.sexo,
+                "edad_aproximada": persona.edad_aproximada,
+                "contextura": persona.contextura,
+                "cabello": persona.cabello,
+                "estado_clinico": persona.estado_clinico,
+                "numero_contacto": persona.numero_contacto,
+                "foto_url": persona.foto_url,
+                "tipo_reporte": persona.tipo_reporte,
                 "estado": persona.estado,
             } if persona else None,
         })

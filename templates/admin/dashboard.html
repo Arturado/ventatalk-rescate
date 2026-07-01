@@ -2829,40 +2829,81 @@ async function loadNotifLocalizado() {
   }
 }
 
+const NOTIF_SEXO_LABEL = { masculino: 'Masculino', femenino: 'Femenino', no_determinado: 'No determinado' };
+const NOTIF_EDAD_LABEL = { nino: 'Niño 0-12', joven: 'Joven 13-25', adulto: 'Adulto 26-60', adulto_mayor: 'Adulto mayor 60+', no_sabe: 'No sé' };
+const NOTIF_CONTEXTURA_LABEL = { delgada: 'Delgada', media: 'Media', robusta: 'Robusta', no_sabe: 'No sé' };
+const NOTIF_CABELLO_LABEL = { corto: 'Corto', largo: 'Largo', calvo: 'Calvo/a', canoso: 'Canoso/a', no_sabe: 'No sé' };
+const NOTIF_CLINICO_LABEL = { atrapado: 'Atrapado/a', herido: 'Herido/a', inconsciente: 'Inconsciente', fallecido: 'Fallecido/a', sin_informacion: 'Sin información' };
+
 function renderNotifLocalizadoCard(item) {
   const n = item.notificacion;
   const p = item.persona;
+  const esNuevo = !!item.es_reporte_nuevo;
   const el = document.createElement('div');
   el.className = 'match-pair';
   el.dataset.notifId = n.id;
+
   const nombre = p ? esc(p.nombres_apellidos) : 'Persona no encontrada';
   const cedula = p ? (p.cedula || '—') : '—';
   const estadoActual = p ? p.estado : '';
-  const fotoHtml = n.foto_url
-    ? `<a href="${n.foto_url}" target="_blank"><img src="${n.foto_url}" style="width:70px;height:70px;object-fit:cover;border-radius:8px;margin-top:6px;" alt="foto"></a>`
+  const fotoUrl = n.foto_url || (p ? p.foto_url : null);
+  const fotoHtml = fotoUrl
+    ? `<a href="${fotoUrl}" target="_blank"><img src="${fotoUrl}" style="width:70px;height:70px;object-fit:cover;border-radius:8px;margin-top:6px;" alt="foto"></a>`
     : '';
+
+  const varianteBadge = esNuevo
+    ? '<span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#ffedd5;color:#c2410c;border:1px solid #fed7aa;">🆕 Reporte nuevo</span>'
+    : '<span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;">🔗 Match con desaparecido</span>';
+
+  let detalleHtml;
+  if (esNuevo && p) {
+    const senasParts = [
+      p.sexo ? `Sexo: ${esc(NOTIF_SEXO_LABEL[p.sexo] || p.sexo)}` : null,
+      p.edad_aproximada ? `Edad: ${esc(NOTIF_EDAD_LABEL[p.edad_aproximada] || p.edad_aproximada)}` : null,
+      p.contextura ? `Contextura: ${esc(NOTIF_CONTEXTURA_LABEL[p.contextura] || p.contextura)}` : null,
+      p.cabello ? `Cabello: ${esc(NOTIF_CABELLO_LABEL[p.cabello] || p.cabello)}` : null,
+    ].filter(Boolean);
+    detalleHtml = `
+      <div style="font-size:13px;color:#374151;line-height:1.8;">
+        <div><strong>Nombre:</strong> ${esc(p.nombres_apellidos)}</div>
+        <div><strong>Cédula:</strong> ${esc(cedula)}</div>
+        <div><strong>Ubicación actual:</strong> ${esc(p.ultima_ubicacion || '—')}</div>
+        <div><strong>Descripción:</strong> ${esc(p.descripcion || '—')}</div>
+        ${senasParts.length ? `<div><strong>Señas físicas:</strong> ${senasParts.join(' · ')}</div>` : ''}
+        ${p.estado_clinico ? `<div><strong>Estado clínico:</strong> ${esc(NOTIF_CLINICO_LABEL[p.estado_clinico] || p.estado_clinico)}</div>` : ''}
+        <div><strong>Contacto del reportante:</strong> ${esc(p.numero_contacto || '—')}</div>
+        ${fotoHtml}
+        <div style="color:#9ca3af;font-size:12px;margin-top:6px;"><strong>Recibido:</strong> ${fmtDate(n.created_at)}</div>
+      </div>`;
+  } else {
+    detalleHtml = `
+      <div style="font-size:13px;color:#374151;line-height:1.7;">
+        <div><strong>Reportado por:</strong> ${esc(n.nombre_reportante)}</div>
+        <div><strong>Contacto:</strong> ${esc(n.numero_contacto)}</div>
+        <div><strong>Nota:</strong> ${esc(n.descripcion || '—')}</div>
+        ${fotoHtml}
+        <div style="color:#9ca3af;font-size:12px;margin-top:6px;"><strong>Recibido:</strong> ${fmtDate(n.created_at)}</div>
+      </div>`;
+  }
+
+  const personaIdArg = p ? p.id : 'null';
   el.innerHTML = `
     <div style="margin-bottom:10px;">
       <div style="font-size:14px;font-weight:700;">👤 ${nombre} — Cédula: ${esc(cedula)}</div>
       ${p ? `<span class="estado-badge estado-${esc(estadoActual)}">${esc((estadoActual || '').replace('_', ' '))}</span>` : ''}
     </div>
+    <div style="margin-bottom:10px;">${varianteBadge}</div>
     <hr style="border:none;border-top:1px solid #f0f0f0;margin:10px 0;">
-    <div style="font-size:13px;color:#374151;line-height:1.7;">
-      <div><strong>Reportado por:</strong> ${esc(n.nombre_reportante)}</div>
-      <div><strong>Contacto:</strong> ${esc(n.numero_contacto)}</div>
-      <div><strong>Nota:</strong> ${esc(n.descripcion || '—')}</div>
-      ${fotoHtml}
-      <div style="color:#9ca3af;font-size:12px;margin-top:6px;"><strong>Recibido:</strong> ${fmtDate(n.created_at)}</div>
-    </div>
+    ${detalleHtml}
     <hr style="border:none;border-top:1px solid #f0f0f0;margin:10px 0;">
     <div class="match-actions">
-      <button class="match-btn-confirm" onclick="confirmarNotifLocalizado(${n.id}, this)">✅ Confirmar — marcar como Localizado</button>
-      <button class="match-btn-discard" onclick="rechazarNotifLocalizado(${n.id}, this)">❌ Rechazar</button>
+      <button class="match-btn-confirm" onclick="confirmarNotifLocalizado(${n.id}, ${esNuevo}, this)">✅ Confirmar — marcar como Localizado</button>
+      <button class="match-btn-discard" onclick="rechazarNotifLocalizado(${n.id}, ${personaIdArg}, ${esNuevo}, this)">❌ Rechazar</button>
     </div>`;
   return el;
 }
 
-async function confirmarNotifLocalizado(id, btn) {
+async function confirmarNotifLocalizado(id, esNuevo, btn) {
   btn.disabled = true; btn.textContent = 'Confirmando…';
   try {
     const res = await fetch('/admin/notificaciones/' + id + '/confirmar', {
@@ -2871,7 +2912,7 @@ async function confirmarNotifLocalizado(id, btn) {
     });
     if (!res.ok) throw new Error();
     document.querySelector('[data-notif-id="' + id + '"]').remove();
-    showToast('✅ Persona marcada como Localizada');
+    showToast(esNuevo ? '✅ Reporte de encontrado confirmado' : '✅ Persona marcada como Localizada');
     actualizarContadorNotifLocalizado();
   } catch (e) {
     btn.disabled = false; btn.textContent = '✅ Confirmar — marcar como Localizado';
@@ -2879,7 +2920,7 @@ async function confirmarNotifLocalizado(id, btn) {
   }
 }
 
-async function rechazarNotifLocalizado(id, btn) {
+async function rechazarNotifLocalizado(id, personaId, esNuevo, btn) {
   btn.disabled = true; btn.textContent = 'Rechazando…';
   try {
     const res = await fetch('/admin/notificaciones/' + id + '/rechazar', {
@@ -2887,6 +2928,17 @@ async function rechazarNotifLocalizado(id, btn) {
       headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
     });
     if (!res.ok) throw new Error();
+
+    if (esNuevo && personaId) {
+      try {
+        await fetch('/admin/personas/' + personaId, {
+          method: 'DELETE',
+          headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
+        });
+      } catch (e) { /* la notificación ya quedó rechazada aunque falle el borrado */ }
+      showToast('❌ Reporte rechazado y eliminado');
+    }
+
     document.querySelector('[data-notif-id="' + id + '"]').remove();
     actualizarContadorNotifLocalizado();
   } catch (e) {

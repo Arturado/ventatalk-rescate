@@ -1061,6 +1061,7 @@ async function reconstructFiles(data) {
       <div class="cb-success-icon">✅</div>
       <h4>¡Reporte enviado!</h4>
       <p>Tu reporte está registrado y disponible para los equipos de rescate. Que Dios los guíe. 🙏🇻🇪</p>
+      ${tipoReporte === "encontrado_vivo" ? '<p>Tu reporte fue enviado y está pendiente de revisión por nuestro equipo.</p>' : ''}
     `;
     msgs.appendChild(el);
     inputArea.innerHTML = `<button class="cb-btn" onclick="resetChat()">Reportar otra persona</button>`;

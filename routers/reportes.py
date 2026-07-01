@@ -107,6 +107,19 @@ async def crear_reporte(
     db.add(persona)
     db.commit()
     db.refresh(persona)
+
+    if persona.tipo_reporte == "encontrado_vivo":
+        notificacion = models.PersonaNotificacionLocalizado(
+            persona_id=persona.id,
+            nombre_reportante=persona.numero_contacto or "Anónimo",
+            numero_contacto=persona.numero_contacto or "No registrado",
+            descripcion=persona.descripcion or "",
+            foto_url=persona.foto_url,
+            estado="pendiente",
+        )
+        db.add(notificacion)
+        db.commit()
+
     return persona
 
 
