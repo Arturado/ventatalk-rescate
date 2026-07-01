@@ -1,15 +1,22 @@
+import os
+import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 import models, schemas
 from database import get_db
 from dependencies import verify_api_key
+from services.images import read_limited, compress_image_async
 
 router = APIRouter(prefix="/api/personas", tags=["personas"])
 matches_router = APIRouter(prefix="/api/matches", tags=["matches"])
 limiter = Limiter(key_func=get_remote_address)
+
+BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
+UPLOAD_DIR_NOTIF = "uploads/notificaciones"
+os.makedirs(UPLOAD_DIR_NOTIF, exist_ok=True)
 
 @router.get("/", response_model=List[schemas.PersonaResponse])
 def listar_personas(
@@ -101,6 +108,93 @@ def cambiar_estado_persona(
     db.commit()
     db.refresh(persona)
     return persona
+
+
+@router.post("/{persona_id}/notificar-localizado")
+@limiter.limit("10/hour")
+async def notificar_localizado(
+    request: Request,
+    persona_id: int,
+    nombre_reportante: str = Form(...),
+    numero_contacto: str = Form(...),
+    descripcion: str = Form(None),
+    foto: UploadFile = File(None),
+    db: Session = Depends(get_db),
+):
+    persona = db.query(models.PersonaDesaparecida).filter(models.PersonaDesaparecida.id == persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    existente = db.query(models.PersonaNotificacionLocalizado).filter(
+        models.PersonaNotificacionLocalizado.persona_id == persona_id,
+        models.PersonaNotificacionLocalizado.estado == "pendiente",
+    ).first()
+    if existente:
+        return {"ok": False, "mensaje": "Ya existe una notificación pendiente para esta persona"}
+
+    foto_url = None
+    if foto and foto.filename:
+        file_bytes = await read_limited(foto)
+        if file_bytes is None:
+            raise HTTPException(status_code=413, detail="Archivo demasiado grande (máx 10MB)")
+        compressed = await compress_image_async(file_bytes)
+        if compressed:
+            filename = f"{uuid.uuid4()}.jpg"
+            with open(os.path.join(UPLOAD_DIR_NOTIF, filename), "wb") as f:
+                f.write(compressed)
+            foto_url = f"{BASE_URL}/uploads/notificaciones/{filename}"
+
+    notificacion = models.PersonaNotificacionLocalizado(
+        persona_id=persona_id,
+        nombre_reportante=nombre_reportante.strip(),
+        numero_contacto=numero_contacto.strip(),
+        descripcion=(descripcion.strip() if descripcion else None) or None,
+        foto_url=foto_url,
+        estado="pendiente",
+    )
+    db.add(notificacion)
+    db.commit()
+    db.refresh(notificacion)
+    return {"ok": True, "notificacion_id": notificacion.id}
+
+
+@router.get("/{persona_id}/ficha")
+@limiter.limit("60/hour")
+def ficha_publica_persona(
+    request: Request,
+    persona_id: int,
+    db: Session = Depends(get_db),
+):
+    persona = db.query(models.PersonaDesaparecida).filter(models.PersonaDesaparecida.id == persona_id).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    tiene_pendiente = db.query(models.PersonaNotificacionLocalizado).filter(
+        models.PersonaNotificacionLocalizado.persona_id == persona_id,
+        models.PersonaNotificacionLocalizado.estado == "pendiente",
+    ).first() is not None
+
+    return {
+        "id": persona.id,
+        "nombres_apellidos": persona.nombres_apellidos,
+        "cedula": persona.cedula,
+        "ultima_ubicacion": persona.ultima_ubicacion,
+        "foto_url": persona.foto_url,
+        "foto_url_2": persona.foto_url_2,
+        "foto_url_3": persona.foto_url_3,
+        "descripcion": persona.descripcion,
+        "numero_contacto": persona.numero_contacto,
+        "estado": persona.estado,
+        "tipo_reporte": persona.tipo_reporte,
+        "estado_clinico": persona.estado_clinico,
+        "sexo": persona.sexo,
+        "edad_aproximada": persona.edad_aproximada,
+        "contextura": persona.contextura,
+        "cabello": persona.cabello,
+        "ropa_aproximada": persona.ropa_aproximada,
+        "created_at": persona.created_at.isoformat() if persona.created_at else None,
+        "tiene_notificacion_pendiente": tiene_pendiente,
+    }
 
 
 @matches_router.get("/posibles")

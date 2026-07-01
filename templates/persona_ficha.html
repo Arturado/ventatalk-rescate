@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Ficha de Persona Reportada — Venezuela Rescate</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: #111; line-height: 1.55; background: #f5f5f5;
+    }
+
+    header {
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      color: white; padding: 14px 18px;
+      display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    }
+    header a { display: flex; align-items: center; gap: 10px; text-decoration: none; color: white; }
+    header svg { width: 26px; height: 26px; flex-shrink: 0; }
+    header h1 { font-size: 15px; font-weight: 700; }
+
+    main { max-width: 560px; margin: 0 auto; padding: 16px 16px 60px; }
+
+    .foto-wrap { background: white; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 14px; }
+    .foto-principal { width: 100%; max-height: 350px; object-fit: contain; display: block; background: #111; }
+    .foto-placeholder {
+      width: 100%; height: 260px; display: flex; align-items: center; justify-content: center;
+      background: #e5e7eb; color: #6b7280; font-size: 48px; font-weight: 800;
+    }
+    .fotos-extra { display: flex; gap: 8px; padding: 10px; flex-wrap: wrap; }
+    .fotos-extra img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; cursor: pointer; }
+
+    .badge-estado {
+      display: inline-block; padding: 6px 16px; border-radius: 20px;
+      font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+      margin-bottom: 14px;
+    }
+    .badge-rojo    { background: #fef2f2; color: #b91c1c; border: 1.5px solid #fecaca; }
+    .badge-verde   { background: #f0fdf4; color: #15803d; border: 1.5px solid #bbf7d0; }
+    .badge-amarillo{ background: #fffbeb; color: #b45309; border: 1.5px solid #fde68a; }
+
+    .card {
+      background: white; border-radius: 14px; padding: 16px 18px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 14px;
+    }
+    .card h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #9ca3af; margin-bottom: 10px; }
+    .datos-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+    .datos-row:last-child { border-bottom: none; }
+    .datos-row .label { color: #6b7280; flex-shrink: 0; }
+    .datos-row .valor { font-weight: 600; text-align: right; }
+    .datos-row a { color: #1d4ed8; text-decoration: none; font-weight: 700; }
+
+    .senas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+    .senas-grid div span { display: block; font-size: 11px; color: #9ca3af; text-transform: uppercase; margin-bottom: 2px; }
+    .senas-grid div strong { font-size: 14px; }
+
+    .desc-block { font-size: 14px; color: #374151; white-space: pre-wrap; }
+
+    .btn-notificar {
+      width: 100%; padding: 16px; background: #16a34a; color: white;
+      border: none; border-radius: 12px; font-size: 15px; font-weight: 800;
+      cursor: pointer; transition: background .15s; margin-top: 6px;
+    }
+    .btn-notificar:hover { background: #15803d; }
+
+    .form-notif { display: none; margin-top: 14px; }
+    .form-notif.open { display: block; }
+    .form-notif h4 { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
+    .form-notif .subtitulo { font-size: 12.5px; color: #6b7280; margin-bottom: 14px; line-height: 1.5; }
+    .fg { margin-bottom: 12px; }
+    .fg label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 5px; }
+    .fg input, .fg textarea {
+      width: 100%; padding: 10px 12px; border: 1.5px solid #d1d5db; border-radius: 8px;
+      font-size: 14px; outline: none; color: #111; background: #fafafa; transition: border-color .15s;
+    }
+    .fg input:focus, .fg textarea:focus { border-color: #16a34a; background: #fff; }
+    .fg textarea { min-height: 70px; resize: vertical; font-family: inherit; }
+    .form-actions { display: flex; gap: 8px; margin-top: 6px; }
+    .btn-enviar {
+      flex: 1; padding: 12px; background: #16a34a; color: white; border: none;
+      border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer;
+    }
+    .btn-enviar:hover { background: #15803d; }
+    .btn-enviar:disabled { background: #9ca3af; cursor: not-allowed; }
+    .btn-cancelar {
+      padding: 12px 18px; background: transparent; color: #6b7280;
+      border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    .btn-cancelar:hover { background: #f9fafb; }
+
+    .msg-error { font-size: 13px; color: #dc2626; margin-top: 8px; display: none; }
+    .msg-ok { font-size: 13.5px; color: #15803d; margin-top: 10px; line-height: 1.5; }
+
+    .spinner {
+      display: none; width: 18px; height: 18px; border: 2.5px solid rgba(255,255,255,.4);
+      border-top-color: white; border-radius: 50%; animation: spin .7s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading, .error-full { text-align: center; padding: 60px 20px; color: #6b7280; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <a href="/">
+    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      <path d="M12 8v4M12 16h.01"/>
+    </svg>
+    <h1>Venezuela Rescate</h1>
+  </a>
+</header>
+
+<main id="main-content">
+  <div class="loading" id="loading">Cargando ficha…</div>
+</main>
+
+<script>
+  const personaId = {{ persona_id }};
+  const main = document.getElementById('main-content');
+
+  function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function getInitials(name) {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+
+  const ESTADO_INFO = {
+    desaparecido: { label: 'DESAPARECIDO', cls: 'badge-rojo' },
+    localizado:   { label: 'LOCALIZADO',   cls: 'badge-verde' },
+    en_proceso:   { label: 'EN PROCESO',   cls: 'badge-amarillo' },
+    encontrado:   { label: 'ENCONTRADO',   cls: 'badge-verde' },
+  };
+
+  const SEXO_LABEL = { masculino: 'Masculino', femenino: 'Femenino', no_determinado: 'No determinado' };
+  const EDAD_LABEL = { nino: 'Niño 0-12', joven: 'Joven 13-25', adulto: 'Adulto 26-60', adulto_mayor: 'Adulto mayor 60+', no_sabe: 'No sé' };
+  const CONTEXTURA_LABEL = { delgada: 'Delgada', media: 'Media', robusta: 'Robusta', no_sabe: 'No sé' };
+  const CABELLO_LABEL = { corto: 'Corto', largo: 'Largo', calvo: 'Calvo/a', canoso: 'Canoso/a', no_sabe: 'No sé' };
+  const CLINICO_LABEL = { atrapado: 'Atrapado/a', herido: 'Herido/a', inconsciente: 'Inconsciente', fallecido: 'Fallecido/a', sin_informacion: 'Sin información' };
+
+  async function cargarFicha() {
+    try {
+      const res = await fetch(`/api/personas/${personaId}/ficha`);
+      if (!res.ok) {
+        main.innerHTML = '<div class="error-full">No se encontró esta ficha. Puede que el registro haya sido eliminado.</div>';
+        return;
+      }
+      const p = await res.json();
+      renderFicha(p);
+    } catch (e) {
+      main.innerHTML = '<div class="error-full">Error de conexión. Intenta recargar la página.</div>';
+    }
+  }
+
+  function renderFicha(p) {
+    const estadoInfo = ESTADO_INFO[p.estado] || { label: (p.estado || '').toUpperCase(), cls: 'badge-amarillo' };
+
+    const fotoHtml = p.foto_url
+      ? `<img class="foto-principal" src="${esc(p.foto_url)}" alt="Foto de ${esc(p.nombres_apellidos)}">`
+      : `<div class="foto-placeholder">${esc(getInitials(p.nombres_apellidos))}</div>`;
+
+    const extras = [p.foto_url_2, p.foto_url_3].filter(Boolean);
+    const extrasHtml = extras.length
+      ? `<div class="fotos-extra">${extras.map(u => `<a href="${esc(u)}" target="_blank"><img src="${esc(u)}" alt="foto adicional"></a>`).join('')}</div>`
+      : '';
+
+    const senas = [];
+    if (p.sexo) senas.push(`<div><span>Sexo</span><strong>${esc(SEXO_LABEL[p.sexo] || p.sexo)}</strong></div>`);
+    if (p.edad_aproximada) senas.push(`<div><span>Edad aprox.</span><strong>${esc(EDAD_LABEL[p.edad_aproximada] || p.edad_aproximada)}</strong></div>`);
+    if (p.contextura) senas.push(`<div><span>Contextura</span><strong>${esc(CONTEXTURA_LABEL[p.contextura] || p.contextura)}</strong></div>`);
+    if (p.cabello) senas.push(`<div><span>Cabello</span><strong>${esc(CABELLO_LABEL[p.cabello] || p.cabello)}</strong></div>`);
+    const senasHtml = senas.length
+      ? `<div class="card"><h3>Señas físicas</h3><div class="senas-grid">${senas.join('')}</div></div>`
+      : '';
+
+    const descHtml = p.descripcion
+      ? `<div class="card"><h3>Descripción</h3><div class="desc-block">${esc(p.descripcion)}</div></div>`
+      : '';
+
+    const obs = [];
+    if (p.estado_clinico) obs.push(`<div class="datos-row"><span class="label">Estado clínico</span><span class="valor">${esc(CLINICO_LABEL[p.estado_clinico] || p.estado_clinico)}</span></div>`);
+    if (p.ropa_aproximada) obs.push(`<div class="datos-row"><span class="label">Ropa</span><span class="valor">${esc(p.ropa_aproximada)}</span></div>`);
+    const obsHtml = obs.length
+      ? `<div class="card"><h3>Observaciones adicionales</h3>${obs.join('')}</div>`
+      : '';
+
+    let notifHtml;
+    if (p.estado === 'localizado') {
+      notifHtml = `<div class="card"><span class="badge-estado badge-verde">✅ LOCALIZADO</span></div>`;
+    } else if (p.tiene_notificacion_pendiente) {
+      notifHtml = `<div class="card"><span class="badge-estado badge-amarillo">⏳ Notificación en revisión</span></div>`;
+    } else {
+      notifHtml = `
+        <div class="card">
+          <button class="btn-notificar" id="btn-abrir-notif">📍 Esta persona fue localizada — Notificar</button>
+          <div class="form-notif" id="form-notif">
+            <h4>Confirmar localización</h4>
+            <p class="subtitulo">Esta información será revisada por nuestro equipo antes de actualizar el estado.</p>
+            <form id="notif-form">
+              <div class="fg">
+                <label>Nombre de quien reporta *</label>
+                <input type="text" id="nf-nombre" required placeholder="Tu nombre completo">
+              </div>
+              <div class="fg">
+                <label>Número de contacto *</label>
+                <input type="tel" id="nf-contacto" required maxlength="15" placeholder="+58 412 1234567">
+              </div>
+              <div class="fg">
+                <label>Descripción o nota *</label>
+                <textarea id="nf-descripcion" required placeholder="¿Dónde fue encontrada? ¿Cuál es su estado?"></textarea>
+              </div>
+              <div class="fg">
+                <label>Foto (opcional)</label>
+                <input type="file" id="nf-foto" accept="image/*">
+              </div>
+              <div class="msg-error" id="nf-error"></div>
+              <div class="form-actions">
+                <button type="submit" class="btn-enviar" id="nf-submit">
+                  <span id="nf-submit-text">Enviar notificación</span>
+                  <div class="spinner" id="nf-spinner"></div>
+                </button>
+                <button type="button" class="btn-cancelar" id="nf-cancelar">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>`;
+    }
+
+    main.innerHTML = `
+      <div class="foto-wrap">
+        ${fotoHtml}
+        ${extrasHtml}
+      </div>
+      <span class="badge-estado ${estadoInfo.cls}">${esc(estadoInfo.label)}</span>
+      <div class="card">
+        <div class="datos-row"><span class="label">Nombre</span><span class="valor">${esc(p.nombres_apellidos)}</span></div>
+        <div class="datos-row"><span class="label">Cédula</span><span class="valor">${esc(p.cedula) || 'No registrada'}</span></div>
+        <div class="datos-row"><span class="label">Última ubicación</span><span class="valor">${esc(p.ultima_ubicacion) || '—'}</span></div>
+        <div class="datos-row"><span class="label">Contacto</span><span class="valor"><a href="tel:${esc(p.numero_contacto)}">${esc(p.numero_contacto)}</a></span></div>
+        <div class="datos-row"><span class="label">Estado</span><span class="valor"><span class="badge-estado ${estadoInfo.cls}" style="margin-bottom:0;padding:3px 10px;font-size:11px;">${esc(estadoInfo.label)}</span></span></div>
+      </div>
+      ${senasHtml}
+      ${descHtml}
+      ${obsHtml}
+      ${notifHtml}
+    `;
+
+    wireNotifForm(p);
+  }
+
+  function wireNotifForm(p) {
+    const btnAbrir = document.getElementById('btn-abrir-notif');
+    const formWrap = document.getElementById('form-notif');
+    if (!btnAbrir) return;
+
+    btnAbrir.addEventListener('click', () => {
+      formWrap.classList.add('open');
+      btnAbrir.style.display = 'none';
+    });
+
+    document.getElementById('nf-cancelar').addEventListener('click', () => {
+      formWrap.classList.remove('open');
+      btnAbrir.style.display = '';
+    });
+
+    document.getElementById('notif-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById('nf-error');
+      errorEl.style.display = 'none';
+
+      const nombre = document.getElementById('nf-nombre').value.trim();
+      const contacto = document.getElementById('nf-contacto').value.trim();
+      const descripcion = document.getElementById('nf-descripcion').value.trim();
+      const foto = document.getElementById('nf-foto').files[0];
+
+      if (!nombre || !contacto || !descripcion) {
+        errorEl.textContent = 'Por favor completa todos los campos requeridos.';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      const submitBtn = document.getElementById('nf-submit');
+      const submitText = document.getElementById('nf-submit-text');
+      const spinner = document.getElementById('nf-spinner');
+      submitBtn.disabled = true;
+      submitText.style.display = 'none';
+      spinner.style.display = 'block';
+
+      try {
+        const fd = new FormData();
+        fd.append('nombre_reportante', nombre);
+        fd.append('numero_contacto', contacto);
+        fd.append('descripcion', descripcion);
+        if (foto) fd.append('foto', foto);
+
+        const res = await fetch(`/api/personas/${personaId}/notificar-localizado`, { method: 'POST', body: fd });
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.detail || 'Error al enviar');
+        }
+
+        if (data.ok) {
+          const card = formWrap.closest('.card');
+          card.innerHTML = `
+            <span class="badge-estado badge-amarillo">⏳ Notificación enviada — En revisión</span>
+            <p class="msg-ok">Gracias. Nuestro equipo verificará la información y actualizará el estado a la brevedad.</p>`;
+        } else {
+          errorEl.textContent = data.mensaje || 'Ya existe una notificación pendiente para esta persona.';
+          errorEl.style.display = 'block';
+          submitBtn.disabled = false;
+          submitText.style.display = '';
+          spinner.style.display = 'none';
+        }
+      } catch (err) {
+        errorEl.textContent = 'No se pudo enviar la notificación. Intenta de nuevo.';
+        errorEl.style.display = 'block';
+        submitBtn.disabled = false;
+        submitText.style.display = '';
+        spinner.style.display = 'none';
+      }
+    });
+  }
+
+  cargarFicha();
+</script>
+</body>
+</html>

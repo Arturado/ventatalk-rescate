@@ -134,6 +134,18 @@ class AcopioReporte(Base):
     reportado_por = Column(String(200), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+class PersonaNotificacionLocalizado(Base):
+    __tablename__ = "persona_notificaciones_localizado"
+    id = Column(Integer, primary_key=True, index=True)
+    persona_id = Column(Integer, nullable=False, index=True)
+    nombre_reportante = Column(String(200), nullable=False)
+    numero_contacto = Column(String(30), nullable=False)
+    descripcion = Column(Text, nullable=True)
+    foto_url = Column(String(600), nullable=True)
+    estado = Column(String(20), nullable=False, default="pendiente")
+    # valores: "pendiente", "confirmado", "rechazado"
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
 class CentroAcopioSolicitud(Base):
     __tablename__ = "centros_acopio_solicitudes"
     id = Column(Integer, primary_key=True, index=True)

@@ -247,6 +247,12 @@ async def acopio_reportar_page(centro_id: int, request: Request):
         {"request": request, "centro_id": centro_id})
 
 
+@app.get("/personas/{persona_id}")
+async def persona_ficha_page(persona_id: int, request: Request):
+    return templates.TemplateResponse("persona_ficha.html",
+        {"request": request, "persona_id": persona_id})
+
+
 @app.get("/health", tags=["sistema"])
 def health():
     return {"status": "ok", "service": "ventatalk-rescate"}

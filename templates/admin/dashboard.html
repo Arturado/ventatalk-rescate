@@ -242,8 +242,21 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 
 <!-- Barra de acciones globales -->
 <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+  <button id="btn-notif-localizado" onclick="toggleNotifLocalizado()" style="padding:8px 16px;background:#ea580c;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;position:relative;">
+    🔔 Localizados pendientes (<span id="notif-localizado-count">0</span>)
+    <span id="notif-localizado-badge" style="display:none;position:absolute;top:-5px;right:-5px;width:12px;height:12px;border-radius:50%;background:#dc2626;border:2px solid white;animation:blink 1s ease-in-out infinite;"></span>
+  </button>
   <button onclick="toggleImportPanel()" style="padding:8px 16px;background:#7c3aed;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">⬆️ Importar CSV</button>
   <button onclick="openModal('modal-hosp')" style="padding:8px 16px;background:#0369a1;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">➕ Nuevo hospital</button>
+</div>
+
+<!-- Panel de notificaciones de localizado -->
+<div id="notif-localizado-panel" class="matches-panel">
+  <div style="margin-bottom:16px;">
+    <h3 style="font-size:16px;font-weight:800;margin-bottom:4px;">Notificaciones de personas localizadas — Pendientes de confirmación</h3>
+    <p style="font-size:13px;color:#6b7280;">Reportes ciudadanos de personas encontradas. Revisa y confirma antes de actualizar el estado.</p>
+  </div>
+  <div id="notif-localizado-content"><div class="matches-loading">Cargando notificaciones…</div></div>
 </div>
 
 <!-- Panel de importación CSV -->
@@ -2787,6 +2800,118 @@ async function guardarEditarPersona() {
   }
   btn.disabled = false; btn.textContent = 'Guardar cambios';
 }
+
+/* ---- NOTIFICACIONES DE LOCALIZADO ---- */
+var _notifLocalizadoOpen = false;
+
+function toggleNotifLocalizado() {
+  _notifLocalizadoOpen = !_notifLocalizadoOpen;
+  document.getElementById('notif-localizado-panel').classList.toggle('open', _notifLocalizadoOpen);
+  if (_notifLocalizadoOpen) loadNotifLocalizado();
+}
+
+async function loadNotifLocalizado() {
+  const content = document.getElementById('notif-localizado-content');
+  content.innerHTML = '<div class="matches-loading">Cargando notificaciones…</div>';
+  try {
+    const res = await fetch('/admin/notificaciones/localizado');
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    actualizarContadorNotifLocalizado(data.length);
+    if (!data.length) {
+      content.innerHTML = '<p style="color:#6b7280;padding:16px;text-align:center;">No hay notificaciones pendientes.</p>';
+      return;
+    }
+    content.innerHTML = '';
+    data.forEach(item => content.appendChild(renderNotifLocalizadoCard(item)));
+  } catch (e) {
+    content.innerHTML = '<p style="color:#dc2626;padding:16px;">Error al cargar. Intenta de nuevo.</p>';
+  }
+}
+
+function renderNotifLocalizadoCard(item) {
+  const n = item.notificacion;
+  const p = item.persona;
+  const el = document.createElement('div');
+  el.className = 'match-pair';
+  el.dataset.notifId = n.id;
+  const nombre = p ? esc(p.nombres_apellidos) : 'Persona no encontrada';
+  const cedula = p ? (p.cedula || '—') : '—';
+  const estadoActual = p ? p.estado : '';
+  const fotoHtml = n.foto_url
+    ? `<a href="${n.foto_url}" target="_blank"><img src="${n.foto_url}" style="width:70px;height:70px;object-fit:cover;border-radius:8px;margin-top:6px;" alt="foto"></a>`
+    : '';
+  el.innerHTML = `
+    <div style="margin-bottom:10px;">
+      <div style="font-size:14px;font-weight:700;">👤 ${nombre} — Cédula: ${esc(cedula)}</div>
+      ${p ? `<span class="estado-badge estado-${esc(estadoActual)}">${esc((estadoActual || '').replace('_', ' '))}</span>` : ''}
+    </div>
+    <hr style="border:none;border-top:1px solid #f0f0f0;margin:10px 0;">
+    <div style="font-size:13px;color:#374151;line-height:1.7;">
+      <div><strong>Reportado por:</strong> ${esc(n.nombre_reportante)}</div>
+      <div><strong>Contacto:</strong> ${esc(n.numero_contacto)}</div>
+      <div><strong>Nota:</strong> ${esc(n.descripcion || '—')}</div>
+      ${fotoHtml}
+      <div style="color:#9ca3af;font-size:12px;margin-top:6px;"><strong>Recibido:</strong> ${fmtDate(n.created_at)}</div>
+    </div>
+    <hr style="border:none;border-top:1px solid #f0f0f0;margin:10px 0;">
+    <div class="match-actions">
+      <button class="match-btn-confirm" onclick="confirmarNotifLocalizado(${n.id}, this)">✅ Confirmar — marcar como Localizado</button>
+      <button class="match-btn-discard" onclick="rechazarNotifLocalizado(${n.id}, this)">❌ Rechazar</button>
+    </div>`;
+  return el;
+}
+
+async function confirmarNotifLocalizado(id, btn) {
+  btn.disabled = true; btn.textContent = 'Confirmando…';
+  try {
+    const res = await fetch('/admin/notificaciones/' + id + '/confirmar', {
+      method: 'POST',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
+    });
+    if (!res.ok) throw new Error();
+    document.querySelector('[data-notif-id="' + id + '"]').remove();
+    showToast('✅ Persona marcada como Localizada');
+    actualizarContadorNotifLocalizado();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = '✅ Confirmar — marcar como Localizado';
+    alert('Error al confirmar. Intenta de nuevo.');
+  }
+}
+
+async function rechazarNotifLocalizado(id, btn) {
+  btn.disabled = true; btn.textContent = 'Rechazando…';
+  try {
+    const res = await fetch('/admin/notificaciones/' + id + '/rechazar', {
+      method: 'POST',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
+    });
+    if (!res.ok) throw new Error();
+    document.querySelector('[data-notif-id="' + id + '"]').remove();
+    actualizarContadorNotifLocalizado();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = '❌ Rechazar';
+    alert('Error al rechazar. Intenta de nuevo.');
+  }
+}
+
+function actualizarContadorNotifLocalizado(n) {
+  if (n === undefined) n = document.querySelectorAll('#notif-localizado-content .match-pair').length;
+  document.getElementById('notif-localizado-count').textContent = n;
+  document.getElementById('notif-localizado-badge').style.display = n > 0 ? 'block' : 'none';
+}
+
+async function initNotifLocalizadoCount() {
+  try {
+    const res = await fetch('/admin/notificaciones/localizado');
+    if (!res.ok) return;
+    const data = await res.json();
+    actualizarContadorNotifLocalizado(data.length);
+  } catch (e) { /* silencioso */ }
+}
+
+initNotifLocalizadoCount();
+setInterval(initNotifLocalizadoCount, 60000);
 
 /* ---- Init ---- */
 (function() {

@@ -1019,3 +1019,88 @@ async def rechazar_solicitud_acopio(
     solicitud.estado = "rechazado"
     db.commit()
     return {"ok": True}
+
+
+# --- Notificaciones de personas localizadas ---
+
+@router.get("/notificaciones/localizado")
+async def listar_notificaciones_localizado(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+
+    notificaciones = db.query(models.PersonaNotificacionLocalizado).filter(
+        models.PersonaNotificacionLocalizado.estado == "pendiente"
+    ).order_by(sqldesc(models.PersonaNotificacionLocalizado.created_at)).all()
+
+    result = []
+    for n in notificaciones:
+        persona = db.query(models.PersonaDesaparecida).filter(
+            models.PersonaDesaparecida.id == n.persona_id
+        ).first()
+        result.append({
+            "notificacion": _schemas.NotificacionLocalizadoResponse.model_validate(n),
+            "persona": {
+                "id": persona.id,
+                "nombres_apellidos": persona.nombres_apellidos,
+                "cedula": persona.cedula,
+                "estado": persona.estado,
+            } if persona else None,
+        })
+    return result
+
+
+@router.post("/notificaciones/{notificacion_id}/confirmar")
+async def confirmar_notificacion_localizado(
+    notificacion_id: int,
+    request: Request,
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+
+    notificacion = db.query(models.PersonaNotificacionLocalizado).filter(
+        models.PersonaNotificacionLocalizado.id == notificacion_id
+    ).first()
+    if not notificacion:
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    notificacion.estado = "confirmado"
+    persona = db.query(models.PersonaDesaparecida).filter(
+        models.PersonaDesaparecida.id == notificacion.persona_id
+    ).first()
+    if persona:
+        persona.estado = "localizado"
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/notificaciones/{notificacion_id}/rechazar")
+async def rechazar_notificacion_localizado(
+    notificacion_id: int,
+    request: Request,
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+
+    notificacion = db.query(models.PersonaNotificacionLocalizado).filter(
+        models.PersonaNotificacionLocalizado.id == notificacion_id
+    ).first()
+    if not notificacion:
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    notificacion.estado = "rechazado"
+    db.commit()
+    return {"ok": True}
