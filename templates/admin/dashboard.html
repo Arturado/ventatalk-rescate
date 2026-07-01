@@ -2602,6 +2602,9 @@ async function _loadAcopioHistorialModal(centroId, centroNombre) {
     if (res.status === 401) { sessionStorage.removeItem('vr_api_key'); body.innerHTML = '<p style="color:#dc2626;padding:16px;">API Key inválida.</p>'; return; }
     var data = await res.json();
     if (!data.length) { body.innerHTML = '<p style="color:#9ca3af;text-align:center;padding:32px;">Sin reportes aún.</p>'; return; }
+    _acoHistCentroNombre = centroNombre;
+    _acoHistReportesById = {};
+    data.forEach(function(r) { _acoHistReportesById[r.id] = r; });
     var csrf = document.querySelector('meta[name="csrf-token"]').content;
     body.innerHTML = '<div style="overflow-x:auto;">' +
       '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:700px;">' +
@@ -2633,7 +2636,7 @@ async function _loadAcopioHistorialModal(centroId, centroNombre) {
           '<td style="padding:8px 12px;vertical-align:top;word-break:break-word;min-width:130px;">' + esc(r.notas||'—') + '</td>' +
           '<td style="padding:8px 12px;vertical-align:top;white-space:nowrap;">' + esc(r.reportado_por||'—') + '</td>' +
           '<td style="padding:8px 12px;vertical-align:top;white-space:nowrap;">' +
-            '<button data-rid="' + r.id + '" data-cid="' + centroId + '" data-cnombre="' + esc(centroNombre) + '" data-extra="' + esc(r.necesitan_extra||'') + '" onclick="openCrearPedidoModal(this.dataset.rid,this.dataset.cid,this.dataset.cnombre,this.dataset.extra)" style="font-size:11px;padding:3px 7px;background:#16a34a;color:white;border:none;border-radius:4px;cursor:pointer;margin-right:4px;">📦 Crear pedido</button>' +
+            '<button data-rid="' + r.id + '" data-cid="' + centroId + '" onclick="openCrearPedidoModal(this.dataset.rid,this.dataset.cid,_acoHistReportesById[this.dataset.rid])" style="font-size:11px;padding:3px 7px;background:#16a34a;color:white;border:none;border-radius:4px;cursor:pointer;margin-right:4px;">📦 Crear pedido</button>' +
             '<button onclick="eliminarAcopioReporte(' + r.id + ',\'' + csrf + '\',this)" style="font-size:11px;padding:3px 7px;background:#ef4444;color:white;border:none;border-radius:4px;cursor:pointer;">🗑</button>' +
           '</td>' +
         '</tr>' +
@@ -2767,10 +2770,12 @@ var PEDIDO_ITEMS = [
   'Ropa (adultos)',
   'Ropa (niños)',
   'Calzado',
-  'Linternas / velas / pilas',
+  'Linternas/velas/pilas',
   'Cargadores / poder eléctrico'
 ];
 var _pedidoExtraItems = [];
+var _acoHistCentroNombre = '';
+var _acoHistReportesById = {};
 
 async function loadPedidosReporte(reporteId) {
   var container = document.getElementById('aco-pedidos-' + reporteId);
@@ -2833,9 +2838,9 @@ function togglePedidoExtraQty(idx) {
 
 function buildPedidoItemRow(idx, label) {
   return '<label class="ped-item" for="ped_cb_' + idx + '">' +
-    '<input type="checkbox" id="ped_cb_' + idx + '" onchange="togglePedidoQty(' + idx + ')">' +
+    '<input type="checkbox" id="ped_cb_' + idx + '" checked onchange="togglePedidoQty(' + idx + ')">' +
     '<span class="ped-item-label">' + esc(label) + '</span>' +
-    '<input type="number" id="ped_qty_' + idx + '" class="ped-item-qty" min="1" placeholder="Cant." disabled>' +
+    '<input type="number" id="ped_qty_' + idx + '" class="ped-item-qty" min="1" value="1" placeholder="Cant.">' +
   '</label>';
 }
 
@@ -2873,7 +2878,16 @@ function removePedidoCustomItem(idx) {
   renderPedidoCustomChips();
 }
 
-function _buildPedidoFormHtml(reporteId, centroId, extras) {
+function _buildPedidoFormHtml(reporteId, centroId, necesitan, extras) {
+  var matched = PEDIDO_ITEMS
+    .map(function(label, i) { return { label: label, idx: i }; })
+    .filter(function(entry) { return necesitan.indexOf(entry.label) !== -1; });
+
+  var mainHtml = matched.length
+    ? '<div class="section-title-sm">Items que el centro necesita</div>' +
+      '<div class="ped-grid">' + matched.map(function(entry) { return buildPedidoItemRow(entry.idx, entry.label); }).join('') + '</div>'
+    : '<p style="font-size:13px;color:#94a3b8;margin-bottom:8px;">Este reporte no especificó items necesarios. Puedes agregar items manualmente abajo.</p>';
+
   var extrasHtml = extras.length
     ? '<div class="section-title-sm">Items adicionales reportados por el centro</div>' +
       '<div class="ped-grid">' + extras.map(function(label, i) { return buildPedidoExtraRow(i, label); }).join('') + '</div>'
@@ -2881,8 +2895,7 @@ function _buildPedidoFormHtml(reporteId, centroId, extras) {
 
   return '<input type="hidden" id="ped-reporte-id" value="' + reporteId + '">' +
     '<input type="hidden" id="ped-centro-id" value="' + centroId + '">' +
-    '<div class="section-title-sm">Items del centro de acopio</div>' +
-    '<div class="ped-grid">' + PEDIDO_ITEMS.map(function(label, i) { return buildPedidoItemRow(i, label); }).join('') + '</div>' +
+    mainHtml +
     extrasHtml +
     '<div class="custom-input-row" style="margin-top:14px;">' +
       '<input type="text" id="ped-custom-name" class="ped-custom-input" placeholder="Otro item...">' +
@@ -2904,11 +2917,12 @@ function _buildPedidoFormHtml(reporteId, centroId, extras) {
     '<button class="adm-save-btn" id="ped-close-btn" style="display:none;background:#374151;margin-top:8px;" onclick="closeModal(\'modal-aco-pedido\')">Cerrar</button>';
 }
 
-function openCrearPedidoModal(reporteId, centroId, centroNombre, necesitanExtra) {
-  document.getElementById('aco-pedido-title').textContent = '📦 Preparar pedido — ' + centroNombre;
+function openCrearPedidoModal(reporteId, centroId, reporte) {
+  document.getElementById('aco-pedido-title').textContent = '📦 Preparar pedido — ' + _acoHistCentroNombre;
   _pedidoExtraItems = [];
-  var extras = (necesitanExtra || '').split(',').map(function(s){return s.trim();}).filter(Boolean);
-  document.getElementById('aco-pedido-modal-content').innerHTML = _buildPedidoFormHtml(reporteId, centroId, extras);
+  var necesitan = (reporte && reporte.necesitan) ? reporte.necesitan.split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
+  var extras = (reporte && reporte.necesitan_extra) ? reporte.necesitan_extra.split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
+  document.getElementById('aco-pedido-modal-content').innerHTML = _buildPedidoFormHtml(reporteId, centroId, necesitan, extras);
   openModal('modal-aco-pedido');
 }
 
