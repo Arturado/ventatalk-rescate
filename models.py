@@ -112,6 +112,8 @@ class CentroAcopio(Base):
     zona = Column(String(100), nullable=True)
     activo = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    latitud = Column(String(30), nullable=True)
+    longitud = Column(String(30), nullable=True)
 
 class AcopioReporte(Base):
     __tablename__ = "acopio_reportes"
@@ -157,3 +159,5 @@ class CentroAcopioSolicitud(Base):
     estado = Column(String(20), nullable=False, default="pendiente")
     # valores: "pendiente", "aprobado", "rechazado"
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    latitud = Column(String(30), nullable=True)
+    longitud = Column(String(30), nullable=True)

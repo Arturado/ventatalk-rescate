@@ -891,6 +891,8 @@ async def nuevo_centro_acopio(
     nombre: str = Form(...),
     zona: Optional[str] = Form(None),
     direccion: Optional[str] = Form(None),
+    latitud: Optional[str] = Form(None),
+    longitud: Optional[str] = Form(None),
     x_csrf_token: str = Header(""),
     db: Session = Depends(get_db),
 ):
@@ -903,6 +905,8 @@ async def nuevo_centro_acopio(
         nombre=nombre,
         zona=zona or None,
         direccion=direccion or None,
+        latitud=latitud or None,
+        longitud=longitud or None,
     )
     db.add(centro)
     db.commit()

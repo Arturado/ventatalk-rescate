@@ -128,6 +128,8 @@ class CentroAcopioResponse(BaseModel):
     zona: Optional[str] = None
     activo: bool
     created_at: datetime
+    latitud: Optional[str] = None
+    longitud: Optional[str] = None
 
     @field_serializer('created_at')
     def serialize_created_at(self, value: datetime) -> str:

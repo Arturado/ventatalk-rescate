@@ -192,6 +192,8 @@ async def solicitar_centro(
     zona: Optional[str] = Form(None),
     reportado_por: Optional[str] = Form(None),
     notas: Optional[str] = Form(None),
+    latitud: Optional[str] = Form(None),
+    longitud: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     """Público — solicitar agregar un centro de acopio nuevo"""
@@ -201,6 +203,8 @@ async def solicitar_centro(
         zona=zona or None,
         reportado_por=reportado_por or None,
         notas=notas or None,
+        latitud=latitud or None,
+        longitud=longitud or None,
     )
     db.add(solicitud)
     db.commit()

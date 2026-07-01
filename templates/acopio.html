@@ -393,6 +393,11 @@ function _getSolFormHtml() {
     '</select></div>' +
     '<div class="sol-fg"><label>Dirección</label>' +
     '<input type="text" id="sol-direccion" placeholder="Av. Principal, Parroquia..."></div>' +
+    '<div class="sol-fg"><label>Latitud <span style="font-weight:400;color:#9ca3af;">(opcional)</span></label>' +
+    '<input type="text" id="sol-latitud" inputmode="decimal" placeholder="Ej: 10.4806418"></div>' +
+    '<div class="sol-fg"><label>Longitud <span style="font-weight:400;color:#9ca3af;">(opcional)</span></label>' +
+    '<input type="text" id="sol-longitud" inputmode="decimal" placeholder="Ej: -66.9036067">' +
+    '<div style="font-size:12px;color:#9ca3af;margin-top:5px;">Puedes obtener las coordenadas tocando tu ubicación en Google Maps</div></div>' +
     '<div class="sol-fg"><label>Tu nombre o contacto <span style="font-weight:400;color:#9ca3af;">(opcional)</span></label>' +
     '<input type="text" id="sol-contacto" placeholder="Nombre o número"></div>' +
     '<div class="sol-fg"><label>Notas adicionales <span style="font-weight:400;color:#9ca3af;">(opcional)</span></label>' +
@@ -418,6 +423,10 @@ async function submitSolicitud() {
   if (zona) fd.append('zona', zona);
   var dir = (document.getElementById('sol-direccion').value || '').trim();
   if (dir) fd.append('direccion', dir);
+  var lat = (document.getElementById('sol-latitud').value || '').trim();
+  if (lat) fd.append('latitud', lat);
+  var lon = (document.getElementById('sol-longitud').value || '').trim();
+  if (lon) fd.append('longitud', lon);
   var contacto = (document.getElementById('sol-contacto').value || '').trim();
   if (contacto) fd.append('reportado_por', contacto);
   var notas = (document.getElementById('sol-notas').value || '').trim();
