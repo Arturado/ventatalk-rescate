@@ -2878,10 +2878,17 @@ function removePedidoCustomItem(idx) {
   renderPedidoCustomChips();
 }
 
+function normalizarItem(str) {
+  return String(str||'').trim()
+    .replace(/\s*\/\s*/g, '/')  // normaliza espacios alrededor de /
+    .toLowerCase();
+}
+
 function _buildPedidoFormHtml(reporteId, centroId, necesitan, extras) {
+  var necesitanNorm = necesitan.map(normalizarItem);
   var matched = PEDIDO_ITEMS
     .map(function(label, i) { return { label: label, idx: i }; })
-    .filter(function(entry) { return necesitan.indexOf(entry.label) !== -1; });
+    .filter(function(entry) { return necesitanNorm.indexOf(normalizarItem(entry.label)) !== -1; });
 
   var mainHtml = matched.length
     ? '<div class="section-title-sm">Items que el centro necesita</div>' +
