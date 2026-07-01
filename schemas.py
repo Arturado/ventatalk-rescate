@@ -269,3 +269,44 @@ class CentroSolicitudResponse(BaseModel):
         return value.astimezone(VE_TZ).isoformat()
 
     model_config = {"from_attributes": True}
+
+class AcopioOrdenResponse(BaseModel):
+    id: int
+    reporte_id: int
+    centro_id: int
+    items_ordenados: str  # JSON string
+    nota_repartidor: Optional[str] = None
+    estado: str
+    creado_por: Optional[str] = None
+    created_at: datetime
+    entrega: Optional["AcopioEntregaResponse"] = None
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, value: datetime) -> str:
+        from datetime import timezone, timedelta
+        VE_TZ = timezone(timedelta(hours=-4))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(VE_TZ).isoformat()
+
+    model_config = {"from_attributes": True}
+
+class AcopioEntregaResponse(BaseModel):
+    id: int
+    orden_id: int
+    nombre_receptor: str
+    foto_entrega_url: Optional[str] = None
+    notas_entrega: Optional[str] = None
+    created_at: datetime
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, value: datetime) -> str:
+        from datetime import timezone, timedelta
+        VE_TZ = timezone(timedelta(hours=-4))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(VE_TZ).isoformat()
+
+    model_config = {"from_attributes": True}
+
+AcopioOrdenResponse.model_rebuild()

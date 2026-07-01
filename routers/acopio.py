@@ -1,10 +1,16 @@
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+import json
+import os
+import uuid
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc, desc
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 from database import get_db
 from dependencies import verify_api_key
+from services.images import read_limited, compress_image_async
 import models, schemas
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -13,6 +19,13 @@ router = APIRouter(prefix="/api/acopio", tags=["acopio"])
 limiter = Limiter(key_func=get_remote_address)
 
 VE_TZ = timezone(timedelta(hours=-4))
+BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
+UPLOAD_DIR_ENTREGAS = "uploads/acopio_entregas"
+ESTADOS_ORDEN_VALIDOS = {"preparando", "en_camino", "entregado"}
+
+
+class OrdenEstadoUpdate(BaseModel):
+    estado: str
 
 # ── Centros ────────────────────────────────────────────────
 
@@ -209,3 +222,177 @@ async def solicitar_centro(
     db.add(solicitud)
     db.commit()
     return {"ok": True, "mensaje": "Tu solicitud fue recibida. El equipo la revisará y agregará el centro a la brevedad."}
+
+# ── Órdenes de acopio ──────────────────────────────────────
+
+@router.get("/ordenes", response_model=List[schemas.AcopioOrdenResponse])
+def listar_ordenes(
+    centro_id: Optional[int] = Query(None),
+    estado: Optional[str] = Query(None),
+    reporte_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    """Protegido — lista órdenes de acopio con filtros opcionales"""
+    q = db.query(models.AcopioOrden)
+    if centro_id is not None:
+        q = q.filter(models.AcopioOrden.centro_id == centro_id)
+    if estado is not None:
+        q = q.filter(models.AcopioOrden.estado == estado)
+    if reporte_id is not None:
+        q = q.filter(models.AcopioOrden.reporte_id == reporte_id)
+    ordenes = q.order_by(desc(models.AcopioOrden.created_at)).all()
+
+    resultado = []
+    for orden in ordenes:
+        resp = schemas.AcopioOrdenResponse.model_validate(orden)
+        entrega = db.query(models.AcopioEntrega).filter(
+            models.AcopioEntrega.orden_id == orden.id
+        ).first()
+        if entrega:
+            resp.entrega = schemas.AcopioEntregaResponse.model_validate(entrega)
+        resultado.append(resp)
+    return resultado
+
+
+@router.get("/ordenes/{orden_id}")
+@limiter.limit("60/hour")
+async def obtener_orden(
+    request: Request,
+    orden_id: int,
+    db: Session = Depends(get_db),
+):
+    """Público — el repartidor consulta el detalle del pedido, sin API key"""
+    orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
+    if not orden:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+
+    try:
+        items = json.loads(orden.items_ordenados)
+    except (TypeError, ValueError):
+        items = []
+
+    entrega = db.query(models.AcopioEntrega).filter(
+        models.AcopioEntrega.orden_id == orden.id
+    ).first()
+
+    centro = db.query(models.CentroAcopio).filter(
+        models.CentroAcopio.id == orden.centro_id
+    ).first()
+
+    reporte = db.query(models.AcopioReporte).filter(
+        models.AcopioReporte.id == orden.reporte_id
+    ).first()
+
+    created_at = orden.created_at
+    if created_at and created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+
+    return {
+        "id": orden.id,
+        "reporte_id": orden.reporte_id,
+        "centro_id": orden.centro_id,
+        "items_ordenados": items,
+        "nota_repartidor": orden.nota_repartidor,
+        "estado": orden.estado,
+        "creado_por": orden.creado_por,
+        "created_at": created_at.astimezone(VE_TZ).isoformat() if created_at else None,
+        "entrega": schemas.AcopioEntregaResponse.model_validate(entrega) if entrega else None,
+        "centro": {
+            "nombre": centro.nombre,
+            "direccion": centro.direccion,
+        } if centro else None,
+        "reporte": {
+            "necesitan": reporte.necesitan,
+            "no_necesitan": reporte.no_necesitan,
+            "notas": reporte.notas,
+        } if reporte else None,
+    }
+
+
+@router.post("/ordenes/{orden_id}/confirmar-entrega",
+             response_model=schemas.AcopioEntregaResponse, status_code=201)
+@limiter.limit("10/hour")
+async def confirmar_entrega(
+    request: Request,
+    orden_id: int,
+    nombre_receptor: str = Form(...),
+    notas_entrega: str = Form(None),
+    foto_entrega: UploadFile = File(None),
+    db: Session = Depends(get_db),
+):
+    """Público — el repartidor confirma la entrega del pedido, sin API key"""
+    orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
+    if not orden:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+
+    existente = db.query(models.AcopioEntrega).filter(
+        models.AcopioEntrega.orden_id == orden_id
+    ).first()
+    if existente:
+        raise HTTPException(status_code=400, detail="Esta orden ya fue confirmada")
+
+    foto_url = None
+    if foto_entrega and foto_entrega.filename:
+        file_bytes = await read_limited(foto_entrega)
+        if file_bytes is None:
+            raise HTTPException(status_code=413, detail="Archivo demasiado grande (máx 10MB)")
+        compressed = await compress_image_async(file_bytes)
+        if compressed:
+            filename = f"entrega_{uuid.uuid4()}.jpg"
+            with open(os.path.join(UPLOAD_DIR_ENTREGAS, filename), "wb") as f:
+                f.write(compressed)
+            foto_url = f"{BASE_URL}/uploads/acopio_entregas/{filename}"
+
+    entrega = models.AcopioEntrega(
+        orden_id=orden_id,
+        nombre_receptor=nombre_receptor,
+        foto_entrega_url=foto_url,
+        notas_entrega=notas_entrega,
+    )
+    db.add(entrega)
+    orden.estado = "entregado"
+    db.commit()
+    db.refresh(entrega)
+    return entrega
+
+
+@router.patch("/ordenes/{orden_id}/estado", response_model=schemas.AcopioOrdenResponse)
+def cambiar_estado_orden(
+    orden_id: int,
+    data: OrdenEstadoUpdate,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
+    if not orden:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+    if data.estado not in ESTADOS_ORDEN_VALIDOS:
+        raise HTTPException(status_code=422, detail="Estado inválido")
+
+    orden.estado = data.estado
+    db.commit()
+    db.refresh(orden)
+
+    resp = schemas.AcopioOrdenResponse.model_validate(orden)
+    entrega = db.query(models.AcopioEntrega).filter(
+        models.AcopioEntrega.orden_id == orden.id
+    ).first()
+    if entrega:
+        resp.entrega = schemas.AcopioEntregaResponse.model_validate(entrega)
+    return resp
+
+
+@router.delete("/ordenes/{orden_id}")
+def eliminar_orden(
+    orden_id: int,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
+    if not orden:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+    db.query(models.AcopioEntrega).filter(models.AcopioEntrega.orden_id == orden_id).delete()
+    db.delete(orden)
+    db.commit()
+    return {"ok": True}

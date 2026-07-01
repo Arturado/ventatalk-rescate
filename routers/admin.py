@@ -1,6 +1,7 @@
 import csv
 import hashlib
 import io
+import json
 import os
 import re
 import threading
@@ -1101,6 +1102,70 @@ async def confirmar_notificacion_localizado(
     ).first()
     if persona:
         persona.estado = "localizado"
+    db.commit()
+    return {"ok": True}
+
+
+# --- Órdenes de acopio ---
+
+@router.post("/acopio/ordenes/nueva")
+async def nueva_orden_acopio(
+    request: Request,
+    reporte_id: int = Form(...),
+    centro_id: int = Form(...),
+    items_ordenados: str = Form(...),
+    nota_repartidor: Optional[str] = Form(None),
+    creado_por: Optional[str] = Form(None),
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+
+    try:
+        json.loads(items_ordenados)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="items_ordenados debe ser un JSON válido")
+
+    orden = models.AcopioOrden(
+        reporte_id=reporte_id,
+        centro_id=centro_id,
+        items_ordenados=items_ordenados,
+        nota_repartidor=nota_repartidor or None,
+        creado_por=creado_por or None,
+        estado="preparando",
+    )
+    db.add(orden)
+    db.commit()
+    db.refresh(orden)
+    return {
+        "ok": True,
+        "orden_id": orden.id,
+        "link_repartidor": f"{BASE_URL}/acopio/pedido/{orden.id}",
+    }
+
+
+@router.delete("/acopio/ordenes/{orden_id}")
+async def eliminar_orden_acopio(
+    orden_id: int,
+    request: Request,
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+
+    orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
+    if not orden:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+    db.query(models.AcopioEntrega).filter(models.AcopioEntrega.orden_id == orden_id).delete()
+    db.delete(orden)
     db.commit()
     return {"ok": True}
 

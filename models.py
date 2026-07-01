@@ -161,3 +161,25 @@ class CentroAcopioSolicitud(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     latitud = Column(String(30), nullable=True)
     longitud = Column(String(30), nullable=True)
+
+class AcopioOrden(Base):
+    __tablename__ = "acopio_ordenes"
+    id = Column(Integer, primary_key=True, index=True)
+    reporte_id = Column(Integer, nullable=False, index=True)
+    centro_id = Column(Integer, nullable=False, index=True)
+    items_ordenados = Column(Text, nullable=False)
+    # JSON string: [{"item": "Agua potable", "cantidad": 20}, ...]
+    nota_repartidor = Column(Text, nullable=True)
+    estado = Column(String(20), nullable=False, default="preparando")
+    # valores: "preparando", "en_camino", "entregado"
+    creado_por = Column(String(200), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class AcopioEntrega(Base):
+    __tablename__ = "acopio_entregas"
+    id = Column(Integer, primary_key=True, index=True)
+    orden_id = Column(Integer, nullable=False, index=True, unique=True)
+    nombre_receptor = Column(String(200), nullable=False)
+    foto_entrega_url = Column(String(600), nullable=True)
+    notas_entrega = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

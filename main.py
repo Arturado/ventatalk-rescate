@@ -160,6 +160,7 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
+    lifespan=lifespan,
 )
 
 # Docs protegidos por API key en /cowboy-bebop
@@ -269,6 +270,18 @@ async def acopio_page(request: Request):
 async def acopio_reportar_page(centro_id: int, request: Request):
     return templates.TemplateResponse("acopio_reportar.html",
         {"request": request, "centro_id": centro_id})
+
+
+@app.get("/acopio/pedido/{orden_id}")
+async def acopio_pedido_page(orden_id: int, request: Request):
+    return templates.TemplateResponse("acopio_pedido.html",
+        {"request": request, "orden_id": orden_id})
+
+
+@app.get("/acopio/directorio")
+async def acopio_directorio_page(request: Request):
+    return templates.TemplateResponse("acopio_directorio.html",
+        {"request": request})
 
 
 @app.get("/personas/{persona_id}")
