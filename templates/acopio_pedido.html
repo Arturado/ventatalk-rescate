@@ -290,8 +290,8 @@ function renderFormulario(p) {
 
   var itemsHtml = items.length
     ? items.map(function(it, i) {
-        return '<label class="item-row" id="item-row-' + i + '" onclick="toggleItem(' + i + ')">' +
-          '<input type="checkbox" id="item-cb-' + i + '" onclick="event.stopPropagation();toggleItem(' + i + ')">' +
+        return '<label class="item-row" id="item-row-' + i + '">' +
+          '<input type="checkbox" id="item-cb-' + i + '" onchange="toggleItem(' + i + ')">' +
           '<span class="item-name">' + esc(it.item) + '</span>' +
           '<span class="item-qty">× ' + esc(it.cantidad) + ' unid</span>' +
         '</label>';
@@ -354,7 +354,6 @@ function renderFormulario(p) {
 function toggleItem(i) {
   var cb  = document.getElementById('item-cb-' + i);
   var row = document.getElementById('item-row-' + i);
-  cb.checked = !cb.checked;
   row.classList.toggle('checked', cb.checked);
 }
 
