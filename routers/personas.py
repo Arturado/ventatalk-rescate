@@ -1,5 +1,6 @@
 import os
 import uuid
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from slowapi import Limiter
@@ -105,6 +106,12 @@ def cambiar_estado_persona(
     if not persona:
         raise HTTPException(status_code=404, detail="No encontrado")
     persona.estado = data.estado
+    if data.descripcion_cambio:
+        prefijo = f"[Cambio de estado a {data.estado} — {datetime.now().strftime('%d/%m/%Y %H:%M')}]: "
+        if persona.descripcion:
+            persona.descripcion = persona.descripcion + "\n" + prefijo + data.descripcion_cambio
+        else:
+            persona.descripcion = prefijo + data.descripcion_cambio
     db.commit()
     db.refresh(persona)
     return persona

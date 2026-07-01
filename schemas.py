@@ -210,6 +210,7 @@ class PacienteUpdate(BaseModel):
 
 class EstadoPersonaUpdate(BaseModel):
     estado: str
+    descripcion_cambio: Optional[str] = None
 
 class CentroAcopioUpdate(BaseModel):
     nombre: Optional[str] = None

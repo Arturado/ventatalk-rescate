@@ -56,6 +56,30 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   color: white; border: none; border-radius: 6px; cursor: pointer;
 }
 .estado-form button:hover { background: #b91c1c; }
+.estado-popover {
+  position: absolute; top: 100%; left: 0; margin-top: 6px;
+  background: white; border: 1px solid #e5e7eb; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 12px; width: 220px;
+  z-index: 1500;
+}
+.estado-popover-title { font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+.estado-popover-desc {
+  width: 100%; font-size: 12px; padding: 6px 8px; border: 1.5px solid #d1d5db;
+  border-radius: 6px; resize: vertical; font-family: inherit; box-sizing: border-box;
+  outline: none;
+}
+.estado-popover-desc:focus { border-color: #dc2626; }
+.estado-popover-actions { display: flex; gap: 6px; margin-top: 8px; }
+.estado-popover-confirm {
+  flex: 1; font-size: 11px; font-weight: 700; padding: 6px 8px; background: #dc2626;
+  color: white; border: none; border-radius: 6px; cursor: pointer;
+}
+.estado-popover-confirm:hover { background: #b91c1c; }
+.estado-popover-cancel {
+  flex: 1; font-size: 11px; font-weight: 700; padding: 6px 8px; background: #f3f4f6;
+  color: #374151; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer;
+}
+.estado-popover-cancel:hover { background: #e5e7eb; }
 .tipo-badge {
   display: inline-block; padding: 2px 8px; border-radius: 20px;
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
@@ -653,8 +677,8 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
           <span class="tipo-badge tipo-{{ p.tipo_reporte }}">{{ 'ENCONTRADO VIVO' if p.tipo_reporte == 'encontrado_vivo' else 'DESAPARECIDO' }}</span>
         </td>
         <td style="white-space:nowrap;">{{ p.created_at.strftime('%d/%m/%Y %H:%M') if p.created_at else '—' }}</td>
-        <td>
-          <form class="estado-form" method="post" action="/admin/personas/{{ p.id }}/estado">
+        <td style="position:relative;">
+          <form class="estado-form" method="post" action="/admin/personas/{{ p.id }}/estado" data-persona-id="{{ p.id }}">
             <select name="estado">
               <option value="desaparecido" {% if p.estado == 'desaparecido' %}selected{% endif %}>Desaparecido</option>
               <option value="encontrado"   {% if p.estado == 'encontrado' %}selected{% endif %}>Encontrado</option>
@@ -663,6 +687,14 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
             </select>
             <button type="submit">✓</button>
           </form>
+          <div class="estado-popover" id="estado-popover-{{ p.id }}" style="display:none;">
+            <div class="estado-popover-title">Cambiar estado a: <strong class="estado-popover-nuevo"></strong></div>
+            <textarea class="estado-popover-desc" rows="2" placeholder="Descripción del cambio (opcional)..."></textarea>
+            <div class="estado-popover-actions">
+              <button type="button" class="estado-popover-confirm">Confirmar</button>
+              <button type="button" class="estado-popover-cancel">Cancelar</button>
+            </div>
+          </div>
         </td>
         <td>
           <div style="display:flex;gap:4px;flex-wrap:wrap;">
@@ -1418,20 +1450,75 @@ function actualizarContadorDup() {
   document.getElementById('dup-count').textContent = n;
 }
 
-/* Intercepta los forms de estado para enviar CSRF header vía fetch */
+/* Intercepta los forms de estado para abrir un popover de confirmación con descripción opcional */
+var ESTADO_LABELS = {
+  desaparecido: 'Desaparecido',
+  encontrado: 'Encontrado',
+  en_proceso: 'En proceso',
+  localizado: 'Localizado'
+};
+
 document.querySelectorAll('.estado-form').forEach(function(form) {
+  var personaId = form.dataset.personaId;
+  var select = form.querySelector('select[name="estado"]');
+  var popover = document.getElementById('estado-popover-' + personaId);
+  var nuevoLabel = popover.querySelector('.estado-popover-nuevo');
+  var descTextarea = popover.querySelector('.estado-popover-desc');
+  var btnConfirm = popover.querySelector('.estado-popover-confirm');
+  var btnCancel = popover.querySelector('.estado-popover-cancel');
+  var estadoActual = select.value;
+
+  function cerrarPopover() {
+    popover.style.display = 'none';
+    select.value = estadoActual;
+    descTextarea.value = '';
+  }
+
   form.addEventListener('submit', function(e) {
     e.preventDefault();
-    var estado = form.querySelector('select[name="estado"]').value;
-    fetch(form.action, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content
-      },
-      body: 'estado=' + encodeURIComponent(estado)
-    }).then(function() { location.reload(); })
-      .catch(function() { alert('Error al cambiar estado. Intenta de nuevo.'); });
+    nuevoLabel.textContent = ESTADO_LABELS[select.value] || select.value;
+    popover.style.display = 'block';
+    descTextarea.focus();
+  });
+
+  btnCancel.addEventListener('click', cerrarPopover);
+
+  btnConfirm.addEventListener('click', async function() {
+    var estado = select.value;
+    var descripcion = descTextarea.value.trim();
+    btnConfirm.disabled = true; btnConfirm.textContent = 'Guardando…';
+    try {
+      var body = 'estado=' + encodeURIComponent(estado);
+      if (descripcion) body += '&descripcion_cambio=' + encodeURIComponent(descripcion);
+      var res = await fetch(form.action, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: body
+      });
+      if (!res.ok) throw new Error();
+      estadoActual = estado;
+      var tr = form.closest('tr');
+      var badge = tr.querySelector('.estado-badge');
+      badge.className = 'estado-badge estado-' + estado;
+      badge.textContent = estado.replace('_', ' ');
+      tr.dataset.estado = estado;
+      popover.style.display = 'none';
+      descTextarea.value = '';
+      showToast('✅ Estado actualizado');
+    } catch (e) {
+      alert('Error al cambiar estado. Intenta de nuevo.');
+    } finally {
+      btnConfirm.disabled = false; btnConfirm.textContent = 'Confirmar';
+    }
+  });
+
+  document.addEventListener('click', function(e) {
+    if (popover.style.display === 'block' && !popover.contains(e.target) && !form.contains(e.target)) {
+      cerrarPopover();
+    }
   });
 });
 

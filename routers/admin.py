@@ -162,6 +162,7 @@ async def cambiar_estado(
     persona_id: int,
     request: Request,
     estado: str = Form(...),
+    descripcion_cambio: str = Form(None),
     x_csrf_token: str = Header(""),
     db: Session = Depends(get_db),
 ):
@@ -180,6 +181,12 @@ async def cambiar_estado(
     ).first()
     if persona:
         persona.estado = estado
+        if descripcion_cambio:
+            prefijo = f"[Cambio de estado a {estado} — {datetime.now().strftime('%d/%m/%Y %H:%M')}]: "
+            if persona.descripcion:
+                persona.descripcion = persona.descripcion + "\n" + prefijo + descripcion_cambio
+            else:
+                persona.descripcion = prefijo + descripcion_cambio
         db.commit()
     return RedirectResponse(url="/admin/dashboard", status_code=303)
 
