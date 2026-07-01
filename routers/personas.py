@@ -101,7 +101,7 @@ def cambiar_estado_persona(
 ):
     estados_validos = {"desaparecido", "encontrado", "en_proceso", "localizado"}
     if data.estado not in estados_validos:
-        raise HTTPException(status_code=422, detail=f"Estado inválido. Valores permitidos: {', '.join(estados_validos)}")
+        raise HTTPException(status_code=422, detail="Estado inválido")
     persona = db.query(models.PersonaDesaparecida).filter(models.PersonaDesaparecida.id == persona_id).first()
     if not persona:
         raise HTTPException(status_code=404, detail="No encontrado")
