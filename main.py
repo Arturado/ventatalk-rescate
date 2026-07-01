@@ -2,8 +2,10 @@ import os
 import bcrypt
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -155,10 +157,32 @@ app = FastAPI(
     title="Venezuela Rescate API",
     description="API de emergencias post-sismo Venezuela 2026",
     version="1.0.0",
-    docs_url="/docs" if ENV == "development" else None,
+    docs_url=None,
     redoc_url=None,
-    openapi_url="/openapi.json" if ENV == "development" else None,
+    openapi_url=None,
 )
+
+# Docs protegidos por API key en /cowboy-bebop
+@app.get("/cowboy-bebop", include_in_schema=False)
+async def custom_swagger(x_api_key: str = Header(None)):
+    expected = os.getenv("API_KEY")
+    if not expected or x_api_key != expected:
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    return get_swagger_ui_html(
+        openapi_url="/cowboy-bebop/openapi.json",
+        title="Venezuela Rescate API"
+    )
+
+@app.get("/cowboy-bebop/openapi.json", include_in_schema=False)
+async def custom_openapi(x_api_key: str = Header(None)):
+    expected = os.getenv("API_KEY")
+    if not expected or x_api_key != expected:
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    return get_openapi(
+        title="Venezuela Rescate API",
+        version="1.0.0",
+        routes=app.routes,
+    )
 
 MAX_BODY_BYTES = 15 * 1024 * 1024  # 15MB absoluto
 
