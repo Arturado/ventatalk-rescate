@@ -537,11 +537,12 @@ async function reconstructFiles(data) {
     const btnSi = document.createElement('button'); btnSi.className = 'cb-btn'; btnSi.textContent = 'Sí, tengo la cédula';
     btnSi.addEventListener('click', () => {
       userMsg('Sí, tengo la cédula');
-      inputArea.innerHTML = `<input type="text" id="cb-input" placeholder="V-12345678 o solo números" maxlength="15">
+      inputArea.innerHTML = `<input type="text" id="cb-input" placeholder="Ej: 12345678 (solo números)" maxlength="15" inputmode="numeric">
         <button class="cb-btn" id="cb-next">Continuar</button>
         <button class="cb-btn cb-btn-sec" id="cb-skip">No la sé</button>`;
       document.getElementById('cb-next').addEventListener('click', () => {
-        const v = document.getElementById('cb-input').value.trim();
+        const raw = document.getElementById('cb-input').value.trim();
+        const v = normalizarCedula(raw);
         if (v) { formData.cedula = v; userMsg(v); }
         currentStep++; saveDraft(currentStep, formData).catch(() => {}); askStep();
       });
@@ -691,7 +692,7 @@ async function reconstructFiles(data) {
     userMsg("Sí, tengo la cédula");
     await botMsg("¿Cuál es el número de cédula?", 350);
     inputArea.innerHTML = `
-      <input type="text" id="cb-input" placeholder="Ej: V-12345678 o 12345678" maxlength="15">
+      <input type="text" id="cb-input" placeholder="Ej: 12345678 (solo números)" maxlength="15" inputmode="numeric">
       <button class="cb-btn" id="cb-next">Continuar</button>
       <button class="cb-btn cb-btn-sec" id="cb-skip">No recuerdo el número</button>`;
     const inp = document.getElementById("cb-input");
@@ -829,8 +830,13 @@ async function reconstructFiles(data) {
     renderFotoUI();
   }
 
+  function normalizarCedula(val) {
+    return val.replace(/[^0-9]/g, '').trim();
+  }
+
   async function cedulaCheck(step, inp) {
-    const value = inp ? inp.value.trim() : "";
+    const raw = inp ? inp.value.trim() : "";
+    const value = normalizarCedula(raw);
     if (!value) { currentStep++; saveDraft(currentStep, formData).catch(() => {}); askStep(); return; }
     try {
       const res = await fetch(`/api/check-cedula?cedula=${encodeURIComponent(value)}`);
@@ -848,7 +854,11 @@ async function reconstructFiles(data) {
         return;
       }
     } catch (e) { /* continúa si falla */ }
-    processInput(step, inp);
+    formData[step.field] = value;
+    userMsg(value);
+    currentStep++;
+    saveDraft(currentStep, formData).catch(() => {});
+    askStep();
   }
 
   function processInput(step, inp) {
@@ -908,6 +918,18 @@ async function reconstructFiles(data) {
     inputArea.innerHTML = "";
     await clearDraft();
 
+    if (tipoReporte === "encontrado_vivo" && formData.cedula) {
+      try {
+        const ckRes = await fetch(`/api/check-cedula?cedula=${encodeURIComponent(formData.cedula)}`);
+        const ckData = await ckRes.json();
+        if (ckData.existe) {
+          try { await fetch(`/api/personas/${ckData.id}/localizar`, { method: 'POST' }); } catch(e) {}
+          showLocalizadoSuccess();
+          return;
+        }
+      } catch(e) { /* continúa con flujo normal */ }
+    }
+
     if (navigator.onLine) {
       await botMsg('Enviando tu reporte... ⏳', 500);
       const sent = await trySend(formData);
@@ -917,6 +939,20 @@ async function reconstructFiles(data) {
     await saveToQueue(formData);
     await registerSync();
     showOfflineSuccess();
+  }
+
+  function showLocalizadoSuccess() {
+    msgs.innerHTML = '';
+    bar.style.width = '100%';
+    const el = document.createElement('div');
+    el.className = 'cb-success';
+    el.innerHTML = `
+      <div class="cb-success-icon">✅</div>
+      <h2>¡Persona localizada!</h2>
+      <p>Encontramos un registro existente con esa cédula y actualizamos su estado a Localizado. La familia será notificada.</p>
+    `;
+    msgs.appendChild(el);
+    inputArea.innerHTML = `<button class="cb-btn" onclick="resetChat()">Reportar otra persona</button>`;
   }
 
   async function trySend(data) {

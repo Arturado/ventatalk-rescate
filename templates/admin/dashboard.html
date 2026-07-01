@@ -45,6 +45,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 .estado-desaparecido { background: #fef2f2; color: #b91c1c; }
 .estado-encontrado   { background: #f0fdf4; color: #15803d; }
 .estado-en_proceso   { background: #fffbeb; color: #b45309; }
+.estado-localizado   { background: #dcfce7; color: #16a34a; border: 1px solid #15803d; }
 .estado-form { display: inline-flex; gap: 4px; align-items: center; }
 .estado-form select {
   font-size: 12px; padding: 4px 8px; border: 1px solid #d1d5db;
@@ -564,6 +565,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
     <option value="desaparecido">Desaparecido</option>
     <option value="encontrado">Encontrado</option>
     <option value="en_proceso">En proceso</option>
+    <option value="localizado">Localizado</option>
   </select>
   <select id="filtrar-tipo">
     <option value="">Todos los tipos</option>
@@ -593,7 +595,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
         <th>Estado</th>
         <th>Fecha</th>
         <th>Acción</th>
-        <th>Eliminar</th>
+        <th>Acciones</th>
         <th>Detalle</th>
       </tr>
     </thead>
@@ -633,15 +635,36 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
               <option value="desaparecido" {% if p.estado == 'desaparecido' %}selected{% endif %}>Desaparecido</option>
               <option value="encontrado"   {% if p.estado == 'encontrado' %}selected{% endif %}>Encontrado</option>
               <option value="en_proceso"   {% if p.estado == 'en_proceso' %}selected{% endif %}>En proceso</option>
+              <option value="localizado"   {% if p.estado == 'localizado' %}selected{% endif %}>Localizado</option>
             </select>
             <button type="submit">✓</button>
           </form>
         </td>
         <td>
-          <button onclick="eliminarPersona({{ p.id }}, this)"
-                  style="font-size:11px;padding:4px 10px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
-            Eliminar
-          </button>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">
+            <button onclick="abrirEditarPersona(this)"
+                    data-id="{{ p.id }}"
+                    data-nombre="{{ p.nombres_apellidos }}"
+                    data-cedula="{{ p.cedula or '' }}"
+                    data-ubicacion="{{ p.ultima_ubicacion or '' }}"
+                    data-descripcion="{{ p.descripcion or '' }}"
+                    data-contacto="{{ p.numero_contacto or '' }}"
+                    data-contacto2="{{ p.numero_contacto_2 or '' }}"
+                    data-quien="{{ p.quien_ayudo or '' }}"
+                    data-contacto-quien="{{ p.contacto_quien_ayudo or '' }}"
+                    data-estado="{{ p.estado }}"
+                    data-tipo="{{ p.tipo_reporte }}"
+                    data-clinico="{{ p.estado_clinico or '' }}"
+                    data-sexo="{{ p.sexo or '' }}"
+                    data-edad="{{ p.edad_aproximada or '' }}"
+                    style="font-size:11px;padding:4px 10px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
+              ✏️ Editar
+            </button>
+            <button onclick="eliminarPersona({{ p.id }}, this)"
+                    style="font-size:11px;padding:4px 10px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
+              Eliminar
+            </button>
+          </div>
         </td>
         <td>
           <button onclick="toggleDetalle({{ p.id }}, this)"
@@ -727,6 +750,104 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
       {% endfor %}
     </tbody>
   </table>
+</div>
+
+<!-- Modal: Editar Persona -->
+<div class="adm-modal-bd" id="modal-editar-persona" onclick="if(event.target===this)closeModal('modal-editar-persona')">
+  <div class="adm-modal">
+    <div class="adm-modal-hdr">
+      <div class="adm-modal-title">✏️ Editar registro</div>
+      <button class="adm-modal-x" onclick="closeModal('modal-editar-persona')">×</button>
+    </div>
+    <div class="fg">
+      <label>Nombres y Apellidos</label>
+      <input type="text" id="ep-nombres" placeholder="Nombre completo">
+    </div>
+    <div class="fg">
+      <label>Cédula <small style="color:#9ca3af;">(solo números)</small></label>
+      <input type="text" id="ep-cedula" placeholder="solo números" inputmode="numeric">
+    </div>
+    <div class="fg">
+      <label>Última ubicación</label>
+      <input type="text" id="ep-ubicacion" placeholder="Av. Principal, Urb...">
+    </div>
+    <div class="fg">
+      <label>Descripción</label>
+      <textarea id="ep-descripcion" placeholder="Señas particulares, descripción..."></textarea>
+    </div>
+    <div class="fg-row">
+      <div class="fg">
+        <label>Número de contacto</label>
+        <input type="tel" id="ep-contacto" placeholder="+58 412...">
+      </div>
+      <div class="fg">
+        <label>Número de contacto 2</label>
+        <input type="tel" id="ep-contacto2" placeholder="+58 414...">
+      </div>
+    </div>
+    <div class="fg-row">
+      <div class="fg">
+        <label>Quién ayudó</label>
+        <input type="text" id="ep-quien" placeholder="Nombre...">
+      </div>
+      <div class="fg">
+        <label>Contacto de quien ayudó</label>
+        <input type="tel" id="ep-contacto-quien" placeholder="+58 414...">
+      </div>
+    </div>
+    <div class="fg-row">
+      <div class="fg">
+        <label>Estado</label>
+        <select id="ep-estado">
+          <option value="desaparecido">Desaparecido</option>
+          <option value="encontrado">Encontrado</option>
+          <option value="en_proceso">En proceso</option>
+          <option value="localizado">Localizado</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Tipo reporte</label>
+        <select id="ep-tipo">
+          <option value="desaparecido">Desaparecido</option>
+          <option value="encontrado_vivo">Encontrado vivo</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg-row">
+      <div class="fg">
+        <label>Estado clínico</label>
+        <select id="ep-clinico">
+          <option value="">— No especificado —</option>
+          <option value="atrapado">Atrapado/a</option>
+          <option value="herido">Herido/a</option>
+          <option value="inconsciente">Inconsciente</option>
+          <option value="sin_informacion">Sin información</option>
+          <option value="fallecido">Fallecido/a</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Sexo</label>
+        <select id="ep-sexo">
+          <option value="">— No especificado —</option>
+          <option value="masculino">Masculino</option>
+          <option value="femenino">Femenino</option>
+          <option value="no_determinado">No determinado</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Edad aproximada</label>
+      <select id="ep-edad">
+        <option value="">— No especificada —</option>
+        <option value="nino">Niño 0-12</option>
+        <option value="joven">Joven 13-25</option>
+        <option value="adulto">Adulto 26-60</option>
+        <option value="adulto_mayor">Adulto mayor 60+</option>
+        <option value="no_sabe">No sé</option>
+      </select>
+    </div>
+    <button class="adm-save-btn" id="btn-guardar-editar-persona" onclick="guardarEditarPersona()">Guardar cambios</button>
+  </div>
 </div>
 
 <!-- Toast -->
@@ -1084,7 +1205,11 @@ function renderMatchPair(m) {
       '<div class="match-score">' + scoreCircles(m.score) + '</div>' +
       '<div class="match-criterios">Coinciden en: ' + m.criterios_match.map(criterioLabel).join(' · ') + '</div>' +
       '<div class="match-actions">' +
-        '<button class="match-btn-confirm" onclick="confirmarMatch(' + m.desaparecido.id + ',' + m.encontrado.id + ',\'' + pairId + '\',this)">✓ Confirmar match — marcar ambos como Encontrado</button>' +
+        '<select id="match-sel-'+pairId+'" style="font-size:12px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;flex-shrink:0;">' +
+          '<option value="encontrado">Encontrado</option>' +
+          '<option value="localizado">Localizado</option>' +
+        '</select>' +
+        '<button class="match-btn-confirm" onclick="confirmarMatch(' + m.desaparecido.id + ',' + m.encontrado.id + ',\'' + pairId + '\',this)">✓ Confirmar match</button>' +
         '<button class="match-btn-discard" onclick="descartarMatch(\'' + pairId + '\',this)">✗ Descartar</button>' +
       '</div>' +
     '</div>';
@@ -1093,7 +1218,9 @@ function renderMatchPair(m) {
 
 async function confirmarMatch(desapId, encId, pairId, btn) {
   btn.disabled = true; btn.textContent = 'Confirmando…';
-  const body = new URLSearchParams({ estado: 'encontrado' });
+  var estadoSel = document.getElementById('match-sel-' + pairId);
+  var estadoValue = estadoSel ? estadoSel.value : 'encontrado';
+  const body = new URLSearchParams({ estado: estadoValue });
   const csrfHeaders = {
     'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content
   };
@@ -1103,7 +1230,7 @@ async function confirmarMatch(desapId, encId, pairId, btn) {
       fetch('/admin/personas/' + encId   + '/estado', { method: 'POST', body, headers: csrfHeaders }),
     ]);
     document.querySelector('[data-pair-id="' + pairId + '"]').remove();
-    showToast('✓ Match confirmado — ambos registros marcados como encontrados');
+    showToast('✓ Match confirmado — ambos registros marcados como ' + estadoValue);
     actualizarContadorMatches();
   } catch (e) {
     btn.disabled = false; btn.textContent = '✓ Confirmar match';
@@ -1679,7 +1806,7 @@ function closeLbFoto() {
   document.getElementById('lb-foto').classList.remove('open');
   document.getElementById('lb-foto-img').src = '';
 }
-document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { closeLbFoto(); closeModal('modal-hosp'); closeModal('modal-pac'); closeModal('modal-centro'); closeAcopioHistorialModal(); } });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { closeLbFoto(); closeModal('modal-hosp'); closeModal('modal-pac'); closeModal('modal-centro'); closeModal('modal-editar-persona'); closeAcopioHistorialModal(); } });
 
 async function exportPacientesCSV() {
   var key = sessionStorage.getItem('vr_api_key') || getApiKey();
@@ -2560,6 +2687,106 @@ function updateSolCount(n) {
     updateSolCount(data.length);
   } catch(e) {}
 })();
+
+/* ---- EDITAR PERSONA ---- */
+var _editPersonaId = null;
+var _editPersonaRow = null;
+
+function abrirEditarPersona(btn) {
+  var d = btn.dataset;
+  _editPersonaId = d.id;
+  _editPersonaRow = btn.closest('tr');
+  document.getElementById('ep-nombres').value      = d.nombre || '';
+  document.getElementById('ep-cedula').value       = d.cedula || '';
+  document.getElementById('ep-ubicacion').value    = d.ubicacion || '';
+  document.getElementById('ep-descripcion').value  = d.descripcion || '';
+  document.getElementById('ep-contacto').value     = d.contacto || '';
+  document.getElementById('ep-contacto2').value    = d.contacto2 || '';
+  document.getElementById('ep-quien').value        = d.quien || '';
+  document.getElementById('ep-contacto-quien').value = d.contactoQuien || '';
+  document.getElementById('ep-estado').value       = d.estado || 'desaparecido';
+  document.getElementById('ep-tipo').value         = d.tipo || 'desaparecido';
+  document.getElementById('ep-clinico').value      = d.clinico || '';
+  document.getElementById('ep-sexo').value         = d.sexo || '';
+  document.getElementById('ep-edad').value         = d.edad || '';
+  openModal('modal-editar-persona');
+}
+
+async function guardarEditarPersona() {
+  if (!_editPersonaId) return;
+  var btn = document.getElementById('btn-guardar-editar-persona');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  var cedula = document.getElementById('ep-cedula').value.replace(/[^0-9]/g, '').trim();
+
+  var fd = new FormData();
+  fd.append('nombres_apellidos',    document.getElementById('ep-nombres').value.trim());
+  fd.append('cedula',               cedula);
+  fd.append('ultima_ubicacion',     document.getElementById('ep-ubicacion').value.trim());
+  fd.append('descripcion',          document.getElementById('ep-descripcion').value.trim());
+  fd.append('numero_contacto',      document.getElementById('ep-contacto').value.trim());
+  fd.append('numero_contacto_2',    document.getElementById('ep-contacto2').value.trim());
+  fd.append('quien_ayudo',          document.getElementById('ep-quien').value.trim());
+  fd.append('contacto_quien_ayudo', document.getElementById('ep-contacto-quien').value.trim());
+  fd.append('estado',               document.getElementById('ep-estado').value);
+  fd.append('tipo_reporte',         document.getElementById('ep-tipo').value);
+  fd.append('estado_clinico',       document.getElementById('ep-clinico').value);
+  fd.append('sexo',                 document.getElementById('ep-sexo').value);
+  fd.append('edad_aproximada',      document.getElementById('ep-edad').value);
+
+  try {
+    var res = await fetch('/admin/personas/' + _editPersonaId, {
+      method: 'PATCH',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content },
+      body: fd
+    });
+    if (!res.ok) throw new Error();
+    var data = await res.json();
+    if (data.ok) {
+      showToast('✅ Registro actualizado');
+      closeModal('modal-editar-persona');
+      if (_editPersonaRow) {
+        var editBtn = _editPersonaRow.querySelector('[data-id]');
+        if (editBtn) {
+          var nuevoNombre = document.getElementById('ep-nombres').value.trim();
+          var nuevoEstado = document.getElementById('ep-estado').value;
+          var nuevoTipo   = document.getElementById('ep-tipo').value;
+          editBtn.dataset.nombre         = nuevoNombre;
+          editBtn.dataset.cedula         = cedula;
+          editBtn.dataset.ubicacion      = document.getElementById('ep-ubicacion').value.trim();
+          editBtn.dataset.descripcion    = document.getElementById('ep-descripcion').value.trim();
+          editBtn.dataset.contacto       = document.getElementById('ep-contacto').value.trim();
+          editBtn.dataset.contacto2      = document.getElementById('ep-contacto2').value.trim();
+          editBtn.dataset.quien          = document.getElementById('ep-quien').value.trim();
+          editBtn.dataset.contactoQuien  = document.getElementById('ep-contacto-quien').value.trim();
+          editBtn.dataset.estado         = nuevoEstado;
+          editBtn.dataset.tipo           = nuevoTipo;
+          editBtn.dataset.clinico        = document.getElementById('ep-clinico').value;
+          editBtn.dataset.sexo           = document.getElementById('ep-sexo').value;
+          editBtn.dataset.edad           = document.getElementById('ep-edad').value;
+          _editPersonaRow.dataset.nombre  = nuevoNombre.toLowerCase();
+          _editPersonaRow.dataset.cedula  = cedula;
+          _editPersonaRow.dataset.estado  = nuevoEstado;
+          _editPersonaRow.dataset.tipo    = nuevoTipo;
+          _editPersonaRow.dataset.clinico = document.getElementById('ep-clinico').value;
+          var cells = _editPersonaRow.querySelectorAll('td');
+          if (cells[2]) cells[2].innerHTML = '<strong>' + esc(nuevoNombre) + '</strong>';
+          if (cells[3]) cells[3].textContent = cedula || '—';
+          if (cells[6]) {
+            var tipoBadge = nuevoTipo === 'encontrado_vivo' ? 'ENCONTRADO VIVO' : 'DESAPARECIDO';
+            var tipoCls   = 'tipo-' + nuevoTipo;
+            cells[6].innerHTML =
+              '<span class="estado-badge estado-' + esc(nuevoEstado) + '">' + esc(nuevoEstado.replace(/_/g, ' ')) + '</span><br>' +
+              '<span class="tipo-badge ' + esc(tipoCls) + '">' + esc(tipoBadge) + '</span>';
+          }
+        }
+      }
+    }
+  } catch(e) {
+    alert('Error al guardar. Intenta de nuevo.');
+  }
+  btn.disabled = false; btn.textContent = 'Guardar cambios';
+}
 
 /* ---- Init ---- */
 (function() {

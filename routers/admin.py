@@ -172,7 +172,7 @@ async def cambiar_estado(
     if not validate_csrf(request, x_csrf_token, admin):
         raise HTTPException(status_code=403, detail="CSRF token inválido")
 
-    if estado not in ("desaparecido", "encontrado", "en_proceso"):
+    if estado not in ("desaparecido", "encontrado", "en_proceso", "localizado"):
         return RedirectResponse(url="/admin/dashboard", status_code=303)
 
     persona = db.query(models.PersonaDesaparecida).filter(
@@ -182,6 +182,80 @@ async def cambiar_estado(
         persona.estado = estado
         db.commit()
     return RedirectResponse(url="/admin/dashboard", status_code=303)
+
+# --- Editar persona (admin) ---
+
+@router.patch("/personas/{persona_id}")
+async def editar_persona_admin(
+    persona_id: int,
+    request: Request,
+    nombres_apellidos: Optional[str] = Form(None),
+    cedula: Optional[str] = Form(None),
+    ultima_ubicacion: Optional[str] = Form(None),
+    descripcion: Optional[str] = Form(None),
+    numero_contacto: Optional[str] = Form(None),
+    numero_contacto_2: Optional[str] = Form(None),
+    quien_ayudo: Optional[str] = Form(None),
+    contacto_quien_ayudo: Optional[str] = Form(None),
+    estado: Optional[str] = Form(None),
+    tipo_reporte: Optional[str] = Form(None),
+    estado_clinico: Optional[str] = Form(None),
+    sexo: Optional[str] = Form(None),
+    edad_aproximada: Optional[str] = Form(None),
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+
+    persona = db.query(models.PersonaDesaparecida).filter(
+        models.PersonaDesaparecida.id == persona_id
+    ).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="No encontrado")
+
+    if cedula is not None:
+        cedula = re.sub(r'[^0-9]', '', cedula.strip()) or None
+
+    ESTADOS_VALIDOS = {"desaparecido", "encontrado", "en_proceso", "localizado"}
+    TIPOS_VALIDOS = {"desaparecido", "encontrado_vivo"}
+    CLINICO_VALIDOS = {"atrapado", "herido", "inconsciente", "fallecido", "sin_informacion"}
+    SEXO_VALIDOS = {"masculino", "femenino", "no_determinado"}
+    EDAD_VALIDOS = {"nino", "joven", "adulto", "adulto_mayor", "no_sabe"}
+
+    if nombres_apellidos and nombres_apellidos.strip():
+        persona.nombres_apellidos = nombres_apellidos.strip()
+    if cedula is not None:
+        persona.cedula = cedula
+    if ultima_ubicacion and ultima_ubicacion.strip():
+        persona.ultima_ubicacion = ultima_ubicacion.strip()
+    if descripcion is not None:
+        persona.descripcion = descripcion.strip() or None
+    if numero_contacto and numero_contacto.strip():
+        persona.numero_contacto = numero_contacto.strip()
+    if numero_contacto_2 is not None:
+        persona.numero_contacto_2 = numero_contacto_2.strip() or None
+    if quien_ayudo is not None:
+        persona.quien_ayudo = quien_ayudo.strip() or None
+    if contacto_quien_ayudo is not None:
+        persona.contacto_quien_ayudo = contacto_quien_ayudo.strip() or None
+    if estado and estado in ESTADOS_VALIDOS:
+        persona.estado = estado
+    if tipo_reporte and tipo_reporte in TIPOS_VALIDOS:
+        persona.tipo_reporte = tipo_reporte
+    if estado_clinico and estado_clinico in CLINICO_VALIDOS:
+        persona.estado_clinico = estado_clinico
+    if sexo and sexo in SEXO_VALIDOS:
+        persona.sexo = sexo
+    if edad_aproximada and edad_aproximada in EDAD_VALIDOS:
+        persona.edad_aproximada = edad_aproximada
+
+    db.commit()
+    return {"ok": True, "id": persona_id}
+
 
 # --- Eliminar persona ---
 

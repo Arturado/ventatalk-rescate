@@ -170,6 +170,23 @@ async def check_cedula(
     return {"existe": False}
 
 
+@check_router.post("/personas/{persona_id}/localizar")
+@limiter.limit("30/hour")
+async def localizar_persona(
+    request: Request,
+    persona_id: int,
+    db: Session = Depends(get_db),
+):
+    persona = db.query(models.PersonaDesaparecida).filter(
+        models.PersonaDesaparecida.id == persona_id
+    ).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="No encontrado")
+    persona.estado = "localizado"
+    db.commit()
+    return {"ok": True, "id": persona_id}
+
+
 @check_router.get("/feed")
 @limiter.limit("30/hour")
 async def feed_publico(

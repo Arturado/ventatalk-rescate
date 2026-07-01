@@ -91,7 +91,7 @@ def cambiar_estado_persona(
     db: Session = Depends(get_db),
     _: str = Depends(verify_api_key),
 ):
-    estados_validos = {"desaparecido", "encontrado", "en_proceso"}
+    estados_validos = {"desaparecido", "encontrado", "en_proceso", "localizado"}
     if data.estado not in estados_validos:
         raise HTTPException(status_code=422, detail=f"Estado inválido. Valores permitidos: {', '.join(estados_validos)}")
     persona = db.query(models.PersonaDesaparecida).filter(models.PersonaDesaparecida.id == persona_id).first()
