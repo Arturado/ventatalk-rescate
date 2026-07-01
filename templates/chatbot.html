@@ -1032,6 +1032,7 @@ async function reconstructFiles(data) {
         if (data[key] instanceof File) fd.append(key, data[key]);
       }
       fd.append('sin_documentos', data.sin_documentos ? 'true' : 'false');
+      fd.append('tipo_reporte', tipoReporte);
       Object.entries(data).forEach(([k, v]) => {
         if (k.startsWith('_') || k === 'sin_documentos') return;
         if (['foto', 'foto_2', 'foto_3'].includes(k)) return;
