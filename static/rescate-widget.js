@@ -4,17 +4,17 @@
   let currentStep = 0, formData = {}, STEPS = [], tipoReporte = "";
 
   function buildSteps() {
-    const tR = formData.tipo_reportante || "familiar";
+    const tR = formData.tipo_reportante || "ciudadano";
     const isDesap = tipoReporte === "desaparecido";
     const ubicacionQ = !isDesap
       ? "¿Dónde está ahora mismo esta persona?"
-      : tR === "familiar" ? "¿Cuál fue su última ubicación conocida?"
+      : (tR === "familiar" || tR === "ciudadano") ? "¿Cuál fue su última ubicación conocida?"
       : (tR === "rescatista" || tR === "personal_salud" || tR === "personal_rescate_salud") ? "¿En qué punto de rescate o zona fue visto/a?"
       : "¿Dónde exactamente lo/la viste?";
     const estadoQ = (tR === "personal_salud" || tR === "rescatista" || tR === "personal_rescate_salud")
       ? "¿Cuál es su estado clínico actual?"
       : "¿Cuál era su estado cuando lo/la viste por última vez?";
-    const descripQ = { familiar: "¿Alguna seña particular adicional? (cicatrices, tatuajes, condiciones médicas)", personal_salud: "¿Algún detalle clínico relevante?", rescatista: "¿Algún detalle operacional relevante?", personal_rescate_salud: "¿Algún detalle clínico relevante?", testigo: "¿Qué más recuerdas de cuando lo/la viste?" }[tR] || "¿Alguna seña particular adicional?";
+    const descripQ = { familiar: "¿Alguna seña particular adicional? (cicatrices, tatuajes, condiciones médicas)", ciudadano: "¿Alguna seña particular adicional? (cicatrices, tatuajes, condiciones médicas)", personal_salud: "¿Algún detalle clínico relevante?", rescatista: "¿Algún detalle operacional relevante?", personal_rescate_salud: "¿Algún detalle clínico relevante?", testigo: "¿Qué más recuerdas de cuando lo/la viste?" }[tR] || "¿Alguna seña particular adicional?";
     return [
       { field: "nombres_apellidos", question: "¿Cuál es el nombre completo de la persona?", subtext: "Si no lo sabes escribe 'Desconocido'", type: "text", placeholder: "Ej: Maria Gonzalez Perez", required: true },
       { field: "_doc_choice", type: "doc-choice", question: "¿Tienes información sobre su cédula de identidad?" },
@@ -152,7 +152,7 @@
   function renderTipoReportanteButtons() {
     inputArea.innerHTML = "";
     [
-      { label: "👤 Familiar o conocido",    value: "familiar" },
+      { label: "👤 Ciudadano",    value: "ciudadano" },
       { label: "🦺 Personal Rescate/Salud", value: "personal_rescate_salud" },
     ].forEach(op => {
       const b = document.createElement("button");
