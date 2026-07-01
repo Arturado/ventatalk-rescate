@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Pedido de Entrega — Venezuela Rescate</title>
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100dvh; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a; color: #f1f5f9;
+      display: flex; flex-direction: column;
+    }
+
+    /* HEADER */
+    #hdr {
+      position: sticky; top: 0; z-index: 10;
+      background: #0f172a; border-bottom: 1px solid #1e293b;
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      flex-shrink: 0;
+    }
+    #hdr-title {
+      font-size: 14px; font-weight: 700; color: #f1f5f9;
+      display: flex; align-items: center; gap: 8px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #conn-badge {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600;
+      padding: 4px 10px; border-radius: 20px;
+      background: #1e293b; flex-shrink: 0; transition: all .2s;
+    }
+    #conn-dot { width: 8px; height: 8px; border-radius: 50%; background: #16a34a; flex-shrink: 0; }
+    #conn-badge.offline #conn-dot { background: #dc2626; }
+    #conn-badge.offline #conn-text { color: #fca5a5; }
+
+    /* MAIN */
+    #main { flex: 1; padding: 16px; max-width: 600px; width: 100%; margin: 0 auto; }
+
+    /* SECTION */
+    .section {
+      background: #1e293b; border-radius: 14px;
+      border: 1px solid #334155;
+      padding: 16px 16px 18px;
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-size: 14px; font-weight: 700; color: #f1f5f9;
+      margin-bottom: 14px; padding-bottom: 10px;
+      border-bottom: 1px solid #334155;
+    }
+
+    /* BADGE ESTADO */
+    .badge-estado {
+      display: inline-block; padding: 6px 14px; border-radius: 20px;
+      font-size: 13px; font-weight: 700; margin-bottom: 12px;
+    }
+    .badge-preparando { background: #422006; color: #fbbf24; }
+    .badge-en_camino  { background: #172554; color: #93c5fd; }
+
+    .centro-nombre { font-size: 17px; font-weight: 800; color: #f1f5f9; margin-bottom: 3px; }
+    .centro-direccion { font-size: 13px; color: #94a3b8; margin-bottom: 10px; }
+    .generado-por { font-size: 12px; color: #64748b; }
+
+    /* ITEMS */
+    .item-row {
+      display: flex; align-items: center; gap: 10px;
+      background: #0f172a; border: 1.5px solid #334155;
+      border-radius: 8px; padding: 12px 12px;
+      margin-bottom: 8px; cursor: pointer; user-select: none;
+      transition: border-color .15s;
+    }
+    .item-row:last-child { margin-bottom: 0; }
+    .item-row:hover { border-color: #475569; }
+    .item-row.checked { border-color: #16a34a; background: #052e16; }
+    .item-row input[type="checkbox"] {
+      width: 20px; height: 20px; flex-shrink: 0; cursor: pointer; accent-color: #16a34a;
+    }
+    .item-name { flex: 1; font-size: 14px; color: #f1f5f9; }
+    .item-qty { font-size: 13px; font-weight: 700; color: #94a3b8; white-space: nowrap; }
+
+    .nota-block {
+      margin-top: 14px; padding: 12px 14px;
+      background: #422006; border: 1px solid #92400e;
+      border-radius: 10px; font-size: 13.5px; color: #fde68a; line-height: 1.5;
+    }
+
+    /* COLLAPSIBLE */
+    .collapsible-toggle {
+      width: 100%; text-align: left; background: transparent; border: none;
+      color: #93c5fd; font-size: 14px; font-weight: 700; cursor: pointer;
+      padding: 0; display: flex; align-items: center; justify-content: space-between;
+    }
+    .reporte-info-row { font-size: 13px; margin-bottom: 8px; }
+    .reporte-info-label { font-weight: 700; color: #94a3b8; text-transform: uppercase; font-size: 10.5px; letter-spacing: .04em; }
+    .reporte-info-txt { color: #cbd5e1; margin-top: 2px; }
+
+    /* FORM FIELDS */
+    .field-label { display: block; font-size: 13px; font-weight: 600; color: #94a3b8; margin-bottom: 6px; }
+    #receptor-input {
+      width: 100%; padding: 14px; font-size: 17px; font-weight: 600;
+      background: #0f172a; border: 1.5px solid #334155; border-radius: 10px;
+      color: #f1f5f9; outline: none; transition: border-color .15s;
+    }
+    #receptor-input::placeholder { color: #475569; }
+    #receptor-input:focus { border-color: #16a34a; }
+    #notas-entrega-input {
+      width: 100%; min-height: 70px; margin-top: 14px;
+      background: #0f172a; border: 1.5px solid #334155;
+      border-radius: 10px; padding: 12px 14px;
+      font-size: 14px; color: #f1f5f9; outline: none; resize: vertical;
+      font-family: inherit; line-height: 1.5; transition: border-color .15s;
+    }
+    #notas-entrega-input::placeholder { color: #475569; }
+    #notas-entrega-input:focus { border-color: #16a34a; }
+
+    /* FOTO */
+    .foto-options { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+    .foto-btn {
+      flex: 1; min-width: 120px; text-align: center;
+      padding: 12px 10px; background: #0f172a; border: 1.5px solid #334155;
+      border-radius: 10px; font-size: 13px; font-weight: 700; color: #cbd5e1;
+      cursor: pointer; transition: border-color .15s;
+    }
+    .foto-btn:hover { border-color: #475569; }
+    .foto-btn-clear { flex: 0 0 auto; min-width: unset; background: #3b0a0a; border-color: #7f1d1d; color: #fca5a5; display: none; }
+    #foto-preview-wrap { display: none; margin-top: 12px; }
+    #foto-preview { width: 100%; max-height: 260px; object-fit: cover; border-radius: 10px; }
+
+    /* SUBMIT */
+    #btn-confirmar {
+      width: 100%; min-height: 56px;
+      background: #16a34a; color: white; border: none;
+      border-radius: 12px; font-size: 17px; font-weight: 800;
+      cursor: pointer; margin-bottom: 32px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: background .15s;
+    }
+    #btn-confirmar:hover { background: #15803d; }
+    #btn-confirmar:disabled { background: #14532d; color: #86efac; cursor: not-allowed; }
+
+    /* SUCCESS / COMPLETADO */
+    .success-screen {
+      text-align: center; padding: 40px 20px;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 14px;
+    }
+    .success-icon { font-size: 64px; }
+    .success-title { font-size: 21px; font-weight: 800; color: #4ade80; }
+    .success-summary {
+      width: 100%; text-align: left;
+      background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+      padding: 16px; margin-top: 10px;
+    }
+    .success-row { font-size: 13.5px; margin-bottom: 8px; color: #cbd5e1; }
+    .success-row:last-child { margin-bottom: 0; }
+    .success-row strong { color: #f1f5f9; }
+    .success-foto { width: 100%; max-height: 240px; object-fit: cover; border-radius: 10px; margin-top: 10px; }
+
+    /* ERROR */
+    .error-msg {
+      background: #3b0a0a; border: 1px solid #7f1d1d;
+      border-radius: 10px; padding: 12px 16px;
+      color: #fca5a5; font-size: 14px; font-weight: 600;
+      margin-bottom: 12px; display: none;
+    }
+
+    /* SPINNER */
+    .spinner-inline {
+      width: 20px; height: 20px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-top-color: white; border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    .spinner {
+      width: 28px; height: 28px;
+      border: 3px solid #334155; border-top-color: #16a34a;
+      border-radius: 50%; animation: spin .7s linear infinite;
+      display: inline-block; margin-bottom: 10px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .state-msg { text-align: center; padding: 60px 20px; color: #94a3b8; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+<header id="hdr">
+  <div id="hdr-title">📦 Cargando pedido...</div>
+  <div id="conn-badge">
+    <div id="conn-dot"></div>
+    <span id="conn-text">En línea</span>
+  </div>
+</header>
+
+<main id="main">
+  <div class="error-msg" id="error-msg"></div>
+  <div id="content">
+    <div class="state-msg"><div class="spinner"></div><br>Cargando pedido...</div>
+  </div>
+</main>
+
+<script>
+var ORDEN_ID = {{ orden_id }};
+var _pedido = null;
+var _selectedFoto = null;
+
+/* ── Conexión ── */
+function updateConn() {
+  var b = document.getElementById('conn-badge');
+  var t = document.getElementById('conn-text');
+  if (navigator.onLine) { b.classList.remove('offline'); t.textContent = 'En línea'; }
+  else { b.classList.add('offline'); t.textContent = 'Sin señal'; }
+}
+window.addEventListener('online',  updateConn);
+window.addEventListener('offline', updateConn);
+updateConn();
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtFecha(iso) {
+  if (!iso) return '—';
+  var d = new Date(iso);
+  return d.toLocaleString('es-VE', {
+    timeZone: 'America/Caracas',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  });
+}
+
+/* ── Cargar pedido ── */
+async function loadPedido() {
+  try {
+    var res = await fetch('/api/acopio/ordenes/' + ORDEN_ID);
+    if (res.status === 404) {
+      document.getElementById('hdr-title').textContent = '📦 Pedido no encontrado';
+      document.getElementById('content').innerHTML =
+        '<div class="state-msg">❌ Este pedido no existe o fue eliminado.</div>';
+      return;
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _pedido = await res.json();
+    document.title = 'Pedido #' + _pedido.id + ' — ' + (_pedido.centro ? _pedido.centro.nombre : '');
+    document.getElementById('hdr-title').textContent = '📦 Pedido #' + _pedido.id;
+    if (_pedido.entrega) {
+      renderCompletado(_pedido);
+    } else {
+      renderFormulario(_pedido);
+    }
+  } catch(e) {
+    document.getElementById('content').innerHTML =
+      '<div class="state-msg">❌ Error al cargar el pedido.<br>' +
+      '<button onclick="loadPedido()" style="margin-top:12px;padding:10px 22px;background:#16a34a;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">Reintentar</button></div>';
+  }
+}
+
+/* ── Pantalla: ya entregado ── */
+function renderCompletado(p) {
+  var e = p.entrega;
+  document.getElementById('content').innerHTML =
+    '<div class="success-screen">' +
+      '<div class="success-icon">✅</div>' +
+      '<div class="success-title">Este pedido ya fue confirmado</div>' +
+      '<div class="success-summary">' +
+        '<div class="success-row">👤 Receptor: <strong>' + esc(e.nombre_receptor) + '</strong></div>' +
+        '<div class="success-row">🕐 Fecha de entrega: <strong>' + fmtFecha(e.created_at) + '</strong></div>' +
+        (e.notas_entrega ? '<div class="success-row">📝 Notas: ' + esc(e.notas_entrega) + '</div>' : '') +
+        (e.foto_entrega_url ? '<img class="success-foto" src="' + e.foto_entrega_url + '" alt="Foto de entrega">' : '') +
+      '</div>' +
+    '</div>';
+}
+
+/* ── Pantalla: formulario ── */
+function renderFormulario(p) {
+  var estadoInfo = p.estado === 'en_camino'
+    ? { cls: 'badge-en_camino', txt: '🚛 En camino' }
+    : { cls: 'badge-preparando', txt: '🚚 En preparación' };
+
+  var centro = p.centro || {};
+  var items = Array.isArray(p.items_ordenados) ? p.items_ordenados : [];
+  var reporte = p.reporte || {};
+
+  var itemsHtml = items.length
+    ? items.map(function(it, i) {
+        return '<label class="item-row" id="item-row-' + i + '" onclick="toggleItem(' + i + ')">' +
+          '<input type="checkbox" id="item-cb-' + i + '" onclick="event.stopPropagation();toggleItem(' + i + ')">' +
+          '<span class="item-name">' + esc(it.item) + '</span>' +
+          '<span class="item-qty">× ' + esc(it.cantidad) + ' unid</span>' +
+        '</label>';
+      }).join('')
+    : '<div style="color:#64748b;font-size:13px;">Sin items especificados.</div>';
+
+  var necesitan = reporte.necesitan ? reporte.necesitan.split(',').map(function(s){return s.trim();}).filter(Boolean).join(', ') : '';
+  var noNecesitan = reporte.no_necesitan ? reporte.no_necesitan.split(',').map(function(s){return s.trim();}).filter(Boolean).join(', ') : '';
+
+  document.getElementById('content').innerHTML =
+    /* SECCIÓN 1 — Header del pedido */
+    '<div class="section">' +
+      '<span class="badge-estado ' + estadoInfo.cls + '">' + estadoInfo.txt + '</span>' +
+      '<div class="centro-nombre">' + esc(centro.nombre || 'Centro de acopio') + '</div>' +
+      (centro.direccion ? '<div class="centro-direccion">' + esc(centro.direccion) + '</div>' : '') +
+      '<div class="generado-por">Generado por: ' + esc(p.creado_por || 'No especificado') + '</div>' +
+    '</div>' +
+
+    /* SECCIÓN 2 — Items a entregar */
+    '<div class="section">' +
+      '<div class="section-title">📦 Items a entregar</div>' +
+      itemsHtml +
+      (p.nota_repartidor ? '<div class="nota-block">📝 Nota: ' + esc(p.nota_repartidor) + '</div>' : '') +
+    '</div>' +
+
+    /* SECCIÓN 3 — Datos del reporte original */
+    '<div class="section">' +
+      '<button type="button" class="collapsible-toggle" onclick="toggleReporteInfo()">' +
+        '<span>Ver qué necesita el centro</span><span id="reporte-toggle-icon">▼</span>' +
+      '</button>' +
+      '<div id="reporte-info-body" style="display:none;margin-top:14px;">' +
+        '<div class="reporte-info-row"><div class="reporte-info-label">✅ Necesitan</div><div class="reporte-info-txt">' + (necesitan ? esc(necesitan) : 'No indicado') + '</div></div>' +
+        '<div class="reporte-info-row"><div class="reporte-info-label">❌ NO necesitan</div><div class="reporte-info-txt">' + (noNecesitan ? esc(noNecesitan) : 'No indicado') + '</div></div>' +
+        '<div class="reporte-info-row"><div class="reporte-info-label">📝 Notas</div><div class="reporte-info-txt">' + (reporte.notas ? esc(reporte.notas) : 'No indicado') + '</div></div>' +
+      '</div>' +
+    '</div>' +
+
+    /* SECCIÓN 4 — Confirmar entrega */
+    '<div class="section">' +
+      '<div class="section-title">✅ Confirmar entrega</div>' +
+      '<p style="font-size:13px;color:#94a3b8;margin:-6px 0 14px;">Completa estos datos al entregar los insumos</p>' +
+      '<label class="field-label">Nombre de quien recibe *</label>' +
+      '<input id="receptor-input" type="text" placeholder="Nombre completo">' +
+      '<label class="field-label" style="margin-top:14px;">Notas de entrega</label>' +
+      '<textarea id="notas-entrega-input" placeholder="Observaciones de la entrega..."></textarea>' +
+      '<label class="field-label" style="margin-top:14px;">Foto de los insumos entregados</label>' +
+      '<div class="foto-options">' +
+        '<label class="foto-btn" for="foto-camera">📷 Tomar foto</label>' +
+        '<label class="foto-btn" for="foto-file">🖼️ Adjuntar</label>' +
+        '<button type="button" class="foto-btn foto-btn-clear" id="foto-clear-btn" onclick="clearFoto()">✕ Sin foto</button>' +
+      '</div>' +
+      '<input type="file" id="foto-camera" accept="image/*" capture="environment" style="display:none" onchange="onFotoSelected(this)">' +
+      '<input type="file" id="foto-file" accept="image/*" style="display:none" onchange="onFotoSelected(this)">' +
+      '<div id="foto-preview-wrap"><img id="foto-preview" src="" alt="Preview"></div>' +
+    '</div>' +
+
+    '<button id="btn-confirmar" onclick="submitEntrega()">✅ CONFIRMAR ENTREGA</button>';
+}
+
+function toggleItem(i) {
+  var cb  = document.getElementById('item-cb-' + i);
+  var row = document.getElementById('item-row-' + i);
+  cb.checked = !cb.checked;
+  row.classList.toggle('checked', cb.checked);
+}
+
+function toggleReporteInfo() {
+  var body = document.getElementById('reporte-info-body');
+  var icon = document.getElementById('reporte-toggle-icon');
+  var vis = body.style.display !== 'none';
+  body.style.display = vis ? 'none' : 'block';
+  icon.textContent = vis ? '▼' : '▲';
+}
+
+/* ── Foto ── */
+function onFotoSelected(input) {
+  var file = input.files[0];
+  if (!file) return;
+  _selectedFoto = file;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    document.getElementById('foto-preview').src = e.target.result;
+    document.getElementById('foto-preview-wrap').style.display = 'block';
+    document.getElementById('foto-clear-btn').style.display = 'inline-block';
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearFoto() {
+  _selectedFoto = null;
+  document.getElementById('foto-camera').value = '';
+  document.getElementById('foto-file').value = '';
+  document.getElementById('foto-preview-wrap').style.display = 'none';
+  document.getElementById('foto-clear-btn').style.display = 'none';
+}
+
+/* ── Submit ── */
+async function submitEntrega() {
+  var errEl = document.getElementById('error-msg');
+  errEl.style.display = 'none';
+
+  var nombre = (document.getElementById('receptor-input').value || '').trim();
+  if (!nombre) {
+    errEl.textContent = 'El nombre de quien recibe es obligatorio.';
+    errEl.style.display = 'block';
+    errEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+
+  var btn = document.getElementById('btn-confirmar');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner-inline"></div> Confirmando...';
+
+  var fd = new FormData();
+  fd.append('nombre_receptor', nombre);
+  var notas = (document.getElementById('notas-entrega-input').value || '').trim();
+  if (notas) fd.append('notas_entrega', notas);
+  if (_selectedFoto) fd.append('foto_entrega', _selectedFoto);
+
+  try {
+    var res = await fetch('/api/acopio/ordenes/' + ORDEN_ID + '/confirmar-entrega', { method: 'POST', body: fd });
+    if (res.status === 400) {
+      var d400 = await res.json().catch(function(){ return {}; });
+      throw new Error(d400.detail || 'Esta orden ya fue confirmada.');
+    }
+    if (!res.ok) {
+      var d = await res.json().catch(function(){ return {}; });
+      throw new Error(d.detail || 'Error del servidor');
+    }
+    var entrega = await res.json();
+    showSuccessScreen(entrega);
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = '✅ CONFIRMAR ENTREGA';
+    errEl.textContent = '❌ ' + (e.message || 'Error de red — verifica tu conexión e intenta de nuevo.');
+    errEl.style.display = 'block';
+    errEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function showSuccessScreen(entrega) {
+  var centro = (_pedido && _pedido.centro) || {};
+  var items = (_pedido && Array.isArray(_pedido.items_ordenados)) ? _pedido.items_ordenados : [];
+  var itemsTxt = items.length
+    ? items.map(function(it){ return it.item + ' × ' + it.cantidad; }).join(', ')
+    : '—';
+
+  document.getElementById('content').innerHTML =
+    '<div class="success-screen">' +
+      '<div class="success-icon">✅</div>' +
+      '<div class="success-title">Entrega confirmada. ¡Gracias!</div>' +
+      '<div class="success-summary">' +
+        '<div class="success-row">📍 Centro: <strong>' + esc(centro.nombre || '—') + '</strong></div>' +
+        '<div class="success-row">📦 Items entregados: ' + esc(itemsTxt) + '</div>' +
+        '<div class="success-row">👤 Receptor: <strong>' + esc(entrega.nombre_receptor) + '</strong></div>' +
+        '<div class="success-row">🕐 Hora: <strong>' + fmtFecha(entrega.created_at) + '</strong></div>' +
+        (entrega.foto_entrega_url ? '<img class="success-foto" src="' + entrega.foto_entrega_url + '" alt="Foto de entrega">' : '') +
+      '</div>' +
+    '</div>';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ── Init ── */
+loadPedido();
+</script>
+</body>
+</html>

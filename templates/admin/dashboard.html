@@ -260,6 +260,38 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   .match-cards { grid-template-columns: 1fr; }
   .fg-row { grid-template-columns: 1fr; }
 }
+
+/* Pedidos de acopio (modal crear pedido) */
+.section-title-sm { font-size:12px; font-weight:700; color:#374151; text-transform:uppercase; letter-spacing:.04em; margin:14px 0 8px; }
+.ped-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.ped-item {
+  display:flex; align-items:center; gap:8px;
+  border:1.5px solid #e5e7eb; border-radius:8px; padding:8px 10px;
+  cursor:pointer; transition:border-color .15s; background:#fff;
+}
+.ped-item:hover { border-color:#9ca3af; }
+.ped-item input[type="checkbox"] { width:16px; height:16px; cursor:pointer; flex-shrink:0; accent-color:#16a34a; }
+.ped-item-label { flex:1; font-size:13px; color:#374151; }
+.ped-item-qty {
+  width:64px; padding:5px 8px; border:1.5px solid #d1d5db; border-radius:6px;
+  font-size:13px; text-align:center; outline:none; color:#111;
+}
+.ped-item-qty:disabled { background:#f3f4f6; color:#9ca3af; }
+.ped-item-qty:focus { border-color:#16a34a; }
+.custom-input-row { display:flex; gap:8px; }
+.ped-custom-input { flex:1; padding:9px 12px; border:1.5px solid #d1d5db; border-radius:7px; font-size:14px; outline:none; color:#111; }
+.ped-custom-input:focus { border-color:#16a34a; }
+.ped-custom-qty { width:80px; padding:9px 12px; border:1.5px solid #d1d5db; border-radius:7px; font-size:14px; outline:none; color:#111; text-align:center; }
+.ped-custom-qty:focus { border-color:#16a34a; }
+.btn-add-ped { width:44px; flex-shrink:0; background:#16a34a; color:white; border:none; border-radius:7px; font-size:20px; font-weight:700; cursor:pointer; }
+.btn-add-ped:hover { background:#15803d; }
+.chips-wrap { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.chip { display:inline-flex; align-items:center; gap:5px; background:#f3f4f6; border-radius:20px; padding:4px 10px; font-size:12px; font-weight:600; color:#374151; }
+.chip-x { background:transparent; border:none; color:#9ca3af; cursor:pointer; font-size:14px; line-height:1; padding:0 2px; }
+.chip-x:hover { color:#111; }
+@media (max-width: 480px) {
+  .ped-grid { grid-template-columns: 1fr; }
+}
 {% endblock %}
 {% block content %}
 <meta name="csrf-token" content="{{ csrf_token }}">
@@ -1101,6 +1133,18 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
     <div id="aco-hist-modal-body" style="overflow-y:auto;overflow-x:auto;flex:1;">
       <p style="color:#6b7280;text-align:center;padding:32px;">Cargando...</p>
     </div>
+  </div>
+</div>
+
+<!-- Modal: Crear pedido de entrega (acopio) -->
+<div class="adm-modal-bd" id="modal-aco-pedido" style="z-index:1002;" onclick="if(event.target===this)closeModal('modal-aco-pedido')">
+  <div class="adm-modal" style="max-width:640px;">
+    <div class="adm-modal-hdr">
+      <div class="adm-modal-title" id="aco-pedido-title">📦 Preparar pedido</div>
+      <button class="adm-modal-x" onclick="closeModal('modal-aco-pedido')">×</button>
+    </div>
+    <p style="font-size:13px;color:#6b7280;margin:-12px 0 16px;">Selecciona qué vas a enviar y en qué cantidad</p>
+    <div id="aco-pedido-modal-content"></div>
   </div>
 </div>
 
@@ -2541,14 +2585,14 @@ function openAcopioHistorialModal(centroId, centroNombre) {
   document.getElementById('aco-hist-modal-title').textContent = '📋 Historial — ' + centroNombre;
   document.getElementById('aco-hist-modal-body').innerHTML = '<p style="color:#6b7280;text-align:center;padding:32px;">Cargando...</p>';
   document.getElementById('modal-aco-hist').style.display = 'flex';
-  _loadAcopioHistorialModal(centroId);
+  _loadAcopioHistorialModal(centroId, centroNombre);
 }
 
 function closeAcopioHistorialModal() {
   document.getElementById('modal-aco-hist').style.display = 'none';
 }
 
-async function _loadAcopioHistorialModal(centroId) {
+async function _loadAcopioHistorialModal(centroId, centroNombre) {
   var key = getApiKey(); if (!key) return;
   var body = document.getElementById('aco-hist-modal-body');
   try {
@@ -2588,12 +2632,19 @@ async function _loadAcopioHistorialModal(centroId) {
           '<td style="padding:8px 12px;vertical-align:top;word-break:break-word;min-width:130px;">' + noNecCell + '</td>' +
           '<td style="padding:8px 12px;vertical-align:top;word-break:break-word;min-width:130px;">' + esc(r.notas||'—') + '</td>' +
           '<td style="padding:8px 12px;vertical-align:top;white-space:nowrap;">' + esc(r.reportado_por||'—') + '</td>' +
-          '<td style="padding:8px 12px;vertical-align:top;">' +
+          '<td style="padding:8px 12px;vertical-align:top;white-space:nowrap;">' +
+            '<button data-rid="' + r.id + '" data-cid="' + centroId + '" data-cnombre="' + esc(centroNombre) + '" data-extra="' + esc(r.necesitan_extra||'') + '" onclick="openCrearPedidoModal(this.dataset.rid,this.dataset.cid,this.dataset.cnombre,this.dataset.extra)" style="font-size:11px;padding:3px 7px;background:#16a34a;color:white;border:none;border-radius:4px;cursor:pointer;margin-right:4px;">📦 Crear pedido</button>' +
             '<button onclick="eliminarAcopioReporte(' + r.id + ',\'' + csrf + '\',this)" style="font-size:11px;padding:3px 7px;background:#ef4444;color:white;border:none;border-radius:4px;cursor:pointer;">🗑</button>' +
+          '</td>' +
+        '</tr>' +
+        '<tr class="aco-hist-row" id="aco-pedidos-row-' + r.id + '">' +
+          '<td colspan="7" style="padding:6px 12px 10px;">' +
+            '<div id="aco-pedidos-' + r.id + '" style="color:#9ca3af;">Cargando pedidos...</div>' +
           '</td>' +
         '</tr>';
       }).join('') +
       '</tbody></table></div>';
+    data.forEach(function(r) { loadPedidosReporte(r.id); });
   } catch(e) {
     body.innerHTML = '<p style="color:#dc2626;padding:16px;">Error al cargar historial.</p>';
   }
@@ -2609,6 +2660,8 @@ async function eliminarAcopioReporte(reporteId, csrf, btn) {
     });
     if (!res.ok) throw new Error();
     btn.closest('tr').remove();
+    var pedidosRow = document.getElementById('aco-pedidos-row-' + reporteId);
+    if (pedidosRow) pedidosRow.remove();
     showToast('✓ Reporte eliminado');
     loadAcopio();
   } catch(e) {
@@ -2694,6 +2747,261 @@ function startAcoRefresh() {
 
 function stopAcoRefresh() {
   if (_acoRefreshTimer) { clearInterval(_acoRefreshTimer); _acoRefreshTimer = null; }
+}
+
+/* ---- PEDIDOS DE ACOPIO ---- */
+var PEDIDO_ITEMS = [
+  'Agua potable',
+  'Alimentos no perecederos',
+  'Fórmula láctea/leche',
+  'Comida preparada',
+  'Tiendas de campaña',
+  'Colchonetas / catres',
+  'Frazadas / sábanas',
+  'Lonas / plásticos',
+  'Medicamentos básicos',
+  'Botiquín primeros auxilios',
+  'Pañales',
+  'Artículos de higiene personal',
+  'Toallas sanitarias',
+  'Ropa (adultos)',
+  'Ropa (niños)',
+  'Calzado',
+  'Linternas / velas / pilas',
+  'Cargadores / poder eléctrico'
+];
+var _pedidoExtraItems = [];
+
+async function loadPedidosReporte(reporteId) {
+  var container = document.getElementById('aco-pedidos-' + reporteId);
+  if (!container) return;
+  var key = sessionStorage.getItem('vr_api_key');
+  if (!key) { container.innerHTML = ''; return; }
+  try {
+    var res = await fetch('/api/acopio/ordenes?reporte_id=' + reporteId, { headers: { 'X-Api-Key': key } });
+    if (!res.ok) { container.innerHTML = ''; return; }
+    var pedidos = await res.json();
+    if (!pedidos.length) { container.innerHTML = '<span style="color:#9ca3af;">Sin pedidos creados aún.</span>'; return; }
+    var csrf = document.querySelector('meta[name="csrf-token"]').content;
+    var estLabel = { preparando: '🚚 Preparando', en_camino: '🚛 En camino', entregado: '✅ Entregado' };
+    var estColor = { preparando: '#a16207', en_camino: '#1e40af', entregado: '#15803d' };
+    container.innerHTML = pedidos.map(function(p) {
+      var link = 'https://rescate.ventatalk.com/acopio/pedido/' + p.id;
+      var entregaInfo = p.entrega
+        ? ' — Recibió: <strong>' + esc(p.entrega.nombre_receptor) + '</strong> (' + fmtDate(p.entrega.created_at) + ')'
+        : '';
+      return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0;border-top:1px solid #e5e7eb;">' +
+        '<span style="font-weight:700;color:' + (estColor[p.estado] || '#6b7280') + ';">' + (estLabel[p.estado] || p.estado) + '</span>' +
+        '<a href="' + link + '" target="_blank" style="color:#0369a1;">' + link + '</a>' +
+        entregaInfo +
+        '<button onclick="eliminarPedido(' + p.id + ',\'' + csrf + '\',' + reporteId + ')" style="font-size:11px;padding:2px 7px;background:#ef4444;color:white;border:none;border-radius:4px;cursor:pointer;margin-left:auto;">🗑️</button>' +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    container.innerHTML = '<span style="color:#dc2626;">Error al cargar pedidos.</span>';
+  }
+}
+
+async function eliminarPedido(ordenId, csrf, reporteId) {
+  if (!confirm('¿Eliminar este pedido?')) return;
+  try {
+    var res = await fetch('/admin/acopio/ordenes/' + ordenId, {
+      method: 'DELETE',
+      headers: { 'X-Csrf-Token': csrf }
+    });
+    if (!res.ok) throw new Error();
+    showToast('✓ Pedido eliminado');
+    loadPedidosReporte(reporteId);
+  } catch(e) {
+    alert('Error al eliminar el pedido. Intenta de nuevo.');
+  }
+}
+
+function togglePedidoQty(idx) {
+  var cb  = document.getElementById('ped_cb_' + idx);
+  var qty = document.getElementById('ped_qty_' + idx);
+  qty.disabled = !cb.checked;
+  qty.value = cb.checked ? (qty.value || '1') : '';
+}
+
+function togglePedidoExtraQty(idx) {
+  var cb  = document.getElementById('ped_ex_' + idx);
+  var qty = document.getElementById('ped_exqty_' + idx);
+  qty.disabled = !cb.checked;
+  qty.value = cb.checked ? (qty.value || '1') : '';
+}
+
+function buildPedidoItemRow(idx, label) {
+  return '<label class="ped-item" for="ped_cb_' + idx + '">' +
+    '<input type="checkbox" id="ped_cb_' + idx + '" onchange="togglePedidoQty(' + idx + ')">' +
+    '<span class="ped-item-label">' + esc(label) + '</span>' +
+    '<input type="number" id="ped_qty_' + idx + '" class="ped-item-qty" min="1" placeholder="Cant." disabled>' +
+  '</label>';
+}
+
+function buildPedidoExtraRow(idx, label) {
+  return '<label class="ped-item" for="ped_ex_' + idx + '">' +
+    '<input type="checkbox" id="ped_ex_' + idx + '" onchange="togglePedidoExtraQty(' + idx + ')">' +
+    '<span class="ped-item-label">' + esc(label) + '</span>' +
+    '<input type="number" id="ped_exqty_' + idx + '" class="ped-item-qty" min="1" placeholder="Cant." disabled>' +
+  '</label>';
+}
+
+function renderPedidoCustomChips() {
+  var wrap = document.getElementById('ped-custom-chips');
+  if (!wrap) return;
+  wrap.innerHTML = _pedidoExtraItems.map(function(it, i) {
+    return '<span class="chip">' + esc(it.item) + ' × ' + it.cantidad +
+      '<button class="chip-x" onclick="removePedidoCustomItem(' + i + ')">×</button></span>';
+  }).join('');
+}
+
+function addPedidoCustomItem() {
+  var nameEl = document.getElementById('ped-custom-name');
+  var qtyEl  = document.getElementById('ped-custom-qty');
+  var nombre = (nameEl.value || '').trim();
+  var cantidad = parseInt(qtyEl.value, 10) || 0;
+  if (!nombre || cantidad <= 0) return;
+  _pedidoExtraItems.push({ item: nombre, cantidad: cantidad });
+  nameEl.value = '';
+  qtyEl.value = '';
+  renderPedidoCustomChips();
+}
+
+function removePedidoCustomItem(idx) {
+  _pedidoExtraItems.splice(idx, 1);
+  renderPedidoCustomChips();
+}
+
+function _buildPedidoFormHtml(reporteId, centroId, extras) {
+  var extrasHtml = extras.length
+    ? '<div class="section-title-sm">Items adicionales reportados por el centro</div>' +
+      '<div class="ped-grid">' + extras.map(function(label, i) { return buildPedidoExtraRow(i, label); }).join('') + '</div>'
+    : '';
+
+  return '<input type="hidden" id="ped-reporte-id" value="' + reporteId + '">' +
+    '<input type="hidden" id="ped-centro-id" value="' + centroId + '">' +
+    '<div class="section-title-sm">Items del centro de acopio</div>' +
+    '<div class="ped-grid">' + PEDIDO_ITEMS.map(function(label, i) { return buildPedidoItemRow(i, label); }).join('') + '</div>' +
+    extrasHtml +
+    '<div class="custom-input-row" style="margin-top:14px;">' +
+      '<input type="text" id="ped-custom-name" class="ped-custom-input" placeholder="Otro item...">' +
+      '<input type="number" id="ped-custom-qty" class="ped-custom-qty" min="1" placeholder="Cant.">' +
+      '<button type="button" class="btn-add-ped" onclick="addPedidoCustomItem()">+</button>' +
+    '</div>' +
+    '<div class="chips-wrap" id="ped-custom-chips"></div>' +
+    '<div class="fg" style="margin-top:16px;">' +
+      '<label>Nota para el repartidor</label>' +
+      '<textarea id="ped-nota" placeholder="Instrucciones de entrega, contacto en el centro, etc."></textarea>' +
+    '</div>' +
+    '<div class="fg">' +
+      '<label>Creado por <span style="font-weight:400;color:#9ca3af;">(opcional)</span></label>' +
+      '<input type="text" id="ped-creado-por" placeholder="Tu nombre o cargo">' +
+    '</div>' +
+    '<div id="ped-error" style="display:none;color:#dc2626;font-size:13px;font-weight:600;margin-bottom:8px;"></div>' +
+    '<div id="ped-result" style="display:none;"></div>' +
+    '<button class="adm-save-btn" id="ped-submit-btn" style="background:#16a34a;" onclick="submitCrearPedido()">🚀 Generar pedido y link</button>' +
+    '<button class="adm-save-btn" id="ped-close-btn" style="display:none;background:#374151;margin-top:8px;" onclick="closeModal(\'modal-aco-pedido\')">Cerrar</button>';
+}
+
+function openCrearPedidoModal(reporteId, centroId, centroNombre, necesitanExtra) {
+  document.getElementById('aco-pedido-title').textContent = '📦 Preparar pedido — ' + centroNombre;
+  _pedidoExtraItems = [];
+  var extras = (necesitanExtra || '').split(',').map(function(s){return s.trim();}).filter(Boolean);
+  document.getElementById('aco-pedido-modal-content').innerHTML = _buildPedidoFormHtml(reporteId, centroId, extras);
+  openModal('modal-aco-pedido');
+}
+
+async function submitCrearPedido() {
+  var errEl = document.getElementById('ped-error');
+  errEl.style.display = 'none';
+
+  var items = [];
+  PEDIDO_ITEMS.forEach(function(label, i) {
+    var cb  = document.getElementById('ped_cb_' + i);
+    var qty = document.getElementById('ped_qty_' + i);
+    if (cb && cb.checked) {
+      var cantidad = parseInt(qty.value, 10) || 0;
+      if (cantidad > 0) items.push({ item: label, cantidad: cantidad });
+    }
+  });
+
+  Array.prototype.slice.call(document.querySelectorAll('[id^="ped_ex_"]')).forEach(function(cb) {
+    var idx = cb.id.replace('ped_ex_', '');
+    var qty = document.getElementById('ped_exqty_' + idx);
+    if (cb.checked) {
+      var cantidad = parseInt(qty.value, 10) || 0;
+      if (cantidad > 0) items.push({ item: cb.closest('.ped-item').querySelector('.ped-item-label').textContent, cantidad: cantidad });
+    }
+  });
+
+  _pedidoExtraItems.forEach(function(it) { items.push(it); });
+
+  if (!items.length) {
+    errEl.textContent = 'Selecciona al menos un item con cantidad mayor a 0.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  var btn = document.getElementById('ped-submit-btn');
+  btn.disabled = true; btn.textContent = 'Generando...';
+
+  var fd = new FormData();
+  fd.append('reporte_id', document.getElementById('ped-reporte-id').value);
+  fd.append('centro_id', document.getElementById('ped-centro-id').value);
+  fd.append('items_ordenados', JSON.stringify(items));
+  var nota = document.getElementById('ped-nota').value.trim();
+  if (nota) fd.append('nota_repartidor', nota);
+  var creadoPor = document.getElementById('ped-creado-por').value.trim();
+  if (creadoPor) fd.append('creado_por', creadoPor);
+
+  try {
+    var res = await fetch('/admin/acopio/ordenes/nueva', {
+      method: 'POST',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content },
+      body: fd
+    });
+    var data = await res.json().catch(function(){ return {}; });
+    if (!res.ok || !data.ok) throw new Error(data.detail || 'No se pudo generar el pedido');
+
+    var resultEl = document.getElementById('ped-result');
+    resultEl.style.display = 'block';
+    resultEl.innerHTML =
+      '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px;margin-top:10px;">' +
+        '<div style="font-size:13px;font-weight:700;color:#15803d;margin-bottom:6px;">🔗 Link para el repartidor:</div>' +
+        '<div style="word-break:break-all;font-size:13px;color:#111;margin-bottom:10px;">' + esc(data.link_repartidor) + '</div>' +
+        '<button type="button" onclick="copiarLinkPedido(\'' + data.link_repartidor + '\', this)" style="padding:8px 14px;background:#0369a1;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">📋 Copiar link</button>' +
+      '</div>';
+    btn.style.display = 'none';
+    document.getElementById('ped-close-btn').style.display = '';
+    showToast('✅ Pedido creado');
+    loadPedidosReporte(document.getElementById('ped-reporte-id').value);
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '🚀 Generar pedido y link';
+    errEl.textContent = '❌ ' + (e.message || 'Error del servidor');
+    errEl.style.display = 'block';
+  }
+}
+
+async function copiarLinkPedido(url, btn) {
+  var original = btn.textContent;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      var inp = document.createElement('input');
+      inp.value = url;
+      inp.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+      document.body.appendChild(inp);
+      inp.select();
+      document.execCommand('copy');
+      document.body.removeChild(inp);
+    }
+    btn.textContent = '✅ Copiado';
+    setTimeout(function() { btn.textContent = original; }, 2000);
+  } catch(e) {
+    alert('No se pudo copiar. URL: ' + url);
+  }
 }
 
 /* ---- SOLICITUDES CENTROS ACOPIO ---- */
