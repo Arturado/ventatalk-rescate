@@ -353,6 +353,17 @@
     renderTextInput(step);
   }
 
+  function insertMenorSteps() {
+    if (STEPS.some(s => s.field === "email_reportante")) return;
+    const idx = STEPS.findIndex(s => s.field === "numero_contacto");
+    if (idx === -1) return;
+    STEPS.splice(idx, 0,
+      { field: "nombre_reportante_menor", type: "text", question: "Para reportar a un menor de edad necesitamos tus datos de contacto.<br>¿Cuál es tu nombre completo?", placeholder: "Nombre completo", required: true },
+      { field: "telefono_reportante_menor", type: "tel", question: "¿Cuál es tu número de teléfono?", placeholder: "+58 412 1234567", maxlength: 15, required: true },
+      { field: "email_reportante", type: "email", question: "¿Cuál es tu correo electrónico?", placeholder: "ejemplo@correo.com", required: true },
+    );
+  }
+
   function renderButtonStep(step) {
     const grid = document.createElement("div");
     grid.className = "rw-btn-grid";
@@ -361,7 +372,12 @@
       b.className = "rw-btn-opt"; b.textContent = opt.label;
       b.addEventListener("click", () => {
         formData[step.field] = opt.value;
-        userMsg(opt.label); currentStep++; askStep();
+        userMsg(opt.label);
+        if (step.field === "edad_aproximada") {
+          formData._es_menor = opt.value === "nino";
+          if (formData._es_menor) insertMenorSteps();
+        }
+        currentStep++; askStep();
       });
       grid.appendChild(b);
     });
@@ -569,12 +585,18 @@
     setProgress(STEPS.length); inputArea.innerHTML = "";
     await botMsg("Enviando reporte... ⏳", 500);
     try {
+      if (formData._es_menor && formData.telefono_reportante_menor) {
+        formData.numero_contacto = formData.telefono_reportante_menor;
+        delete formData.telefono_reportante_menor;
+      }
       const fd = new FormData();
       fd.append("nombres_apellidos", formData.nombres_apellidos || "");
       if (formData.cedula) fd.append("cedula", formData.cedula);
       fd.append("ultima_ubicacion", formData.ultima_ubicacion || "");
       if (formData.descripcion) fd.append("descripcion", formData.descripcion);
       fd.append("numero_contacto", formData.numero_contacto || "");
+      if (formData.nombre_reportante_menor) fd.append("nombre_reportante_menor", formData.nombre_reportante_menor);
+      if (formData.email_reportante) fd.append("email_reportante", formData.email_reportante);
       if (formData.numero_contacto_2) fd.append("numero_contacto_2", formData.numero_contacto_2);
       if (formData.quien_ayudo) fd.append("quien_ayudo", formData.quien_ayudo);
       if (formData.contacto_quien_ayudo) fd.append("contacto_quien_ayudo", formData.contacto_quien_ayudo);

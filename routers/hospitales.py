@@ -6,6 +6,7 @@ import models, schemas, os, uuid
 from services.images import read_limited, compress_image_async
 from dependencies import verify_api_key
 from cache import _hospitales_cache, cache_get, cache_set
+from helpers import es_menor_de_edad, enmascarar_cedula
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -82,6 +83,8 @@ async def crear_paciente(
                 f.write(compressed)
             foto_url = f"{BASE_URL}/uploads/capturas/{filename}"
 
+    menor = es_menor_de_edad(edad_texto=edad)
+
     paciente = models.PacienteHospitalizado(
         hospital_id=hospital_id,
         nombre_hospital=nombre_hospital,
@@ -94,7 +97,8 @@ async def crear_paciente(
         reportado_por=reportado_por,
         necesita_ayuda=necesita_ayuda,
         tipo_ayuda=tipo_ayuda or None,
-        foto_captura_url=foto_url
+        foto_captura_url=foto_url,
+        es_menor=menor,
     )
     db.add(paciente)
     db.commit()
@@ -152,7 +156,16 @@ def buscar_pacientes(
         ))
     if hospital_id:
         query = query.filter(models.PacienteHospitalizado.hospital_id == hospital_id)
-    return query.order_by(models.PacienteHospitalizado.created_at.desc()).limit(50).all()
+    pacientes = query.order_by(models.PacienteHospitalizado.created_at.desc()).limit(50).all()
+
+    resultado = []
+    for p in pacientes:
+        item = schemas.PacienteResponse.model_validate(p)
+        item.cedula = enmascarar_cedula(p.cedula)
+        if p.es_menor:
+            item.foto_captura_url = None
+        resultado.append(item)
+    return resultado
 
 @pacientes_router.get("/count")
 def contar_pacientes(
@@ -248,7 +261,14 @@ def listar_pacientes(
         query = query.filter(models.PacienteHospitalizado.hospital_id == hospital_id)
     if fuente:
         query = query.filter(models.PacienteHospitalizado.fuente == fuente)
-    return query.order_by(models.PacienteHospitalizado.created_at.desc()).offset(skip).limit(limit).all()
+    pacientes = query.order_by(models.PacienteHospitalizado.created_at.desc()).offset(skip).limit(limit).all()
+
+    resultado = []
+    for p in pacientes:
+        item = schemas.PacienteResponse.model_validate(p)
+        item.cedula = enmascarar_cedula(p.cedula)
+        resultado.append(item)
+    return resultado
 
 @pacientes_router.get("/{paciente_id}/historial", response_model=List[schemas.MovimientoResponse])
 @limiter.limit("30/hour")

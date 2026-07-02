@@ -10,6 +10,7 @@ import models, schemas
 from database import get_db
 from dependencies import verify_api_key
 from services.images import read_limited, compress_image_async
+from helpers import enmascarar_cedula, enmascarar_email
 
 router = APIRouter(prefix="/api/personas", tags=["personas"])
 matches_router = APIRouter(prefix="/api/matches", tags=["matches"])
@@ -54,7 +55,17 @@ def listar_personas(
         query = query.filter(models.PersonaDesaparecida.sexo == sexo)
     if edad_aproximada:
         query = query.filter(models.PersonaDesaparecida.edad_aproximada == edad_aproximada)
-    return query.order_by(models.PersonaDesaparecida.created_at.desc()).offset(skip).limit(limit).all()
+    personas = query.order_by(models.PersonaDesaparecida.created_at.desc()).offset(skip).limit(limit).all()
+
+    resultado = []
+    for p in personas:
+        item = schemas.PersonaResponse.model_validate(p)
+        item.cedula = enmascarar_cedula(p.cedula)
+        if p.es_menor:
+            item.email_reportante = enmascarar_email(p.email_reportante)
+            item.edad_aproximada = "menor"
+        resultado.append(item)
+    return resultado
 
 @router.get("/{persona_id}", response_model=schemas.PersonaResponse)
 def obtener_persona(persona_id: int, db: Session = Depends(get_db), _: str = Depends(verify_api_key)):
@@ -184,18 +195,18 @@ def ficha_publica_persona(
     return {
         "id": persona.id,
         "nombres_apellidos": persona.nombres_apellidos,
-        "cedula": persona.cedula,
+        "cedula": enmascarar_cedula(persona.cedula),
         "ultima_ubicacion": persona.ultima_ubicacion,
-        "foto_url": persona.foto_url,
-        "foto_url_2": persona.foto_url_2,
-        "foto_url_3": persona.foto_url_3,
+        "foto_url": persona.foto_url if not persona.es_menor else None,
+        "foto_url_2": persona.foto_url_2 if not persona.es_menor else None,
+        "foto_url_3": persona.foto_url_3 if not persona.es_menor else None,
         "descripcion": persona.descripcion,
         "numero_contacto": persona.numero_contacto,
         "estado": persona.estado,
         "tipo_reporte": persona.tipo_reporte,
         "estado_clinico": persona.estado_clinico,
         "sexo": persona.sexo,
-        "edad_aproximada": persona.edad_aproximada,
+        "edad_aproximada": persona.edad_aproximada if not persona.es_menor else "menor",
         "contextura": persona.contextura,
         "cabello": persona.cabello,
         "ropa_aproximada": persona.ropa_aproximada,

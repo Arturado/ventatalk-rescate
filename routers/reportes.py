@@ -8,6 +8,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 import models, schemas
 from database import get_db
+from helpers import es_menor_de_edad, enmascarar_cedula
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/reportes", tags=["reportes"])
@@ -67,6 +68,8 @@ async def crear_reporte(
     sin_documentos: bool = Form(False),
     numero_contacto_2: str = Form(None),
     website: str = Form(None),
+    email_reportante: str = Form(None),
+    nombre_reportante_menor: str = Form(None),
     foto: UploadFile = File(None),
     foto_2: UploadFile = File(None),
     foto_3: UploadFile = File(None),
@@ -87,6 +90,14 @@ async def crear_reporte(
     if contacto_quien_ayudo:
         contacto_quien_ayudo = normalize_contacto(contacto_quien_ayudo)
 
+    menor = es_menor_de_edad(
+        edad_aproximada=edad_aproximada,
+        edad_texto=None,  # el chatbot usa edad_aproximada del selector
+    )
+
+    if menor and nombre_reportante_menor and not quien_ayudo:
+        quien_ayudo = nombre_reportante_menor
+
     foto_url = await save_photo(foto)
     foto_url_2 = await save_photo(foto_2)
     foto_url_3 = await save_photo(foto_3)
@@ -103,6 +114,7 @@ async def crear_reporte(
         cabello=cabello, ropa_aproximada=ropa_aproximada,
         estado_clinico=estado_clinico, sin_documentos=sin_documentos,
         numero_contacto_2=numero_contacto_2,
+        email_reportante=email_reportante, es_menor=menor,
     )
     db.add(persona)
     db.commit()
@@ -155,11 +167,11 @@ async def buscar_personas(
         {
             "id": p.id,
             "nombres_apellidos": p.nombres_apellidos,
-            "cedula": p.cedula,
+            "cedula": enmascarar_cedula(p.cedula),
             "ultima_ubicacion": p.ultima_ubicacion,
             "estado": p.estado,
             "tipo_reporte": p.tipo_reporte,
-            "foto_url": p.foto_url,
+            "foto_url": p.foto_url if not p.es_menor else None,
             "created_at": p.created_at.isoformat() if p.created_at else None,
         }
         for p in personas
@@ -223,18 +235,18 @@ async def feed_publico(
         {
             "id": p.id,
             "nombres_apellidos": p.nombres_apellidos,
-            "cedula": p.cedula,
+            "cedula": enmascarar_cedula(p.cedula),
             "ultima_ubicacion": p.ultima_ubicacion,
             "descripcion": p.descripcion,
             "numero_contacto": p.numero_contacto,
             "numero_contacto_2": p.numero_contacto_2,
-            "foto_url": p.foto_url,
+            "foto_url": p.foto_url if not p.es_menor else None,
             "estado": p.estado,
             "tipo_reporte": p.tipo_reporte,
             "created_at": p.created_at.isoformat() if p.created_at else None,
             "tipo_reportante": p.tipo_reportante,
             "sexo": p.sexo,
-            "edad_aproximada": p.edad_aproximada,
+            "edad_aproximada": p.edad_aproximada if not p.es_menor else "menor",
             "contextura": p.contextura,
             "cabello": p.cabello,
             "ropa_aproximada": p.ropa_aproximada,

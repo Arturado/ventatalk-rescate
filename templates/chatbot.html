@@ -652,6 +652,17 @@ async function reconstructFiles(data) {
     renderTextInput(step);
   }
 
+  function insertMenorSteps() {
+    if (STEPS.some(s => s.field === "email_reportante")) return;
+    const idx = STEPS.findIndex(s => s.field === "numero_contacto");
+    if (idx === -1) return;
+    STEPS.splice(idx, 0,
+      { field: "nombre_reportante_menor", type: "text", question: "Para reportar a un menor de edad necesitamos tus datos de contacto.<br>¿Cuál es tu nombre completo?", placeholder: "Nombre completo", required: true },
+      { field: "telefono_reportante_menor", type: "tel", question: "¿Cuál es tu número de teléfono?", placeholder: "+58 412 1234567", maxlength: 15, required: true },
+      { field: "email_reportante", type: "email", question: "¿Cuál es tu correo electrónico?", placeholder: "ejemplo@correo.com", required: true },
+    );
+  }
+
   function renderButtonStep(step) {
     const grid = document.createElement("div");
     grid.className = "cb-btn-grid";
@@ -661,6 +672,10 @@ async function reconstructFiles(data) {
       b.addEventListener("click", () => {
         formData[step.field] = opt.value;
         userMsg(opt.label);
+        if (step.field === "edad_aproximada") {
+          formData._es_menor = opt.value === "nino";
+          if (formData._es_menor) insertMenorSteps();
+        }
         currentStep++;
         saveDraft(currentStep, formData).catch(() => {});
         askStep();
@@ -988,6 +1003,11 @@ async function reconstructFiles(data) {
     inputArea.innerHTML = "";
     await clearDraft();
 
+    if (formData._es_menor && formData.telefono_reportante_menor) {
+      formData.numero_contacto = formData.telefono_reportante_menor;
+      delete formData.telefono_reportante_menor;
+    }
+
     if (tipoReporte === "encontrado_vivo" && formData.cedula) {
       try {
         const ckRes = await fetch(`/api/check-cedula?cedula=${encodeURIComponent(formData.cedula)}`);
@@ -1196,6 +1216,7 @@ async function reconstructFiles(data) {
       formData = await reconstructFiles(draft.formData);
       tipoReporte = formData._tipo_reporte || 'desaparecido';
       STEPS = buildSteps();
+      if (formData._es_menor) insertMenorSteps();
       currentStep = draft.stepIndex;
       inputArea.innerHTML = '';
       const botEl = document.createElement('div');

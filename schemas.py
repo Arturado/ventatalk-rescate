@@ -34,6 +34,8 @@ class PersonaResponse(BaseModel):
     ropa_aproximada: Optional[str] = None
     estado_clinico: Optional[str] = None
     sin_documentos: bool = False
+    email_reportante: Optional[str] = None
+    es_menor: bool = False
 
     model_config = {"from_attributes": True}
 

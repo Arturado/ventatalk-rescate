@@ -27,6 +27,8 @@ class PersonaDesaparecida(Base):
     ropa_aproximada = Column(String(200), nullable=True)
     estado_clinico = Column(String(30), nullable=True)
     sin_documentos = Column(Boolean, nullable=False, default=False)
+    email_reportante = Column(String(200), nullable=True)
+    es_menor = Column(Boolean, nullable=False, default=False)
 
 class AdminUser(Base):
     __tablename__ = "admin_users"
@@ -80,6 +82,7 @@ class PacienteHospitalizado(Base):
     nombre_variantes = Column(Text, nullable=True)
     batch_date = Column(String(20), nullable=True)
     fuente = Column(String(30), nullable=True, default="manual")
+    es_menor = Column(Boolean, nullable=False, default=False)
 
 class BomberoReporte(Base):
     __tablename__ = "bombero_reportes"
