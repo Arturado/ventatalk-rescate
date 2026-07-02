@@ -337,6 +337,12 @@
       return;
     }
     const step = STEPS[currentStep];
+    if (step.field === "numero_contacto" && formData._es_menor && formData.telefono_reportante_menor) {
+      formData.numero_contacto = formData.telefono_reportante_menor;
+      currentStep++;
+      askStep();
+      return;
+    }
     setProgress(currentStep);
     botMsg(step.question, 350).then(() => setTimeout(() => renderInput(step), 200));
   }
