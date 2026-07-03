@@ -64,6 +64,9 @@ def listar_personas(
         if p.es_menor:
             item.email_reportante = enmascarar_email(p.email_reportante)
             item.edad_aproximada = "menor"
+            item.foto_url = None
+            item.foto_url_2 = None
+            item.foto_url_3 = None
         resultado.append(item)
     return resultado
 
