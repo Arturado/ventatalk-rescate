@@ -787,7 +787,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
               <strong style="color:#374151;display:block;margin-bottom:6px;">Señas físicas</strong>
               <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px 16px;">
                 <div><span style="color:#9ca3af;font-size:11px;">SEXO</span><br>{{ {'masculino':'Masculino','femenino':'Femenino','no_determinado':'No determinado'}.get(p.sexo, p.sexo or '—') }}</div>
-                <div><span style="color:#9ca3af;font-size:11px;">EDAD</span><br>{{ {'nino':'Niño 0-12','joven':'Joven 13-25','adulto':'Adulto 26-60','adulto_mayor':'Adulto mayor 60+','no_sabe':'No sé'}.get(p.edad_aproximada, p.edad_aproximada or '—') }}</div>
+                <div><span style="color:#9ca3af;font-size:11px;">EDAD</span><br>{{ {'menor':'Menor 0-17','adulto':'Adulto 18-60','adulto_mayor':'Adulto mayor 60+','no_sabe':'No sé'}.get(p.edad_aproximada, p.edad_aproximada or '—') }}</div>
                 <div><span style="color:#9ca3af;font-size:11px;">CONTEXTURA</span><br>{{ {'delgada':'Delgada','media':'Media','robusta':'Robusta','no_sabe':'No sé'}.get(p.contextura, p.contextura or '—') }}</div>
                 <div><span style="color:#9ca3af;font-size:11px;">CABELLO</span><br>{{ {'corto':'Corto','largo':'Largo','calvo':'Calvo/a','canoso':'Canoso/a','no_sabe':'No sé'}.get(p.cabello, p.cabello or '—') }}</div>
                 <div style="grid-column:1/-1;"><span style="color:#9ca3af;font-size:11px;">ROPA</span><br>{{ p.ropa_aproximada or '—' }}</div>
@@ -934,9 +934,8 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
       <label>Edad aproximada</label>
       <select id="ep-edad">
         <option value="">— No especificada —</option>
-        <option value="nino">Niño 0-12</option>
-        <option value="joven">Joven 13-25</option>
-        <option value="adulto">Adulto 26-60</option>
+        <option value="menor">Menor 0-17</option>
+        <option value="adulto">Adulto 18-60</option>
         <option value="adulto_mayor">Adulto mayor 60+</option>
         <option value="no_sabe">No sé</option>
       </select>
@@ -3264,7 +3263,7 @@ async function loadNotifLocalizado() {
 }
 
 const NOTIF_SEXO_LABEL = { masculino: 'Masculino', femenino: 'Femenino', no_determinado: 'No determinado' };
-const NOTIF_EDAD_LABEL = { nino: 'Niño 0-12', joven: 'Joven 13-25', adulto: 'Adulto 26-60', adulto_mayor: 'Adulto mayor 60+', no_sabe: 'No sé' };
+const NOTIF_EDAD_LABEL = { menor: 'Menor 0-17', adulto: 'Adulto 18-60', adulto_mayor: 'Adulto mayor 60+', no_sabe: 'No sé' };
 const NOTIF_CONTEXTURA_LABEL = { delgada: 'Delgada', media: 'Media', robusta: 'Robusta', no_sabe: 'No sé' };
 const NOTIF_CABELLO_LABEL = { corto: 'Corto', largo: 'Largo', calvo: 'Calvo/a', canoso: 'Canoso/a', no_sabe: 'No sé' };
 const NOTIF_CLINICO_LABEL = { atrapado: 'Atrapado/a', herido: 'Herido/a', inconsciente: 'Inconsciente', fallecido: 'Fallecido/a', sin_informacion: 'Sin información' };

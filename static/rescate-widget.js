@@ -19,7 +19,7 @@
       { field: "nombres_apellidos", question: "¿Cuál es el nombre completo de la persona?", subtext: "Si no lo sabes escribe 'Desconocido'", type: "text", placeholder: "Ej: Maria Gonzalez Perez", required: true },
       { field: "_doc_choice", type: "doc-choice", question: "¿Tienes información sobre su cédula de identidad?" },
       { field: "sexo", type: "buttons", question: "Descripción física — <small style='color:#9ca3af'>Sexo</small>", buttons: [{ label: "Masculino", value: "masculino" }, { label: "Femenino", value: "femenino" }, { label: "No det.", value: "no_determinado" }] },
-      { field: "edad_aproximada", type: "buttons", question: "<small style='color:#9ca3af'>Edad aproximada</small>", buttons: [{ label: "Niño 0-12", value: "nino" }, { label: "Joven 13-25", value: "joven" }, { label: "Adulto 26-60", value: "adulto" }, { label: "Mayor 60+", value: "adulto_mayor" }, { label: "No sé", value: "no_sabe" }] },
+      { field: "edad_aproximada", type: "buttons", question: "<small style='color:#9ca3af'>Edad aproximada</small>", buttons: [{ label: "Menor 0-17", value: "menor" }, { label: "Adulto 18-60", value: "adulto" }, { label: "Mayor 60+", value: "adulto_mayor" }, { label: "No sé", value: "no_sabe" }] },
       { field: "contextura", type: "buttons", question: "<small style='color:#9ca3af'>Contextura</small>", buttons: [{ label: "Delgada", value: "delgada" }, { label: "Media", value: "media" }, { label: "Robusta", value: "robusta" }, { label: "No sé", value: "no_sabe" }] },
       { field: "cabello", type: "buttons", question: "<small style='color:#9ca3af'>Cabello</small>", buttons: [{ label: "Corto", value: "corto" }, { label: "Largo", value: "largo" }, { label: "Calvo/a", value: "calvo" }, { label: "Canoso/a", value: "canoso" }, { label: "No sé", value: "no_sabe" }] },
       { field: "ropa_aproximada", type: "text", question: "¿Qué ropa llevaba? (opcional)", placeholder: "Ej: Camisa azul, pantalón negro", required: false },
@@ -359,14 +359,18 @@
     renderTextInput(step);
   }
 
-  function insertMenorSteps() {
-    if (STEPS.some(s => s.field === "email_reportante")) return;
-    const idx = STEPS.findIndex(s => s.field === "numero_contacto");
-    if (idx === -1) return;
-    STEPS.splice(idx, 0,
-      { field: "nombre_reportante_menor", type: "text", question: "Para reportar a un menor de edad necesitamos tus datos de contacto.<br>¿Cuál es tu nombre completo?", placeholder: "Nombre completo", required: true },
-      { field: "telefono_reportante_menor", type: "tel", question: "¿Cuál es tu número de teléfono?", placeholder: "+58 412 1234567", maxlength: 15, required: true },
-      { field: "email_reportante", type: "email", question: "¿Cuál es tu correo electrónico?", placeholder: "ejemplo@correo.com", required: true },
+  const MENOR_STEP_FIELDS = ["nombre_reportante_menor", "telefono_reportante_menor", "email_reportante"];
+
+  function removeMenorSteps() {
+    STEPS = STEPS.filter(s => !MENOR_STEP_FIELDS.includes(s.field));
+  }
+
+  function insertMenorSteps(atIndex) {
+    removeMenorSteps();
+    STEPS.splice(atIndex, 0,
+      { field: "nombre_reportante_menor", question: "Para reportar a un menor de edad necesitamos tus datos. ¿Cuál es tu nombre completo?", type: "text", required: true },
+      { field: "telefono_reportante_menor", question: "¿Cuál es tu número de teléfono?", type: "tel", maxlength: 15, required: true },
+      { field: "email_reportante", question: "¿Cuál es tu correo electrónico?", type: "email", required: true, placeholder: "ejemplo@correo.com" },
     );
   }
 
@@ -380,8 +384,12 @@
         formData[step.field] = opt.value;
         userMsg(opt.label);
         if (step.field === "edad_aproximada") {
-          formData._es_menor = opt.value === "nino";
-          if (formData._es_menor) insertMenorSteps();
+          formData._es_menor = opt.value === "menor";
+          if (formData._es_menor) {
+            insertMenorSteps(currentStep + 1);
+          } else {
+            removeMenorSteps();
+          }
         }
         currentStep++; askStep();
       });

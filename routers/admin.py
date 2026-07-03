@@ -232,7 +232,7 @@ async def editar_persona_admin(
     TIPOS_VALIDOS = {"desaparecido", "encontrado_vivo"}
     CLINICO_VALIDOS = {"atrapado", "herido", "inconsciente", "fallecido", "sin_informacion"}
     SEXO_VALIDOS = {"masculino", "femenino", "no_determinado"}
-    EDAD_VALIDOS = {"nino", "joven", "adulto", "adulto_mayor", "no_sabe"}
+    EDAD_VALIDOS = {"menor", "adulto", "adulto_mayor", "no_sabe"}
 
     if nombres_apellidos and nombres_apellidos.strip():
         persona.nombres_apellidos = nombres_apellidos.strip()

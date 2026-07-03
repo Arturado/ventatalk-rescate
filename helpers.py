@@ -4,10 +4,10 @@ import re
 def es_menor_de_edad(edad_aproximada: str = None, edad_texto: str = None) -> bool:
     """
     Detecta si una persona es menor de edad.
-    - edad_aproximada: valor del selector ("nino", "joven", "adulto", etc.)
+    - edad_aproximada: valor del selector ("menor", "adulto", etc.)
     - edad_texto: texto libre de edad ("8 años", "niño", "nino de 5", "15", etc.)
     """
-    if edad_aproximada and edad_aproximada.lower() in ("nino", "niño"):
+    if edad_aproximada and edad_aproximada.lower() in ("nino", "niño", "menor"):
         return True
 
     if edad_texto:
