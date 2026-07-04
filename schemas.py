@@ -71,6 +71,7 @@ class PacienteResponse(BaseModel):
     nombre_variantes: Optional[str] = None
     batch_date: Optional[str] = None
     fuente: Optional[str] = None
+    es_menor: bool = False
 
     @field_serializer('created_at')
     def serialize_created_at(self, value: datetime) -> str:
