@@ -124,7 +124,7 @@ def pacientes_recientes(db: Session = Depends(get_db)):
             "id": p.id,
             "nombre_hospital": p.nombre_hospital,
             "nombres_apellidos": p.nombres_apellidos,
-            "edad": p.edad,
+            "edad": p.edad if not p.es_menor else None,
             "sexo": p.sexo,
             "estado_paciente": p.estado_paciente,
             "procedencia": p.procedencia,
@@ -163,6 +163,7 @@ def buscar_pacientes(
         item = schemas.PacienteResponse.model_validate(p)
         item.cedula = enmascarar_cedula(p.cedula)
         if p.es_menor:
+            item.edad = None
             item.foto_captura_url = None
         resultado.append(item)
     return resultado
@@ -267,8 +268,6 @@ def listar_pacientes(
     for p in pacientes:
         item = schemas.PacienteResponse.model_validate(p)
         item.cedula = enmascarar_cedula(p.cedula)
-        if p.es_menor:
-            item.foto_captura_url = None
         resultado.append(item)
     return resultado
 
