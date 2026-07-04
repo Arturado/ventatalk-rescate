@@ -16,7 +16,7 @@ def es_menor_de_edad(edad_aproximada: str = None, edad_texto: str = None) -> boo
         if any(p in edad_lower for p in ["niño", "nino", "nina", "niña", "bebe", "bebé", "infante"]):
             return True
         # Detectar números menores a 18
-        numeros = re.findall(r'\b(\d{1,2})\b', edad_texto)
+        numeros = re.findall(r'\b(\d{1,2})[a-zA-Záéíóúñ]*\b', edad_texto)
         for n in numeros:
             if int(n) < 18:
                 return True
