@@ -268,6 +268,8 @@ def listar_pacientes(
     for p in pacientes:
         item = schemas.PacienteResponse.model_validate(p)
         item.cedula = enmascarar_cedula(p.cedula)
+        if p.es_menor:
+            item.edad = None
         resultado.append(item)
     return resultado
 
