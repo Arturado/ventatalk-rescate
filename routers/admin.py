@@ -892,9 +892,9 @@ async def get_import_job(job_id: str, request: Request):
     }
 
 
-# --- Centros de acopio ---
+# --- Centros de albergue ---
 
-@router.post("/acopio/centros/nuevo")
+@router.post("/albergues/centros/nuevo")
 async def nuevo_centro_acopio(
     request: Request,
     nombre: str = Form(...),
@@ -923,7 +923,7 @@ async def nuevo_centro_acopio(
     return {"ok": True, "id": centro.id, "nombre": centro.nombre}
 
 
-@router.delete("/acopio/centros/{centro_id}")
+@router.delete("/albergues/centros/{centro_id}")
 async def desactivar_centro_acopio(
     centro_id: int,
     request: Request,
@@ -945,7 +945,7 @@ async def desactivar_centro_acopio(
     return {"ok": True}
 
 
-@router.delete("/acopio/reportes/{reporte_id}")
+@router.delete("/albergues/reportes/{reporte_id}")
 async def eliminar_acopio_reporte(
     reporte_id: int,
     request: Request,
@@ -967,9 +967,9 @@ async def eliminar_acopio_reporte(
     return {"ok": True}
 
 
-# --- Solicitudes de centros de acopio ---
+# --- Solicitudes de centros de albergue ---
 
-@router.get("/acopio/solicitudes")
+@router.get("/albergues/solicitudes")
 async def listar_solicitudes_acopio(
     request: Request,
     db: Session = Depends(get_db),
@@ -983,7 +983,7 @@ async def listar_solicitudes_acopio(
     return [_schemas.CentroSolicitudResponse.model_validate(s) for s in solicitudes]
 
 
-@router.post("/acopio/solicitudes/{solicitud_id}/aprobar")
+@router.post("/albergues/solicitudes/{solicitud_id}/aprobar")
 async def aprobar_solicitud_acopio(
     solicitud_id: int,
     request: Request,
@@ -1012,7 +1012,7 @@ async def aprobar_solicitud_acopio(
     return {"ok": True, "centro_id": centro.id}
 
 
-@router.post("/acopio/solicitudes/{solicitud_id}/rechazar")
+@router.post("/albergues/solicitudes/{solicitud_id}/rechazar")
 async def rechazar_solicitud_acopio(
     solicitud_id: int,
     request: Request,
@@ -1107,9 +1107,9 @@ async def confirmar_notificacion_localizado(
     return {"ok": True}
 
 
-# --- Órdenes de acopio ---
+# --- Órdenes de albergues ---
 
-@router.post("/acopio/ordenes/nueva")
+@router.post("/albergues/ordenes/nueva")
 async def nueva_orden_acopio(
     request: Request,
     reporte_id: int = Form(...),
@@ -1145,11 +1145,11 @@ async def nueva_orden_acopio(
     return {
         "ok": True,
         "orden_id": orden.id,
-        "link_repartidor": f"{BASE_URL}/acopio/pedido/{orden.id}",
+        "link_repartidor": f"{BASE_URL}/albergues/pedido/{orden.id}",
     }
 
 
-@router.delete("/acopio/ordenes/{orden_id}")
+@router.delete("/albergues/ordenes/{orden_id}")
 async def eliminar_orden_acopio(
     orden_id: int,
     request: Request,

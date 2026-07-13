@@ -478,11 +478,11 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   </div>
 </div>
 
-<!-- Modal: Nuevo Centro de Acopio -->
+<!-- Modal: Nuevo Centro de Albergue -->
 <div class="adm-modal-bd" id="modal-centro" onclick="if(event.target===this)closeModal('modal-centro')">
   <div class="adm-modal">
     <div class="adm-modal-hdr">
-      <div class="adm-modal-title">📦 Nuevo centro de acopio</div>
+      <div class="adm-modal-title">🏠 Nuevo centro de albergue</div>
       <button class="adm-modal-x" onclick="closeModal('modal-centro')">×</button>
     </div>
     <form id="form-centro" onsubmit="guardarCentro(event)">
@@ -619,7 +619,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   <button class="dash-tab active" id="tab-personas" onclick="switchTab('personas')">👥 Personas Desaparecidas</button>
   <button class="dash-tab" id="tab-pacientes" onclick="switchTab('pacientes')">🏥 Pacientes Hospitalizados</button>
   <button class="dash-tab" id="tab-bomberos" onclick="switchTab('bomberos')">🚒 Bomberos en Campo <span id="bom-apoyo-indicator"></span></button>
-  <button class="dash-tab" id="tab-acopio" onclick="switchTab('acopio')">📦 Centros de Acopio</button>
+  <button class="dash-tab" id="tab-acopio" onclick="switchTab('acopio')">🏠 Centros de Albergue</button>
   <button class="dash-tab" id="tab-casos" onclick="switchTab('casos')">🤝 Casos de Ayuda</button>
 </div>
 
@@ -948,12 +948,12 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   </div>
 </div><!-- /#pane-bomberos -->
 
-<!-- Pane: Centros de Acopio -->
+<!-- Pane: Centros de Albergue -->
 <div id="pane-acopio" style="display:none">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-    <h2 style="font-size:20px;font-weight:800;">Centros de Acopio</h2>
+    <h2 style="font-size:20px;font-weight:800;">Centros de Albergue</h2>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <a href="/acopio" target="_blank" style="padding:8px 16px;background:#374151;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;">🔗 Ver página pública</a>
+      <a href="/albergues" target="_blank" style="padding:8px 16px;background:#374151;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;">🔗 Ver página pública</a>
       <button onclick="openModal('modal-centro')" style="padding:8px 16px;background:#16a34a;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">➕ Nuevo centro</button>
       <button id="btn-solicitudes-aco" onclick="toggleSolicitudesPanel()" style="padding:8px 16px;background:#7c3aed;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">🔔 Solicitudes pendientes (<span id="sol-aco-count">…</span>)</button>
       <span id="aco-refresh-label" style="font-size:12px;color:#6b7280;">Actualiza en <span id="aco-countdown">60</span>s</span>
@@ -2739,7 +2739,7 @@ async function loadAcopio() {
   var cdEl = document.getElementById('aco-countdown');
   if (cdEl) cdEl.textContent = '60';
   try {
-    var res = await fetch('/api/acopio/estado');
+    var res = await fetch('/api/albergues/estado');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     _acopioData = await res.json();
     _acopioLoaded = true;
@@ -2810,7 +2810,7 @@ async function _loadAcopioHistorialModal(centroId, centroNombre) {
   var key = getApiKey(); if (!key) return;
   var body = document.getElementById('aco-hist-modal-body');
   try {
-    var res = await fetch('/api/acopio/reportes/' + centroId + '/historial?limit=50', {
+    var res = await fetch('/api/albergues/reportes/' + centroId + '/historial?limit=50', {
       headers: { 'X-Api-Key': key }
     });
     if (res.status === 401) { sessionStorage.removeItem('vr_api_key'); body.innerHTML = '<p style="color:#dc2626;padding:16px;">API Key inválida.</p>'; return; }
@@ -2868,10 +2868,10 @@ async function _loadAcopioHistorialModal(centroId, centroNombre) {
 }
 
 async function eliminarAcopioReporte(reporteId, csrf, btn) {
-  if (!confirm('¿Eliminar este reporte de acopio?')) return;
+  if (!confirm('¿Eliminar este reporte de albergue?')) return;
   btn.disabled = true; btn.textContent = '…';
   try {
-    var res = await fetch('/admin/acopio/reportes/' + reporteId, {
+    var res = await fetch('/admin/albergues/reportes/' + reporteId, {
       method: 'DELETE',
       headers: { 'X-Csrf-Token': csrf }
     });
@@ -2891,7 +2891,7 @@ async function desactivarCentro(centroId, btn) {
   if (!confirm('¿Desactivar este centro? Dejará de aparecer en la lista pública.')) return;
   btn.disabled = true; btn.textContent = 'Desactivando...';
   try {
-    var res = await fetch('/admin/acopio/centros/' + centroId, {
+    var res = await fetch('/admin/albergues/centros/' + centroId, {
       method: 'DELETE',
       headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
     });
@@ -2911,7 +2911,7 @@ async function guardarCentro(e) {
   btn.disabled = true; btn.textContent = 'Guardando...';
   var fd = new FormData(form);
   try {
-    var res  = await fetch('/admin/acopio/centros/nuevo', {
+    var res  = await fetch('/admin/albergues/centros/nuevo', {
       method: 'POST',
       headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content },
       body: fd
@@ -2930,7 +2930,7 @@ async function guardarCentro(e) {
 }
 
 async function copiarLinkCentro(centroId, btn) {
-  var url = 'https://rescate.ventatalk.com/acopio/reportar/' + centroId;
+  var url = 'https://rescate.ventatalk.com/albergues/reportar/' + centroId;
   var original = btn.textContent;
   try {
     if (navigator.clipboard && window.isSecureContext) {
@@ -2997,7 +2997,7 @@ async function loadPedidosReporte(reporteId) {
   var key = sessionStorage.getItem('vr_api_key');
   if (!key) { container.innerHTML = ''; return; }
   try {
-    var res = await fetch('/api/acopio/ordenes?reporte_id=' + reporteId, { headers: { 'X-Api-Key': key } });
+    var res = await fetch('/api/albergues/ordenes?reporte_id=' + reporteId, { headers: { 'X-Api-Key': key } });
     if (!res.ok) { container.innerHTML = ''; return; }
     var pedidos = await res.json();
     if (!pedidos.length) { container.innerHTML = '<span style="color:#9ca3af;">Sin pedidos creados aún.</span>'; return; }
@@ -3005,7 +3005,7 @@ async function loadPedidosReporte(reporteId) {
     var estLabel = { preparando: '🚚 Preparando', en_camino: '🚛 En camino', entregado: '✅ Entregado' };
     var estColor = { preparando: '#a16207', en_camino: '#1e40af', entregado: '#15803d' };
     container.innerHTML = pedidos.map(function(p) {
-      var link = 'https://rescate.ventatalk.com/acopio/pedido/' + p.id;
+      var link = 'https://rescate.ventatalk.com/albergues/pedido/' + p.id;
       var entregaInfo = p.entrega
         ? ' — Recibió: <strong>' + esc(p.entrega.nombre_receptor) + '</strong> (' + fmtDate(p.entrega.created_at) + ')'
         : '';
@@ -3024,7 +3024,7 @@ async function loadPedidosReporte(reporteId) {
 async function eliminarPedido(ordenId, csrf, reporteId) {
   if (!confirm('¿Eliminar este pedido?')) return;
   try {
-    var res = await fetch('/admin/acopio/ordenes/' + ordenId, {
+    var res = await fetch('/admin/albergues/ordenes/' + ordenId, {
       method: 'DELETE',
       headers: { 'X-Csrf-Token': csrf }
     });
@@ -3191,7 +3191,7 @@ async function submitCrearPedido() {
   if (creadoPor) fd.append('creado_por', creadoPor);
 
   try {
-    var res = await fetch('/admin/acopio/ordenes/nueva', {
+    var res = await fetch('/admin/albergues/ordenes/nueva', {
       method: 'POST',
       headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content },
       body: fd
@@ -3252,7 +3252,7 @@ async function loadSolicitudesAcopio() {
   var content = document.getElementById('solicitudes-content');
   content.innerHTML = '<p style="color:#6b7280;font-size:14px;text-align:center;padding:20px;">Cargando...</p>';
   try {
-    var res = await fetch('/admin/acopio/solicitudes');
+    var res = await fetch('/admin/albergues/solicitudes');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var data = await res.json();
     updateSolCount(data.length);
@@ -3290,7 +3290,7 @@ async function aprobarSolicitudAco(id, btn) {
   if (!confirm('¿Aprobar esta solicitud y crear el centro?')) return;
   btn.disabled = true; btn.textContent = 'Aprobando...';
   try {
-    var res = await fetch('/admin/acopio/solicitudes/' + id + '/aprobar', {
+    var res = await fetch('/admin/albergues/solicitudes/' + id + '/aprobar', {
       method: 'POST',
       headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
     });
@@ -3310,7 +3310,7 @@ async function rechazarSolicitudAco(id, btn) {
   if (!confirm('¿Rechazar esta solicitud?')) return;
   btn.disabled = true; btn.textContent = 'Rechazando...';
   try {
-    var res = await fetch('/admin/acopio/solicitudes/' + id + '/rechazar', {
+    var res = await fetch('/admin/albergues/solicitudes/' + id + '/rechazar', {
       method: 'POST',
       headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
     });
@@ -3342,7 +3342,7 @@ function updateSolCount(n) {
 
 (async function initSolCount() {
   try {
-    var res = await fetch('/admin/acopio/solicitudes');
+    var res = await fetch('/admin/albergues/solicitudes');
     if (!res.ok) return;
     var data = await res.json();
     updateSolCount(data.length);

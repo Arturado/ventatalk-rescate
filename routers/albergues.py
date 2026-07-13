@@ -15,12 +15,12 @@ import models, schemas
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-router = APIRouter(prefix="/api/acopio", tags=["acopio"])
+router = APIRouter(prefix="/api/albergues", tags=["albergues"])
 limiter = Limiter(key_func=get_remote_address)
 
 VE_TZ = timezone(timedelta(hours=-4))
 BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
-UPLOAD_DIR_ENTREGAS = "uploads/acopio_entregas"
+UPLOAD_DIR_ENTREGAS = "uploads/albergue_entregas"
 ESTADOS_ORDEN_VALIDOS = {"preparando", "en_camino", "entregado"}
 
 
@@ -34,7 +34,7 @@ def listar_centros(
     zona: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
-    """Público — lista centros de acopio activos"""
+    """Público — lista centros de albergue activos"""
     q = db.query(models.CentroAcopio).filter(models.CentroAcopio.activo == True)
     if zona:
         q = q.filter(models.CentroAcopio.zona.ilike(f"%{zona}%"))
@@ -98,7 +98,7 @@ async def crear_reporte(
 def estado_general(db: Session = Depends(get_db)):
     """
     Público — estado actual de todos los centros con su último reporte.
-    Para mostrar en venezuelarescate.com y en /acopio.
+    Para mostrar en venezuelarescate.com y en /albergues.
     """
     centros = db.query(models.CentroAcopio).filter(
         models.CentroAcopio.activo == True
@@ -209,7 +209,7 @@ async def solicitar_centro(
     longitud: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
-    """Público — solicitar agregar un centro de acopio nuevo"""
+    """Público — solicitar agregar un centro de albergue nuevo"""
     solicitud = models.CentroAcopioSolicitud(
         nombre=nombre,
         direccion=direccion or None,
@@ -223,7 +223,7 @@ async def solicitar_centro(
     db.commit()
     return {"ok": True, "mensaje": "Tu solicitud fue recibida. El equipo la revisará y agregará el centro a la brevedad."}
 
-# ── Órdenes de acopio ──────────────────────────────────────
+# ── Órdenes de albergues ──────────────────────────────────────
 
 @router.get("/ordenes", response_model=List[schemas.AcopioOrdenResponse])
 def listar_ordenes(
@@ -233,7 +233,7 @@ def listar_ordenes(
     db: Session = Depends(get_db),
     _: str = Depends(verify_api_key),
 ):
-    """Protegido — lista órdenes de acopio con filtros opcionales"""
+    """Protegido — lista órdenes de albergues con filtros opcionales"""
     q = db.query(models.AcopioOrden)
     if centro_id is not None:
         q = q.filter(models.AcopioOrden.centro_id == centro_id)
@@ -342,7 +342,7 @@ async def confirmar_entrega(
             filename = f"entrega_{uuid.uuid4()}.jpg"
             with open(os.path.join(UPLOAD_DIR_ENTREGAS, filename), "wb") as f:
                 f.write(compressed)
-            foto_url = f"{BASE_URL}/uploads/acopio_entregas/{filename}"
+            foto_url = f"{BASE_URL}/uploads/albergue_entregas/{filename}"
 
     entrega = models.AcopioEntrega(
         orden_id=orden_id,
