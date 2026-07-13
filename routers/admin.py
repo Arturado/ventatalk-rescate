@@ -26,7 +26,7 @@ import schemas as _schemas
 from database import SessionLocal, get_db
 from services.images import read_limited, compress_image_async
 from cache import _hospitales_cache, cache_clear
-from routers.casos_ayuda import TRANSICIONES_VALIDAS, NIVELES_VALIDOS, NIVELES_ORDEN
+from routers.casos_ayuda import TRANSICIONES_VALIDAS, NIVELES_VALIDOS, NIVELES_ORDEN, parse_adjuntos
 
 BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
 UPLOAD_DIR = "uploads/capturas"
@@ -1220,6 +1220,7 @@ async def listar_casos_ayuda_admin(
         contacto = db.query(models.ContactoCasoAyuda).filter(
             models.ContactoCasoAyuda.caso_id == caso.id
         ).first()
+        caso = parse_adjuntos(caso)
         resultado.append({
             "caso": _schemas.CasoAyudaResponse.model_validate(caso),
             "contacto": _schemas.ContactoCasoAyudaResponse.model_validate(contacto) if contacto else None,
