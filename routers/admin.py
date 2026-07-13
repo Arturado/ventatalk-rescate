@@ -26,6 +26,7 @@ import schemas as _schemas
 from database import SessionLocal, get_db
 from services.images import read_limited, compress_image_async
 from cache import _hospitales_cache, cache_clear
+from routers.casos_ayuda import TRANSICIONES_VALIDAS, NIVELES_VALIDOS, NIVELES_ORDEN
 
 BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
 UPLOAD_DIR = "uploads/capturas"
@@ -1190,5 +1191,145 @@ async def rechazar_notificacion_localizado(
         raise HTTPException(status_code=404, detail="No encontrado")
 
     notificacion.estado = "rechazado"
+    db.commit()
+    return {"ok": True}
+
+
+# --- Casos de ayuda ---
+
+@router.get("/casos-ayuda")
+async def listar_casos_ayuda_admin(
+    request: Request,
+    estado: Optional[str] = None,
+    nivel_verificacion: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+
+    q = db.query(models.CasoAyuda)
+    if estado:
+        q = q.filter(models.CasoAyuda.estado == estado)
+    if nivel_verificacion:
+        q = q.filter(models.CasoAyuda.nivel_verificacion == nivel_verificacion)
+    casos = q.order_by(sqldesc(models.CasoAyuda.created_at)).all()
+
+    resultado = []
+    for caso in casos:
+        contacto = db.query(models.ContactoCasoAyuda).filter(
+            models.ContactoCasoAyuda.caso_id == caso.id
+        ).first()
+        resultado.append({
+            "caso": _schemas.CasoAyudaResponse.model_validate(caso),
+            "contacto": _schemas.ContactoCasoAyudaResponse.model_validate(contacto) if contacto else None,
+        })
+    return resultado
+
+
+@router.post("/casos-ayuda/{caso_id}/estado")
+async def cambiar_estado_caso_ayuda_admin(
+    caso_id: int,
+    request: Request,
+    estado: str = Form(...),
+    descripcion_cambio: Optional[str] = Form(None),
+    cambiado_por: Optional[str] = Form(None),
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+
+    caso = db.query(models.CasoAyuda).filter(models.CasoAyuda.id == caso_id).first()
+    if not caso:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+
+    permitidas = TRANSICIONES_VALIDAS.get(caso.estado, [])
+    if estado not in permitidas:
+        raise HTTPException(status_code=400, detail=f"Transición no permitida: {caso.estado} → {estado}")
+
+    historial = models.CasoAyudaHistorial(
+        caso_id=caso.id,
+        tipo_cambio="estado",
+        valor_anterior=caso.estado,
+        valor_nuevo=estado,
+        cambiado_por=cambiado_por or admin,
+        descripcion=descripcion_cambio,
+    )
+    db.add(historial)
+    caso.estado = estado
+    db.commit()
+    return {"ok": True, "estado": caso.estado}
+
+
+@router.post("/casos-ayuda/{caso_id}/nivel")
+async def cambiar_nivel_caso_ayuda_admin(
+    caso_id: int,
+    request: Request,
+    nivel_verificacion: str = Form(...),
+    avalado_por: Optional[str] = Form(None),
+    notas: Optional[str] = Form(None),
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+
+    caso = db.query(models.CasoAyuda).filter(models.CasoAyuda.id == caso_id).first()
+    if not caso:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+
+    if nivel_verificacion not in NIVELES_VALIDOS:
+        raise HTTPException(status_code=400, detail="nivel_verificacion inválido")
+
+    subiendo = NIVELES_ORDEN[nivel_verificacion] > NIVELES_ORDEN.get(caso.nivel_verificacion, 0)
+    if subiendo and not (avalado_por and avalado_por.strip()):
+        raise HTTPException(status_code=400, detail="avalado_por es requerido para subir de nivel")
+
+    historial = models.CasoAyudaHistorial(
+        caso_id=caso.id,
+        tipo_cambio="nivel",
+        valor_anterior=caso.nivel_verificacion,
+        valor_nuevo=nivel_verificacion,
+        cambiado_por=avalado_por or admin,
+        descripcion=notas,
+    )
+    db.add(historial)
+    caso.nivel_verificacion = nivel_verificacion
+    if avalado_por and avalado_por.strip():
+        caso.avalado_por = avalado_por.strip()
+        caso.avalado_en = datetime.now(timezone.utc)
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/casos-ayuda/{caso_id}")
+async def eliminar_caso_ayuda_admin(
+    caso_id: int,
+    request: Request,
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+
+    caso = db.query(models.CasoAyuda).filter(models.CasoAyuda.id == caso_id).first()
+    if not caso:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+    if caso.estado not in ("rechazado", "archivado"):
+        raise HTTPException(status_code=400, detail="Solo se pueden eliminar casos rechazados o archivados")
+
+    db.query(models.ContactoCasoAyuda).filter(models.ContactoCasoAyuda.caso_id == caso_id).delete()
+    db.query(models.CasoAyudaHistorial).filter(models.CasoAyudaHistorial.caso_id == caso_id).delete()
+    db.delete(caso)
     db.commit()
     return {"ok": True}

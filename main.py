@@ -22,6 +22,7 @@ from routers.stats import router as stats_router, public_router as stats_public_
 from routers.hospitales import router as hospitales_router, pacientes_router
 from routers.bomberos import router as bomberos_router
 from routers.acopio import router as acopio_router
+from routers.casos_ayuda import router as casos_ayuda_router
 from sqlalchemy import text as sql_text
 
 templates = Jinja2Templates(directory="templates")
@@ -219,6 +220,7 @@ app.add_middleware(
 )
 
 app.mount("/uploads/capturas", StaticFiles(directory="uploads/capturas"), name="capturas")
+app.mount("/uploads/adjuntos", StaticFiles(directory="uploads/adjuntos"), name="adjuntos")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.mount("/widget", StaticFiles(directory="static"), name="widget")
 app.mount("/static", StaticFiles(directory="static"), name="static-files")
@@ -233,6 +235,7 @@ app.include_router(hospitales_router)
 app.include_router(pacientes_router)
 app.include_router(bomberos_router)
 app.include_router(acopio_router)
+app.include_router(casos_ayuda_router)
 app.include_router(admin_router)
 
 
