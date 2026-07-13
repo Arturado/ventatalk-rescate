@@ -1,6 +1,6 @@
 from pydantic import BaseModel, field_serializer
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import List, Optional
 
 VE_TZ = timezone(timedelta(hours=-4))
 
@@ -326,7 +326,7 @@ class CasoAyudaResponse(BaseModel):
     nivel_verificacion: str
     avalado_por: Optional[str] = None
     avalado_en: Optional[datetime] = None
-    adjuntos: Optional[list] = None
+    adjuntos: Optional[List[str]] = []
     consentimiento_publicacion: bool
     fecha_ultima_confirmacion: datetime
     creado_por: str

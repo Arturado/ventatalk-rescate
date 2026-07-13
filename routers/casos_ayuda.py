@@ -96,6 +96,17 @@ def _api_key_valida(x_api_key: Optional[str]) -> bool:
     return bool(expected) and x_api_key == expected
 
 
+def parse_adjuntos(caso):
+    if isinstance(caso.adjuntos, str):
+        try:
+            caso.adjuntos = json.loads(caso.adjuntos)
+        except Exception:
+            caso.adjuntos = []
+    elif caso.adjuntos is None:
+        caso.adjuntos = []
+    return caso
+
+
 # ── Endpoints protegidos por API key ───────────────────────────────────
 
 @router.get("/")
@@ -126,7 +137,7 @@ def listar_casos(
         q = q.filter(models.CasoAyuda.fecha_ultima_confirmacion < vencidos_antes)
     casos = q.order_by(desc(models.CasoAyuda.created_at)).offset(skip).limit(limit).all()
 
-    resultados = [schemas.CasoAyudaResponse.model_validate(c).model_dump() for c in casos]
+    resultados = [schemas.CasoAyudaResponse.model_validate(parse_adjuntos(c)).model_dump() for c in casos]
     if not autenticado:
         # No exponer cédula en la respuesta pública
         for r in resultados:
@@ -140,7 +151,7 @@ def obtener_caso(
     db: Session = Depends(get_db),
     _: str = Depends(verify_api_key),
 ):
-    return _get_caso_o_404(db, caso_id)
+    return parse_adjuntos(_get_caso_o_404(db, caso_id))
 
 
 @router.post("/", status_code=201)
@@ -218,7 +229,7 @@ def cambiar_estado_caso(
     caso.estado = data.estado
     db.commit()
     db.refresh(caso)
-    return caso
+    return parse_adjuntos(caso)
 
 
 @router.post("/{caso_id}/nivel", response_model=schemas.CasoAyudaResponse)
@@ -251,7 +262,7 @@ def cambiar_nivel_caso(
         caso.avalado_en = datetime.now(timezone.utc)
     db.commit()
     db.refresh(caso)
-    return caso
+    return parse_adjuntos(caso)
 
 
 @router.post("/{caso_id}/confirmar", response_model=schemas.CasoAyudaResponse)
@@ -278,7 +289,7 @@ def confirmar_caso(
 
     db.commit()
     db.refresh(caso)
-    return caso
+    return parse_adjuntos(caso)
 
 
 @router.get("/{caso_id}/contacto", response_model=schemas.ContactoCasoAyudaResponse)
