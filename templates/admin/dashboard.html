@@ -316,6 +316,11 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 .caso-hist-timeline { border-left:2px solid #e5e7eb; padding-left:14px; margin:6px 0; }
 .caso-hist-item { position:relative; padding-bottom:12px; }
 .caso-hist-item::before { content:'📍'; position:absolute; left:-20px; top:0; font-size:11px; }
+@keyframes caso-adj-spin { to { transform: rotate(360deg); } }
+.caso-adj-spinner {
+  width:16px; height:16px; border:2.5px solid #e5e7eb; border-top-color:#1e40af;
+  border-radius:50%; animation: caso-adj-spin .7s linear infinite;
+}
 {% endblock %}
 {% block content %}
 <meta name="csrf-token" content="{{ csrf_token }}">
@@ -3670,6 +3675,58 @@ function _parseAdjuntos(adjuntos) {
   return [];
 }
 
+function onAdjuntoCasoSeleccionado(input) {
+  var wrap = document.getElementById('adjunto-caso-seleccionado');
+  var nombre = document.getElementById('adjunto-caso-nombre');
+  if (!input.files || !input.files[0]) { wrap.style.display = 'none'; return; }
+  nombre.textContent = input.files[0].name;
+  wrap.style.display = 'flex';
+}
+
+async function subirAdjuntoCaso(id) {
+  var input = document.getElementById('input-adjunto-caso');
+  var file = input.files && input.files[0];
+  if (!file) return;
+  var key = getApiKey();
+  if (!key) return;
+
+  var btn = document.getElementById('adjunto-caso-subir-btn');
+  var spinner = document.getElementById('adjunto-caso-spinner');
+  btn.disabled = true;
+  spinner.style.display = 'inline-block';
+
+  try {
+    var fd = new FormData();
+    fd.append('adjunto', file);
+    var res = await fetch('/api/casos-ayuda/' + id + '/adjuntos', {
+      method: 'POST',
+      headers: { 'X-Api-Key': key },
+      body: fd
+    });
+    if (res.status === 401) { sessionStorage.removeItem('vr_api_key'); throw new Error('API Key inválida'); }
+    if (!res.ok) { var err = await res.json().catch(function() { return {}; }); throw new Error(err.detail || 'Error al subir'); }
+    var data = await res.json();
+
+    var lista = document.getElementById('adjuntos-lista-' + id);
+    if (lista) {
+      var a = document.createElement('a');
+      a.href = data.url; a.target = '_blank';
+      a.style.cssText = 'display:block;color:#1e40af;font-size:12px;';
+      a.textContent = data.url;
+      lista.appendChild(a);
+    }
+
+    input.value = '';
+    document.getElementById('adjunto-caso-seleccionado').style.display = 'none';
+    showToast('✅ Adjunto subido');
+  } catch (e) {
+    showToast('❌ Error al subir');
+  } finally {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+  }
+}
+
 function renderCasoDetalleModal(item) {
   var c = item.caso, contacto = item.contacto;
   document.getElementById('caso-modal-title').textContent = '📋 ' + c.nombre + ' — Caso #' + c.id;
@@ -3680,11 +3737,22 @@ function renderCasoDetalleModal(item) {
 
 function _casoDetalleHTML(c, contacto) {
   var adjuntos = _parseAdjuntos(c.adjuntos);
-  var adjuntosHtml = adjuntos.length
-    ? '<div style="margin-bottom:12px;"><strong style="color:#374151;display:block;margin-bottom:4px;">Adjuntos</strong>' +
-      adjuntos.map(function(u) { return '<a href="' + esc(u) + '" target="_blank" style="display:block;color:#1e40af;font-size:12px;">' + esc(u) + '</a>'; }).join('') +
-      '</div>'
-    : '';
+  var adjuntosHtml =
+    '<div style="margin-bottom:12px;">' +
+      '<strong style="color:#374151;display:block;margin-bottom:4px;">Adjuntos</strong>' +
+      '<div id="adjuntos-lista-' + c.id + '">' +
+        adjuntos.map(function(u) { return '<a href="' + esc(u) + '" target="_blank" style="display:block;color:#1e40af;font-size:12px;">' + esc(u) + '</a>'; }).join('') +
+      '</div>' +
+      '<div style="margin-top:8px;">' +
+        '<input type="file" id="input-adjunto-caso" accept="image/*,.pdf,.doc,.docx" style="display:none" onchange="onAdjuntoCasoSeleccionado(this)">' +
+        '<button type="button" onclick="document.getElementById(\'input-adjunto-caso\').click()" style="padding:7px 14px;background:#f3f4f6;color:#374151;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">📎 Adjuntar archivo</button>' +
+        '<div id="adjunto-caso-seleccionado" style="display:none;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">' +
+          '<span id="adjunto-caso-nombre" style="font-size:12px;color:#374151;"></span>' +
+          '<button type="button" onclick="subirAdjuntoCaso(' + c.id + ')" id="adjunto-caso-subir-btn" style="padding:6px 14px;background:#1e40af;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">Subir</button>' +
+          '<span id="adjunto-caso-spinner" class="caso-adj-spinner" style="display:none;"></span>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
 
   var seccion1 =
     '<div style="font-size:13px;line-height:1.7;">' +

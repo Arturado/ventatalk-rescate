@@ -1,6 +1,6 @@
 import re
 
-from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -91,9 +91,14 @@ def _get_caso_o_404(db: Session, caso_id: int) -> models.CasoAyuda:
     return caso
 
 
+def _api_key_valida(x_api_key: Optional[str]) -> bool:
+    expected = os.getenv("API_KEY")
+    return bool(expected) and x_api_key == expected
+
+
 # ── Endpoints protegidos por API key ───────────────────────────────────
 
-@router.get("/", response_model=List[schemas.CasoAyudaResponse])
+@router.get("/")
 def listar_casos(
     estado: Optional[str] = Query(None),
     nivel_verificacion: Optional[str] = Query(None),
@@ -102,8 +107,14 @@ def listar_casos(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
-    _: str = Depends(verify_api_key),
+    x_api_key: Optional[str] = Header(None),
 ):
+    # Público solo cuando se filtra explícitamente por estado=publicado.
+    # Cualquier otro uso (sin filtro de estado, u otro estado) requiere API key.
+    autenticado = _api_key_valida(x_api_key)
+    if not autenticado and estado != "publicado":
+        raise HTTPException(status_code=401, detail="API Key inválida")
+
     q = db.query(models.CasoAyuda)
     if estado:
         q = q.filter(models.CasoAyuda.estado == estado)
@@ -113,7 +124,14 @@ def listar_casos(
         q = q.filter(models.CasoAyuda.cedula == cedula)
     if vencidos_antes:
         q = q.filter(models.CasoAyuda.fecha_ultima_confirmacion < vencidos_antes)
-    return q.order_by(desc(models.CasoAyuda.created_at)).offset(skip).limit(limit).all()
+    casos = q.order_by(desc(models.CasoAyuda.created_at)).offset(skip).limit(limit).all()
+
+    resultados = [schemas.CasoAyudaResponse.model_validate(c).model_dump() for c in casos]
+    if not autenticado:
+        # No exponer cédula en la respuesta pública
+        for r in resultados:
+            r.pop("cedula", None)
+    return resultados
 
 
 @router.get("/{caso_id}", response_model=schemas.CasoAyudaResponse)
@@ -268,7 +286,6 @@ def obtener_contacto_caso(
     caso_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    _: str = Depends(verify_api_key),
 ):
     caso = _get_caso_o_404(db, caso_id)
     contacto = db.query(models.ContactoCasoAyuda).filter(

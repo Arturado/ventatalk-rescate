@@ -293,6 +293,12 @@ async def persona_ficha_page(persona_id: int, request: Request):
         {"request": request, "persona_id": persona_id})
 
 
+@app.get("/casos-ayuda")
+async def casos_ayuda_page(request: Request):
+    return templates.TemplateResponse("casos_ayuda.html",
+        {"request": request})
+
+
 @app.get("/health", tags=["sistema"])
 def health():
     return {"status": "ok", "service": "ventatalk-rescate"}
