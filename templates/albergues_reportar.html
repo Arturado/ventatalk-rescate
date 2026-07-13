@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Reporte de Acopio — Venezuela Rescate</title>
+  <title>Reporte de Albergue — Venezuela Rescate</title>
   <meta name="theme-color" content="#0f172a">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -260,7 +260,7 @@ updateConn();
 /* ── Cargar nombre del centro ── */
 async function loadCentro() {
   try {
-    var res = await fetch('/api/acopio/centros/' + CENTRO_ID);
+    var res = await fetch('/api/albergues/centros/' + CENTRO_ID);
     if (!res.ok) throw new Error();
     var c = await res.json();
     document.getElementById('hdr-title').textContent = '📦 ' + c.nombre;
@@ -406,7 +406,7 @@ async function submitForm() {
   if (rep) fd.append('reportado_por', rep);
 
   try {
-    var res = await fetch('/api/acopio/reportes', { method: 'POST', body: fd });
+    var res = await fetch('/api/albergues/reportes', { method: 'POST', body: fd });
     if (!res.ok) {
       var d = await res.json().catch(function(){return {};});
       throw new Error(d.detail || 'Error del servidor');
@@ -430,7 +430,7 @@ function showSuccess() {
       '<div class="success-title">Reporte enviado</div>' +
       '<div class="success-msg">Gracias por mantener actualizado el centro. La información ayuda a coordinar la ayuda.</div>' +
       '<button class="btn-nuevo" onclick="reiniciarForm()">Hacer otro reporte</button>' +
-      '<a href="/acopio" style="margin-top:6px;font-size:13px;color:#475569;text-decoration:none;">← Ver estado de todos los centros</a>' +
+      '<a href="/albergues" style="margin-top:6px;font-size:13px;color:#475569;text-decoration:none;">← Ver estado de todos los centros</a>' +
     '</div>';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }

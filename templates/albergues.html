@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Centros de Acopio — Venezuela Rescate</title>
+  <title>Centros de Albergue — Venezuela Rescate</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -202,7 +202,7 @@
     <div class="hdr-left">
       <div class="hdr-icon">📦</div>
       <div>
-        <div class="hdr-title">Venezuela Rescate · Centros de Acopio</div>
+        <div class="hdr-title">Venezuela Rescate · Centros de Albergue</div>
         <div class="hdr-sub">Estado actualizado en tiempo real</div>
       </div>
     </div>
@@ -215,7 +215,7 @@
 
 <div class="search-wrap">
   <input type="text" id="buscador-centro" class="search-input"
-    placeholder="🔍 Buscar centro de acopio..."
+    placeholder="🔍 Buscar centro de albergue..."
     oninput="buscarCentro(this.value)">
 </div>
 
@@ -315,7 +315,7 @@ function renderCard(item) {
 
   return '<div class="card" data-zona="' + esc(c.zona||'') + '">' +
     topHtml + bodyHtml +
-    '<a href="/acopio/reportar/' + c.id + '" class="btn-report">📋 Actualizar reporte</a>' +
+    '<a href="/albergues/reportar/' + c.id + '" class="btn-report">📋 Actualizar reporte</a>' +
   '</div>';
 }
 
@@ -354,7 +354,7 @@ function filtrarZona(btn) {
 
 async function loadData() {
   try {
-    var res = await fetch('/api/acopio/estado');
+    var res = await fetch('/api/albergues/estado');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     _data = await res.json();
     renderGrid();
@@ -432,7 +432,7 @@ async function submitSolicitud() {
   var notas = (document.getElementById('sol-notas').value || '').trim();
   if (notas) fd.append('notas', notas);
   try {
-    var res = await fetch('/api/acopio/solicitar-centro', { method: 'POST', body: fd });
+    var res = await fetch('/api/albergues/solicitar-centro', { method: 'POST', body: fd });
     if (!res.ok) {
       var d = await res.json().catch(function(){return {};});
       throw new Error(d.detail || 'Error del servidor');

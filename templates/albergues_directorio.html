@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Directorio — Centros de Acopio — Venezuela Rescate</title>
+  <title>Directorio — Centros de Albergue — Venezuela Rescate</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -54,7 +54,7 @@
 <body>
 
 <div class="wrap">
-  <div class="titulo">📦 Centros de Acopio — Venezuela Rescate</div>
+  <div class="titulo">🏠 Centros de Albergue — Venezuela Rescate</div>
   <div class="subtitulo">Directorio actualizado en tiempo real</div>
 
   <div id="directorio">
@@ -83,7 +83,7 @@ function renderZona(zona, centros) {
     return '<div class="centro-item">' +
       '<div class="centro-nombre">' + esc(c.nombre) + '</div>' +
       (c.direccion ? '<div class="centro-direccion">' + esc(c.direccion) + '</div>' : '') +
-      '<a href="/acopio/reportar/' + c.id + '" class="btn-reportar">📋 Reportar estado →</a>' +
+      '<a href="/albergues/reportar/' + c.id + '" class="btn-reportar">📋 Reportar estado →</a>' +
     '</div>';
   }).join('');
 
@@ -96,7 +96,7 @@ function renderZona(zona, centros) {
 function renderDirectorio(centros) {
   var el = document.getElementById('directorio');
   if (!centros.length) {
-    el.innerHTML = '<div class="state-msg">No hay centros de acopio registrados.</div>';
+    el.innerHTML = '<div class="state-msg">No hay centros de albergue registrados.</div>';
     return;
   }
   var agrupado = agruparPorZona(centros);
@@ -107,7 +107,7 @@ function renderDirectorio(centros) {
 
 async function loadDirectorio() {
   try {
-    var res = await fetch('/api/acopio/centros');
+    var res = await fetch('/api/albergues/centros');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var centros = await res.json();
     renderDirectorio(centros);

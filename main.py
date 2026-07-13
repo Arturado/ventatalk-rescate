@@ -21,7 +21,7 @@ from routers.admin import router as admin_router
 from routers.stats import router as stats_router, public_router as stats_public_router
 from routers.hospitales import router as hospitales_router, pacientes_router
 from routers.bomberos import router as bomberos_router
-from routers.acopio import router as acopio_router
+from routers.albergues import router as albergues_router
 from routers.casos_ayuda import router as casos_ayuda_router
 from sqlalchemy import text as sql_text
 
@@ -234,7 +234,7 @@ app.include_router(stats_public_router)
 app.include_router(hospitales_router)
 app.include_router(pacientes_router)
 app.include_router(bomberos_router)
-app.include_router(acopio_router)
+app.include_router(albergues_router)
 app.include_router(casos_ayuda_router)
 app.include_router(admin_router)
 
@@ -264,26 +264,26 @@ async def bombero_page(request: Request):
     return templates.TemplateResponse("bombero.html", {"request": request})
 
 
-@app.get("/acopio")
-async def acopio_page(request: Request):
-    return templates.TemplateResponse("acopio.html", {"request": request})
+@app.get("/albergues")
+async def albergues_page(request: Request):
+    return templates.TemplateResponse("albergues.html", {"request": request})
 
 
-@app.get("/acopio/reportar/{centro_id}")
-async def acopio_reportar_page(centro_id: int, request: Request):
-    return templates.TemplateResponse("acopio_reportar.html",
+@app.get("/albergues/reportar/{centro_id}")
+async def albergues_reportar_page(centro_id: int, request: Request):
+    return templates.TemplateResponse("albergues_reportar.html",
         {"request": request, "centro_id": centro_id})
 
 
-@app.get("/acopio/pedido/{orden_id}")
-async def acopio_pedido_page(orden_id: int, request: Request):
-    return templates.TemplateResponse("acopio_pedido.html",
+@app.get("/albergues/pedido/{orden_id}")
+async def albergues_pedido_page(orden_id: int, request: Request):
+    return templates.TemplateResponse("albergues_pedido.html",
         {"request": request, "orden_id": orden_id})
 
 
-@app.get("/acopio/directorio")
-async def acopio_directorio_page(request: Request):
-    return templates.TemplateResponse("acopio_directorio.html",
+@app.get("/albergues/directorio")
+async def albergues_directorio_page(request: Request):
+    return templates.TemplateResponse("albergues_directorio.html",
         {"request": request})
 
 

@@ -239,7 +239,7 @@ function fmtFecha(iso) {
 /* ── Cargar pedido ── */
 async function loadPedido() {
   try {
-    var res = await fetch('/api/acopio/ordenes/' + ORDEN_ID);
+    var res = await fetch('/api/albergues/ordenes/' + ORDEN_ID);
     if (res.status === 404) {
       document.getElementById('hdr-title').textContent = '📦 Pedido no encontrado';
       document.getElementById('content').innerHTML =
@@ -305,7 +305,7 @@ function renderFormulario(p) {
     /* SECCIÓN 1 — Header del pedido */
     '<div class="section">' +
       '<span class="badge-estado ' + estadoInfo.cls + '">' + estadoInfo.txt + '</span>' +
-      '<div class="centro-nombre">' + esc(centro.nombre || 'Centro de acopio') + '</div>' +
+      '<div class="centro-nombre">' + esc(centro.nombre || 'Centro de albergue') + '</div>' +
       (centro.direccion ? '<div class="centro-direccion">' + esc(centro.direccion) + '</div>' : '') +
       '<div class="generado-por">Generado por: ' + esc(p.creado_por || 'No especificado') + '</div>' +
     '</div>' +
@@ -411,7 +411,7 @@ async function submitEntrega() {
   if (_selectedFoto) fd.append('foto_entrega', _selectedFoto);
 
   try {
-    var res = await fetch('/api/acopio/ordenes/' + ORDEN_ID + '/confirmar-entrega', { method: 'POST', body: fd });
+    var res = await fetch('/api/albergues/ordenes/' + ORDEN_ID + '/confirmar-entrega', { method: 'POST', body: fd });
     if (res.status === 400) {
       var d400 = await res.json().catch(function(){ return {}; });
       throw new Error(d400.detail || 'Esta orden ya fue confirmada.');
