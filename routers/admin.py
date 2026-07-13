@@ -79,6 +79,33 @@ def require_admin(request: Request):
 class RedirectToLogin(Exception):
     pass
 
+def _require_admin_or_api_key(require_csrf: bool):
+    """Autoriza vía sesión web (humano) o x-api-key (integración técnica, ej. Firebase Functions).
+
+    Cuando la auth es por x-api-key se omite el CSRF: ese token existe para proteger
+    al navegador de un tercero, no aplica a llamadas server-to-server autenticadas por key.
+    """
+    def dependency(
+        request: Request,
+        x_csrf_token: str = Header(""),
+        x_api_key: Optional[str] = Header(None),
+    ) -> str:
+        expected_api_key = os.getenv("API_KEY")
+        if x_api_key and expected_api_key and x_api_key == expected_api_key:
+            return "api_key"
+        admin = get_current_admin(request)
+        if not admin:
+            raise HTTPException(status_code=401, detail="No autorizado")
+        if require_csrf and not validate_csrf(request, x_csrf_token, admin):
+            raise HTTPException(status_code=403, detail="CSRF token inválido")
+        return admin
+    return dependency
+
+# Para POST/PATCH/DELETE: sesión requiere CSRF, x-api-key no.
+require_admin_or_api_key = _require_admin_or_api_key(require_csrf=True)
+# Para GET: sesión no requiere CSRF (igual que antes), x-api-key tampoco.
+require_admin_or_api_key_read = _require_admin_or_api_key(require_csrf=False)
+
 # --- Login ---
 
 @router.get("/login", response_class=HTMLResponse)
@@ -902,14 +929,9 @@ async def nuevo_centro_acopio(
     direccion: Optional[str] = Form(None),
     latitud: Optional[str] = Form(None),
     longitud: Optional[str] = Form(None),
-    x_csrf_token: str = Header(""),
     db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_or_api_key),
 ):
-    admin = get_current_admin(request)
-    if not admin:
-        raise HTTPException(status_code=401, detail="No autorizado")
-    if not validate_csrf(request, x_csrf_token, admin):
-        raise HTTPException(status_code=403, detail="CSRF token inválido")
     centro = models.CentroAcopio(
         nombre=nombre,
         zona=zona or None,
@@ -973,10 +995,8 @@ async def eliminar_acopio_reporte(
 async def listar_solicitudes_acopio(
     request: Request,
     db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_or_api_key_read),
 ):
-    admin = get_current_admin(request)
-    if not admin:
-        raise HTTPException(status_code=401, detail="No autorizado")
     solicitudes = db.query(models.CentroAcopioSolicitud).filter(
         models.CentroAcopioSolicitud.estado == "pendiente"
     ).order_by(sqldesc(models.CentroAcopioSolicitud.created_at)).all()
@@ -987,14 +1007,9 @@ async def listar_solicitudes_acopio(
 async def aprobar_solicitud_acopio(
     solicitud_id: int,
     request: Request,
-    x_csrf_token: str = Header(""),
     db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_or_api_key),
 ):
-    admin = get_current_admin(request)
-    if not admin:
-        raise HTTPException(status_code=401, detail="No autorizado")
-    if not validate_csrf(request, x_csrf_token, admin):
-        raise HTTPException(status_code=403, detail="CSRF token inválido")
     solicitud = db.query(models.CentroAcopioSolicitud).filter(
         models.CentroAcopioSolicitud.id == solicitud_id
     ).first()
@@ -1016,14 +1031,9 @@ async def aprobar_solicitud_acopio(
 async def rechazar_solicitud_acopio(
     solicitud_id: int,
     request: Request,
-    x_csrf_token: str = Header(""),
     db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_or_api_key),
 ):
-    admin = get_current_admin(request)
-    if not admin:
-        raise HTTPException(status_code=401, detail="No autorizado")
-    if not validate_csrf(request, x_csrf_token, admin):
-        raise HTTPException(status_code=403, detail="CSRF token inválido")
     solicitud = db.query(models.CentroAcopioSolicitud).filter(
         models.CentroAcopioSolicitud.id == solicitud_id
     ).first()
