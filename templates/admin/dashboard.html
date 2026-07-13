@@ -292,6 +292,30 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 @media (max-width: 480px) {
   .ped-grid { grid-template-columns: 1fr; }
 }
+
+/* Casos de ayuda tab */
+.dash-tab.active-purple { color:#7c3aed; border-bottom-color:#7c3aed; }
+.caso-stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:22px; }
+.caso-stat { background:#fff; border-radius:10px; padding:16px 14px; box-shadow:0 1px 4px rgba(0,0,0,.07); border-left:4px solid #9ca3af; }
+.caso-stat.green { border-left-color:#16a34a; }
+.caso-stat.red   { border-left-color:#dc2626; }
+.caso-stat.amber { border-left-color:#d97706; }
+.caso-stat .num { font-size:26px; font-weight:800; color:#111; }
+.caso-stat .label { font-size:11px; color:#6b7280; margin-top:4px; text-transform:uppercase; letter-spacing:.04em; }
+.caso-badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; white-space:nowrap; }
+.caso-pendiente_revision { background:#fefce8; color:#a16207; }
+.caso-publicado { background:#f0fdf4; color:#15803d; }
+.caso-rechazado { background:#fef2f2; color:#dc2626; }
+.caso-necesita_actualizacion { background:#fff7ed; color:#c2410c; }
+.caso-resuelto { background:#eff6ff; color:#1d4ed8; }
+.caso-archivado { background:#f3f4f6; color:#6b7280; }
+.nivel-badge { display:inline-block; padding:2px 9px; border-radius:20px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
+.nivel-basico { background:#f3f4f6; color:#374151; }
+.nivel-institucional { background:#dbeafe; color:#1e40af; }
+.nivel-medico { background:#dcfce7; color:#15803d; }
+.caso-hist-timeline { border-left:2px solid #e5e7eb; padding-left:14px; margin:6px 0; }
+.caso-hist-item { position:relative; padding-bottom:12px; }
+.caso-hist-item::before { content:'📍'; position:absolute; left:-20px; top:0; font-size:11px; }
 {% endblock %}
 {% block content %}
 <meta name="csrf-token" content="{{ csrf_token }}">
@@ -583,6 +607,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   <button class="dash-tab" id="tab-pacientes" onclick="switchTab('pacientes')">🏥 Pacientes Hospitalizados</button>
   <button class="dash-tab" id="tab-bomberos" onclick="switchTab('bomberos')">🚒 Bomberos en Campo <span id="bom-apoyo-indicator"></span></button>
   <button class="dash-tab" id="tab-acopio" onclick="switchTab('acopio')">📦 Centros de Acopio</button>
+  <button class="dash-tab" id="tab-casos" onclick="switchTab('casos')">🤝 Casos de Ayuda</button>
 </div>
 
 <!-- Pane: Personas Desaparecidas -->
@@ -1116,6 +1141,63 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   </div>
 </div><!-- /#pane-acopio -->
 
+<!-- Pane: Casos de Ayuda -->
+<div id="pane-casos" style="display:none">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+    <h2 style="font-size:20px;font-weight:800;">Casos de Ayuda Económica</h2>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span id="casos-refresh-label" style="font-size:12px;color:#6b7280;">Actualiza en <span id="casos-countdown">60</span>s</span>
+      <button onclick="loadCasos()" style="padding:8px 14px;background:#7c3aed;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">🔄 Actualizar</button>
+    </div>
+  </div>
+
+  <div class="caso-stats-grid">
+    <div class="caso-stat"><div class="num" id="cs-total">—</div><div class="label">Total casos</div></div>
+    <div class="caso-stat" id="cs-pendientes-card"><div class="num" id="cs-pendientes">—</div><div class="label">Pendientes revisión</div></div>
+    <div class="caso-stat green"><div class="num" id="cs-publicados">—</div><div class="label">Publicados</div></div>
+    <div class="caso-stat" id="cs-actualizar-card"><div class="num" id="cs-actualizar">—</div><div class="label">Necesita actualización</div></div>
+  </div>
+
+  <div class="toolbar" style="margin-bottom:16px;">
+    <select id="caso-filtrar-estado" onchange="filtrarCasos()">
+      <option value="">Todos los estados</option>
+      <option value="pendiente_revision">Pendiente revisión</option>
+      <option value="publicado">Publicado</option>
+      <option value="rechazado">Rechazado</option>
+      <option value="necesita_actualizacion">Necesita actualización</option>
+      <option value="resuelto">Resuelto</option>
+      <option value="archivado">Archivado</option>
+    </select>
+    <select id="caso-filtrar-nivel" onchange="filtrarCasos()">
+      <option value="">Todos los niveles</option>
+      <option value="basico">Básico</option>
+      <option value="institucional">Institucional</option>
+      <option value="medico">Médico</option>
+    </select>
+    <input type="text" id="caso-buscar" placeholder="Buscar por nombre o cédula..." oninput="filtrarCasosDebounce()">
+  </div>
+
+  <div class="table-wrap">
+    <table id="tabla-casos" style="min-width:820px;">
+      <thead style="background:#7c3aed;">
+        <tr>
+          <th>#</th>
+          <th>Nombre</th>
+          <th>Cédula</th>
+          <th>Condición</th>
+          <th>Estado</th>
+          <th>Nivel</th>
+          <th>Fecha</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="caso-tbody">
+        <tr><td colspan="8" style="text-align:center;color:#6b7280;padding:40px;">Cargando casos...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div><!-- /#pane-casos -->
+
 <!-- Lightbox foto captura -->
 <div class="lb-foto" id="lb-foto" onclick="if(event.target===this)closeLbFoto()">
   <button class="lb-foto-close" onclick="closeLbFoto()">×</button>
@@ -1144,6 +1226,19 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
     </div>
     <p style="font-size:13px;color:#6b7280;margin:-12px 0 16px;">Selecciona qué vas a enviar y en qué cantidad</p>
     <div id="aco-pedido-modal-content"></div>
+  </div>
+</div>
+
+<!-- Modal: Detalle de Caso de Ayuda -->
+<div id="modal-caso-detalle" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1001;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;" onclick="if(event.target===this)closeCasoDetalleModal()">
+  <div style="background:#fff;border-radius:16px;padding:28px;width:90vw;max-width:900px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0;">
+      <div id="caso-modal-title" style="font-size:17px;font-weight:800;"></div>
+      <button onclick="closeCasoDetalleModal()" style="border:none;background:transparent;font-size:24px;cursor:pointer;color:#9ca3af;line-height:1;padding:0 4px;">×</button>
+    </div>
+    <div id="caso-modal-body" style="overflow-y:auto;flex:1;">
+      <p style="color:#6b7280;text-align:center;padding:32px;">Cargando...</p>
+    </div>
   </div>
 </div>
 
@@ -1739,10 +1834,12 @@ function switchTab(tab) {
   document.getElementById('pane-pacientes').style.display = tab === 'pacientes' ? '' : 'none';
   document.getElementById('pane-bomberos').style.display  = tab === 'bomberos'  ? '' : 'none';
   document.getElementById('pane-acopio').style.display    = tab === 'acopio'    ? '' : 'none';
+  document.getElementById('pane-casos').style.display     = tab === 'casos'     ? '' : 'none';
   document.getElementById('tab-personas').className  = 'dash-tab' + (tab === 'personas'  ? ' active' : '');
   document.getElementById('tab-pacientes').className = 'dash-tab' + (tab === 'pacientes' ? ' active-blue' : '');
   document.getElementById('tab-bomberos').className  = 'dash-tab' + (tab === 'bomberos'  ? ' active-fire' : '');
   document.getElementById('tab-acopio').className    = 'dash-tab' + (tab === 'acopio'    ? ' active-green' : '');
+  document.getElementById('tab-casos').className     = 'dash-tab' + (tab === 'casos'     ? ' active-purple' : '');
   if (tab === 'pacientes' && !_pacientesLoaded) loadPacientes();
   if (tab === 'bomberos') {
     if (!_bomberosLoaded) loadBomberos();
@@ -1755,6 +1852,12 @@ function switchTab(tab) {
     startAcoRefresh();
   } else {
     stopAcoRefresh();
+  }
+  if (tab === 'casos') {
+    if (!_casosLoaded) loadCasos();
+    startCasoRefresh();
+  } else {
+    stopCasoRefresh();
   }
 }
 
@@ -1967,7 +2070,7 @@ function closeLbFoto() {
   document.getElementById('lb-foto').classList.remove('open');
   document.getElementById('lb-foto-img').src = '';
 }
-document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { closeLbFoto(); closeModal('modal-hosp'); closeModal('modal-pac'); closeModal('modal-centro'); closeModal('modal-editar-persona'); closeAcopioHistorialModal(); } });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { closeLbFoto(); closeModal('modal-hosp'); closeModal('modal-pac'); closeModal('modal-centro'); closeModal('modal-editar-persona'); closeAcopioHistorialModal(); closeCasoDetalleModal(); } });
 
 async function exportPacientesCSV() {
   var key = sessionStorage.getItem('vr_api_key') || getApiKey();
@@ -3397,6 +3500,357 @@ async function initNotifLocalizadoCount() {
 
 initNotifLocalizadoCount();
 setInterval(initNotifLocalizadoCount, 60000);
+
+/* ---- CASOS DE AYUDA ---- */
+var _casosData = [];
+var _casosLoaded = false;
+var _casoRefreshTimer = null;
+var _casoCountdown = 60;
+var _casoFiltroTimer = null;
+var _casoDetalleAbierto = null;
+
+var _CASO_ESTADO_INFO = {
+  pendiente_revision:     { txt: '⏳ PENDIENTE',  cls: 'caso-pendiente_revision' },
+  publicado:              { txt: '✅ PUBLICADO',  cls: 'caso-publicado' },
+  rechazado:              { txt: '❌ RECHAZADO',  cls: 'caso-rechazado' },
+  necesita_actualizacion: { txt: '⚠️ ACTUALIZAR', cls: 'caso-necesita_actualizacion' },
+  resuelto:               { txt: '🔵 RESUELTO',   cls: 'caso-resuelto' },
+  archivado:               { txt: '📁 ARCHIVADO',  cls: 'caso-archivado' }
+};
+var _CASO_NIVEL_INFO = {
+  basico:        { txt: 'BÁSICO',        cls: 'nivel-basico' },
+  institucional: { txt: 'INSTITUCIONAL', cls: 'nivel-institucional' },
+  medico:        { txt: 'MÉDICO',        cls: 'nivel-medico' }
+};
+var _CASO_TRANSICIONES = {
+  pendiente_revision:     [['publicado', 'Publicar'], ['rechazado', 'Rechazar']],
+  publicado:               [['necesita_actualizacion', 'Necesita actualización'], ['resuelto', 'Marcar resuelto']],
+  necesita_actualizacion: [['publicado', 'Publicar de nuevo'], ['archivado', 'Archivar']],
+  resuelto:               [['archivado', 'Archivar']],
+  rechazado:               [],
+  archivado:               []
+};
+
+function startCasoRefresh() {
+  stopCasoRefresh();
+  _casoCountdown = 60;
+  _casoRefreshTimer = setInterval(function() {
+    _casoCountdown--;
+    var el = document.getElementById('casos-countdown');
+    if (el) el.textContent = _casoCountdown;
+    if (_casoCountdown <= 0) { loadCasos(); _casoCountdown = 60; }
+  }, 1000);
+}
+
+function stopCasoRefresh() {
+  if (_casoRefreshTimer) { clearInterval(_casoRefreshTimer); _casoRefreshTimer = null; }
+}
+
+async function loadCasos() {
+  _casoCountdown = 60;
+  var cdEl = document.getElementById('casos-countdown');
+  if (cdEl) cdEl.textContent = '60';
+  try {
+    var res = await fetch('/admin/casos-ayuda');
+    if (res.status === 401) {
+      document.getElementById('caso-tbody').innerHTML = '<tr><td colspan="8" style="color:#dc2626;text-align:center;padding:24px;">No autorizado.</td></tr>';
+      return;
+    }
+    if (!res.ok) throw new Error();
+    _casosData = await res.json();
+    _casosLoaded = true;
+    renderCasoStats();
+    filtrarCasos();
+    if (_casoDetalleAbierto) {
+      var actual = _casosData.find(function(x) { return x.caso.id === _casoDetalleAbierto; });
+      if (actual) renderCasoDetalleModal(actual);
+    }
+  } catch (e) {
+    document.getElementById('caso-tbody').innerHTML = '<tr><td colspan="8" style="color:#dc2626;text-align:center;padding:24px;">Error al cargar. Intenta de nuevo.</td></tr>';
+  }
+}
+
+function renderCasoStats() {
+  var total = _casosData.length;
+  var pend  = _casosData.filter(function(x) { return x.caso.estado === 'pendiente_revision'; }).length;
+  var pub   = _casosData.filter(function(x) { return x.caso.estado === 'publicado'; }).length;
+  var act   = _casosData.filter(function(x) { return x.caso.estado === 'necesita_actualizacion'; }).length;
+  document.getElementById('cs-total').textContent       = total;
+  document.getElementById('cs-pendientes').textContent  = pend;
+  document.getElementById('cs-publicados').textContent  = pub;
+  document.getElementById('cs-actualizar').textContent  = act;
+  document.getElementById('cs-pendientes-card').className = 'caso-stat' + (pend > 0 ? ' red'   : '');
+  document.getElementById('cs-actualizar-card').className = 'caso-stat' + (act  > 0 ? ' amber' : '');
+}
+
+function _getCasoFiltros() {
+  return {
+    estado: document.getElementById('caso-filtrar-estado').value,
+    nivel:  document.getElementById('caso-filtrar-nivel').value,
+    q:      document.getElementById('caso-buscar').value.trim().toLowerCase()
+  };
+}
+
+function filtrarCasosDebounce() {
+  clearTimeout(_casoFiltroTimer);
+  _casoFiltroTimer = setTimeout(filtrarCasos, 500);
+}
+
+function filtrarCasos() {
+  var f = _getCasoFiltros();
+  var filtrados = _casosData.filter(function(x) {
+    var c = x.caso;
+    var okEstado = !f.estado || c.estado === f.estado;
+    var okNivel  = !f.nivel  || c.nivel_verificacion === f.nivel;
+    var okQ = !f.q || (c.nombre || '').toLowerCase().includes(f.q) || (c.cedula || '').toLowerCase().includes(f.q);
+    return okEstado && okNivel && okQ;
+  });
+  renderCasoTable(filtrados);
+}
+
+function renderCasoTable(arr) {
+  var tbody = document.getElementById('caso-tbody');
+  if (!arr.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#6b7280;padding:32px;">Sin registros.</td></tr>'; return; }
+  tbody.innerHTML = arr.map(function(x) {
+    var c = x.caso;
+    var estInfo = _CASO_ESTADO_INFO[c.estado] || { txt: c.estado, cls: '' };
+    var nivInfo = _CASO_NIVEL_INFO[c.nivel_verificacion] || { txt: c.nivel_verificacion, cls: '' };
+    var puedeEliminar = c.estado === 'rechazado' || c.estado === 'archivado';
+    return '<tr data-caso-id="' + c.id + '">' +
+      '<td>' + c.id + '</td>' +
+      '<td><strong>' + esc(c.nombre) + '</strong></td>' +
+      '<td>' + esc(c.cedula) + '</td>' +
+      '<td style="max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(c.condicion_resumen || '') + '">' + esc(c.condicion_resumen || '—') + '</td>' +
+      '<td><span class="caso-badge ' + estInfo.cls + '">' + estInfo.txt + '</span></td>' +
+      '<td><span class="nivel-badge ' + nivInfo.cls + '">' + nivInfo.txt + '</span></td>' +
+      '<td style="white-space:nowrap;font-size:12px;">' + fmtDate(c.created_at) + '</td>' +
+      '<td><div style="display:flex;gap:4px;flex-wrap:wrap;">' +
+        '<button onclick="abrirCasoDetalle(' + c.id + ')" style="font-size:11px;padding:4px 8px;background:#2563eb;color:white;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">👁️ Ver detalle</button>' +
+        (puedeEliminar ? '<button onclick="eliminarCaso(' + c.id + ',this)" style="font-size:11px;padding:4px 8px;background:#ef4444;color:white;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">🗑️ Eliminar</button>' : '') +
+      '</div></td>' +
+    '</tr>';
+  }).join('');
+}
+
+async function eliminarCaso(id, btn) {
+  if (!confirm('¿Eliminar este caso de ayuda? Esta acción no se puede deshacer.')) return;
+  btn.disabled = true; btn.textContent = 'Eliminando...';
+  try {
+    var res = await fetch('/admin/casos-ayuda/' + id, {
+      method: 'DELETE',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
+    });
+    if (!res.ok) throw new Error();
+    showToast('✅ Caso eliminado');
+    loadCasos();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = '🗑️ Eliminar';
+    alert('Error al eliminar. Intenta de nuevo.');
+  }
+}
+
+function abrirCasoDetalle(id) {
+  var item = _casosData.find(function(x) { return x.caso.id === id; });
+  if (!item) return;
+  _casoDetalleAbierto = id;
+  document.getElementById('modal-caso-detalle').style.display = 'flex';
+  renderCasoDetalleModal(item);
+}
+
+function closeCasoDetalleModal() {
+  document.getElementById('modal-caso-detalle').style.display = 'none';
+  _casoDetalleAbierto = null;
+}
+
+function _parseAdjuntos(adjuntos) {
+  if (Array.isArray(adjuntos)) return adjuntos;
+  if (typeof adjuntos === 'string' && adjuntos) {
+    try { var parsed = JSON.parse(adjuntos); return Array.isArray(parsed) ? parsed : []; } catch (e) { return []; }
+  }
+  return [];
+}
+
+function renderCasoDetalleModal(item) {
+  var c = item.caso, contacto = item.contacto;
+  document.getElementById('caso-modal-title').textContent = '📋 ' + c.nombre + ' — Caso #' + c.id;
+  document.getElementById('caso-modal-body').innerHTML = _casoDetalleHTML(c, contacto);
+  var histContainer = document.getElementById('caso-hist-' + c.id);
+  if (histContainer) cargarHistorialCaso(c.id, histContainer);
+}
+
+function _casoDetalleHTML(c, contacto) {
+  var adjuntos = _parseAdjuntos(c.adjuntos);
+  var adjuntosHtml = adjuntos.length
+    ? '<div style="margin-bottom:12px;"><strong style="color:#374151;display:block;margin-bottom:4px;">Adjuntos</strong>' +
+      adjuntos.map(function(u) { return '<a href="' + esc(u) + '" target="_blank" style="display:block;color:#1e40af;font-size:12px;">' + esc(u) + '</a>'; }).join('') +
+      '</div>'
+    : '';
+
+  var seccion1 =
+    '<div style="font-size:13px;line-height:1.7;">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;margin-bottom:14px;">' +
+        '<div><strong style="color:#374151;">Cédula:</strong> ' + esc(c.cedula) + '</div>' +
+        '<div><strong style="color:#374151;">Creado por:</strong> ' + esc(c.creado_por) + '</div>' +
+        '<div><strong style="color:#374151;">Fecha creación:</strong> ' + fmtDate(c.created_at) + '</div>' +
+        '<div><strong style="color:#374151;">Consentimiento:</strong> ' +
+          (c.consentimiento_publicacion
+            ? '<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:#f0fdf4;color:#15803d;">✅ Consintió publicación</span>'
+            : '<span style="color:#9ca3af;">—</span>') +
+        '</div>' +
+        (c.monto_necesario ? '<div><strong style="color:#374151;">Monto necesario:</strong> ' + esc(c.monto_necesario) + ' ' + esc(c.moneda || '') + '</div>' : '') +
+      '</div>' +
+      '<div style="margin-bottom:12px;"><strong style="color:#374151;display:block;margin-bottom:4px;">Condición (resumen)</strong><div style="color:#6b7280;">' + esc(c.condicion_resumen) + '</div></div>' +
+      '<div style="margin-bottom:12px;"><strong style="color:#374151;display:block;margin-bottom:4px;">Relato</strong><div style="color:#6b7280;white-space:pre-wrap;">' + esc(c.relato) + '</div></div>' +
+      adjuntosHtml +
+    '</div>';
+
+  var opciones = _CASO_TRANSICIONES[c.estado] || [];
+  var estadoFormHtml = !opciones.length
+    ? '<p style="color:#9ca3af;font-size:13px;">No hay transiciones de estado disponibles.</p>'
+    : '<div class="fg"><label>Cambiar estado a</label><select id="caso-nuevo-estado-' + c.id + '">' +
+        opciones.map(function(o) { return '<option value="' + o[0] + '">' + o[1] + '</option>'; }).join('') +
+      '</select></div>' +
+      '<div class="fg"><label>Descripción del cambio (obligatorio)</label><textarea id="caso-desc-cambio-' + c.id + '" rows="2" placeholder="Motivo del cambio..."></textarea></div>' +
+      '<div class="fg"><label>Cambiado por (tu nombre)</label><input type="text" id="caso-cambiado-por-' + c.id + '" placeholder="Tu nombre"></div>' +
+      '<button onclick="cambiarEstadoCaso(' + c.id + ')" style="width:100%;padding:11px;background:#dc2626;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">Cambiar estado</button>';
+
+  var nivelFormHtml =
+    '<div class="fg"><label>Nivel de verificación</label><select id="caso-nuevo-nivel-' + c.id + '">' +
+      '<option value="basico"' + (c.nivel_verificacion === 'basico' ? ' selected' : '') + '>Básico</option>' +
+      '<option value="institucional"' + (c.nivel_verificacion === 'institucional' ? ' selected' : '') + '>Institucional</option>' +
+      '<option value="medico"' + (c.nivel_verificacion === 'medico' ? ' selected' : '') + '>Médico</option>' +
+    '</select></div>' +
+    '<div class="fg"><label>Avalado por <small style="color:#9ca3af;">(requerido si sube de nivel)</small></label><input type="text" id="caso-avalado-por-' + c.id + '" placeholder="Nombre de quien avala"></div>' +
+    '<div class="fg"><label>Notas</label><textarea id="caso-nivel-notas-' + c.id + '" rows="2" placeholder="Notas..."></textarea></div>' +
+    '<button onclick="cambiarNivelCaso(' + c.id + ')" style="width:100%;padding:11px;background:#1e40af;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">Actualizar nivel</button>';
+
+  var confirmarHtml = '';
+  if (c.estado === 'publicado' || c.estado === 'necesita_actualizacion') {
+    confirmarHtml =
+      '<div style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e7eb;">' +
+        '<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">Última confirmación: ' + fmtDate(c.fecha_ultima_confirmacion) + '</div>' +
+        '<button onclick="confirmarVigenciaCaso(' + c.id + ')" style="padding:10px 16px;background:#16a34a;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">✅ Confirmar que sigue vigente</button>' +
+      '</div>';
+  }
+
+  var seccion2 =
+    '<div style="margin-top:18px;padding-top:18px;border-top:2px solid #e5e7eb;">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">' +
+        '<strong style="color:#374151;">Estado actual:</strong> <span class="caso-badge ' + (_CASO_ESTADO_INFO[c.estado] || {}).cls + '">' + ((_CASO_ESTADO_INFO[c.estado] || {}).txt || c.estado) + '</span>' +
+        '<strong style="color:#374151;margin-left:12px;">Nivel:</strong> <span class="nivel-badge ' + (_CASO_NIVEL_INFO[c.nivel_verificacion] || {}).cls + '">' + ((_CASO_NIVEL_INFO[c.nivel_verificacion] || {}).txt || c.nivel_verificacion) + '</span>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">' +
+        '<div><div class="section-title-sm">Cambiar estado</div>' + estadoFormHtml + '</div>' +
+        '<div><div class="section-title-sm">Cambiar nivel de verificación</div>' + nivelFormHtml + '</div>' +
+      '</div>' +
+      confirmarHtml +
+    '</div>';
+
+  var contactoHtml = '<div style="margin-top:16px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px 16px;">' +
+    '<div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">🔒 Datos de contacto — Solo visible para administradores</div>';
+  if (contacto && (contacto.telefono || contacto.metodo_pago || contacto.datos_pago || contacto.contacto_alterno)) {
+    contactoHtml +=
+      (contacto.telefono ? '<div style="margin-bottom:4px;font-size:13px;"><strong>Teléfono:</strong> <a href="tel:' + esc(contacto.telefono) + '" style="color:#1e40af;">' + esc(contacto.telefono) + '</a></div>' : '') +
+      (contacto.metodo_pago ? '<div style="margin-bottom:4px;font-size:13px;"><strong>Método de pago:</strong> ' + esc(contacto.metodo_pago) + '</div>' : '') +
+      (contacto.datos_pago ? '<div style="margin-bottom:4px;font-size:13px;"><strong>Datos de pago:</strong> ' + esc(contacto.datos_pago) + '</div>' : '') +
+      (contacto.contacto_alterno ? '<div style="margin-bottom:4px;font-size:13px;"><strong>Contacto alterno:</strong> ' + esc(contacto.contacto_alterno) + '</div>' : '');
+  } else {
+    contactoHtml += '<div style="color:#9ca3af;font-size:13px;">Sin datos de contacto registrados.</div>';
+  }
+  contactoHtml += '</div>';
+
+  var historialHtml =
+    '<div style="margin-top:16px;">' +
+      '<strong style="color:#374151;display:block;margin-bottom:8px;">Historial de cambios</strong>' +
+      '<div id="caso-hist-' + c.id + '"><div style="color:#6b7280;font-size:12px;">Cargando historial...</div></div>' +
+    '</div>';
+
+  return seccion1 + seccion2 + contactoHtml + historialHtml;
+}
+
+async function cargarHistorialCaso(id, container) {
+  var key = getApiKey();
+  if (!key) { container.innerHTML = '<div style="color:#dc2626;font-size:12px;">API Key requerida.</div>'; return; }
+  try {
+    var res = await fetch('/api/casos-ayuda/' + id + '/historial', { headers: { 'X-Api-Key': key } });
+    if (res.status === 401) { sessionStorage.removeItem('vr_api_key'); container.innerHTML = '<div style="color:#dc2626;font-size:12px;">API Key inválida.</div>'; return; }
+    if (!res.ok) throw new Error();
+    var data = await res.json();
+    if (!data.length) { container.innerHTML = '<div style="color:#9ca3af;font-size:12px;">Sin cambios registrados.</div>'; return; }
+    container.innerHTML = '<div class="caso-hist-timeline">' +
+      data.map(function(h) {
+        var quien = h.cambiado_por ? ' por ' + esc(h.cambiado_por) : '';
+        var desc  = h.descripcion ? ': ' + esc(h.descripcion) : '';
+        return '<div class="caso-hist-item">' +
+          '<div style="font-size:11px;color:#9ca3af;">' + fmtDate(h.cambiado_en) + '</div>' +
+          '<div style="font-size:13px;color:#374151;"><strong>' + esc(h.tipo_cambio) + '</strong>: ' + esc(h.valor_anterior || '—') + ' → ' + esc(h.valor_nuevo || '—') + '</div>' +
+          (quien || desc ? '<div style="font-size:12px;color:#6b7280;">' + quien.replace(/^ /, '') + desc + '</div>' : '') +
+        '</div>';
+      }).join('') +
+    '</div>';
+  } catch (e) {
+    container.innerHTML = '<div style="color:#dc2626;font-size:12px;">Error al cargar historial.</div>';
+  }
+}
+
+async function _refrescarCasoYModal(id) {
+  await loadCasos();
+  var item = _casosData.find(function(x) { return x.caso.id === id; });
+  if (item) { _casoDetalleAbierto = id; renderCasoDetalleModal(item); }
+}
+
+async function cambiarEstadoCaso(id) {
+  var estado = document.getElementById('caso-nuevo-estado-' + id).value;
+  var desc = document.getElementById('caso-desc-cambio-' + id).value.trim();
+  var cambiadoPor = document.getElementById('caso-cambiado-por-' + id).value.trim();
+  if (!desc) { alert('La descripción del cambio es obligatoria.'); return; }
+  try {
+    var fd = new FormData();
+    fd.append('estado', estado);
+    fd.append('descripcion_cambio', desc);
+    if (cambiadoPor) fd.append('cambiado_por', cambiadoPor);
+    var res = await fetch('/admin/casos-ayuda/' + id + '/estado', {
+      method: 'POST',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content },
+      body: fd
+    });
+    if (!res.ok) { var err = await res.json().catch(function() { return {}; }); throw new Error(err.detail || 'No se pudo cambiar el estado'); }
+    showToast('✅ Estado actualizado');
+    await _refrescarCasoYModal(id);
+  } catch (e) { alert('Error al cambiar estado: ' + e.message); }
+}
+
+async function cambiarNivelCaso(id) {
+  var nivel = document.getElementById('caso-nuevo-nivel-' + id).value;
+  var avaladoPor = document.getElementById('caso-avalado-por-' + id).value.trim();
+  var notas = document.getElementById('caso-nivel-notas-' + id).value.trim();
+  try {
+    var fd = new FormData();
+    fd.append('nivel_verificacion', nivel);
+    if (avaladoPor) fd.append('avalado_por', avaladoPor);
+    if (notas) fd.append('notas', notas);
+    var res = await fetch('/admin/casos-ayuda/' + id + '/nivel', {
+      method: 'POST',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content },
+      body: fd
+    });
+    if (!res.ok) { var err = await res.json().catch(function() { return {}; }); throw new Error(err.detail || 'No se pudo actualizar el nivel'); }
+    showToast('✅ Nivel actualizado');
+    await _refrescarCasoYModal(id);
+  } catch (e) { alert('Error al cambiar nivel: ' + e.message); }
+}
+
+async function confirmarVigenciaCaso(id) {
+  try {
+    var res = await fetch('/admin/casos-ayuda/' + id + '/confirmar', {
+      method: 'POST',
+      headers: { 'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content }
+    });
+    if (!res.ok) throw new Error();
+    showToast('✅ Vigencia confirmada');
+    await _refrescarCasoYModal(id);
+  } catch (e) { alert('Error al confirmar vigencia.'); }
+}
 
 /* ---- Init ---- */
 (function() {

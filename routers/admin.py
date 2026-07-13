@@ -1309,6 +1309,39 @@ async def cambiar_nivel_caso_ayuda_admin(
     return {"ok": True}
 
 
+@router.post("/casos-ayuda/{caso_id}/confirmar")
+async def confirmar_caso_ayuda_admin(
+    caso_id: int,
+    request: Request,
+    x_csrf_token: str = Header(""),
+    db: Session = Depends(get_db),
+):
+    admin = get_current_admin(request)
+    if not admin:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    if not validate_csrf(request, x_csrf_token, admin):
+        raise HTTPException(status_code=403, detail="CSRF token inválido")
+
+    caso = db.query(models.CasoAyuda).filter(models.CasoAyuda.id == caso_id).first()
+    if not caso:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+
+    caso.fecha_ultima_confirmacion = datetime.now(timezone.utc)
+    if caso.estado == "necesita_actualizacion":
+        historial = models.CasoAyudaHistorial(
+            caso_id=caso.id,
+            tipo_cambio="estado",
+            valor_anterior=caso.estado,
+            valor_nuevo="publicado",
+            cambiado_por=admin,
+            descripcion="Confirmación de vigencia reactivó el caso a publicado",
+        )
+        db.add(historial)
+        caso.estado = "publicado"
+    db.commit()
+    return {"ok": True, "estado": caso.estado}
+
+
 @router.delete("/casos-ayuda/{caso_id}")
 async def eliminar_caso_ayuda_admin(
     caso_id: int,
