@@ -1,5 +1,4 @@
 version: "3.8"
-
 services:
   rescate-api:
     build: .
@@ -12,10 +11,18 @@ services:
       - TZ=America/Caracas
     volumes:
       - ./uploads:/app/uploads
-      - ./rescate.db:/app/rescate.db
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    networks:
+      - ventatalk-rescate_default
+      - ventatalk_default
+
+networks:
+  ventatalk-rescate_default:
+    external: true
+  ventatalk_default:
+    external: true
