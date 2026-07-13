@@ -162,6 +162,14 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
 .bom-apoyo-badge { animation:blink 1s ease-in-out infinite; display:inline-block; margin-left:8px; }
 .bom-hist-row td { background:#f8faff; font-size:12px; }
+/* Paginación personas */
+.per-paginacion { display:flex; align-items:center; justify-content:center; gap:10px; margin-top:16px; flex-wrap:wrap; }
+.per-paginacion button { padding:7px 14px; border:1.5px solid #d1d5db; background:#fff; color:#374151; border-radius:7px; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; }
+.per-paginacion button:hover:not(:disabled) { border-color:#dc2626; color:#dc2626; }
+.per-paginacion button:disabled { opacity:.4; cursor:not-allowed; }
+.per-pag-info { font-size:13px; color:#6b7280; white-space:nowrap; }
+.per-contador { font-size:12px; color:#6b7280; margin-top:10px; text-align:right; }
+
 /* Paginación pacientes */
 .pac-paginacion { display:flex; align-items:center; justify-content:center; gap:10px; margin-top:16px; flex-wrap:wrap; }
 .pac-paginacion button { padding:7px 14px; border:1.5px solid #d1d5db; background:#fff; color:#374151; border-radius:7px; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; }
@@ -622,7 +630,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <button id="btn-matches" onclick="toggleMatches()" style="padding:8px 16px;background:#2563eb;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">🔗 Posibles Matches (<span id="matches-count">…</span>)</button>
     <button id="btn-duplicados" onclick="toggleDuplicados()" style="padding:8px 16px;background:#d97706;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;">⚠️ Posibles duplicados (<span id="dup-count">…</span>)</button>
-    <a href="/admin/export/csv" class="btn btn-red">⬇ Exportar CSV</a>
+    <button type="button" onclick="exportPersonasCSV()" class="btn btn-red">⬇ Exportar CSV</button>
   </div>
 </div>
 
@@ -668,21 +676,21 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
 </div>
 
 <div class="toolbar">
-  <input type="text" id="buscar-nombre" placeholder="Buscar por nombre...">
-  <input type="text" id="buscar-cedula" placeholder="Buscar por cédula...">
-  <select id="filtrar-estado">
+  <input type="text" id="buscar-nombre" placeholder="Buscar por nombre..." oninput="filtrarPersonas()">
+  <input type="text" id="buscar-cedula" placeholder="Buscar por cédula..." oninput="filtrarPersonas()">
+  <select id="filtrar-estado" onchange="filtrarPersonas()">
     <option value="">Todos los estados</option>
     <option value="desaparecido">Desaparecido</option>
     <option value="encontrado">Encontrado</option>
     <option value="en_proceso">En proceso</option>
     <option value="localizado">Localizado</option>
   </select>
-  <select id="filtrar-tipo">
+  <select id="filtrar-tipo" onchange="filtrarPersonas()">
     <option value="">Todos los tipos</option>
     <option value="desaparecido">Desaparecidos</option>
     <option value="encontrado_vivo">Encontrados vivos</option>
   </select>
-  <select id="filtrar-clinico">
+  <select id="filtrar-clinico" onchange="filtrarPersonas()">
     <option value="">Estado clínico (todos)</option>
     <option value="atrapado">Atrapado/a</option>
     <option value="herido">Herido/a</option>
@@ -709,172 +717,16 @@ tbody td { padding: 10px 14px; vertical-align: middle; }
         <th>Detalle</th>
       </tr>
     </thead>
-    <tbody>
-      {% for p in personas %}
-      <tr
-        data-nombre="{{ p.nombres_apellidos | lower }}"
-        data-cedula="{{ p.cedula or '' }}"
-        data-estado="{{ p.estado }}"
-        data-tipo="{{ p.tipo_reporte }}"
-        data-clinico="{{ p.estado_clinico or '' }}"
-        data-id="{{ p.id }}"
-      >
-        <td>{{ p.id }}</td>
-        <td>
-          {% if p.foto_url %}
-          <a href="{{ p.foto_url }}" target="_blank">
-            <img src="{{ p.foto_url }}" class="foto-thumb" alt="foto">
-          </a>
-          {% else %}—{% endif %}
-        </td>
-        <td><strong>{{ p.nombres_apellidos }}</strong></td>
-        <td>
-          {{ p.cedula or '—' }}
-          {% if p.sin_documentos %}<br><span style="display:inline-block;padding:1px 6px;border-radius:20px;font-size:9px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;text-transform:uppercase;">Sin doc.</span>{% endif %}
-        </td>
-        <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ p.ultima_ubicacion }}">{{ p.ultima_ubicacion }}</td>
-        <td>{{ p.numero_contacto }}</td>
-        <td>
-          <span class="estado-badge estado-{{ p.estado }}">{{ p.estado.replace('_', ' ') }}</span><br>
-          <span class="tipo-badge tipo-{{ p.tipo_reporte }}">{{ 'ENCONTRADO VIVO' if p.tipo_reporte == 'encontrado_vivo' else 'DESAPARECIDO' }}</span>
-        </td>
-        <td style="white-space:nowrap;">{{ p.created_at.strftime('%d/%m/%Y %H:%M') if p.created_at else '—' }}</td>
-        <td style="position:relative;">
-          <form class="estado-form" method="post" action="/admin/personas/{{ p.id }}/estado" data-persona-id="{{ p.id }}">
-            <select name="estado">
-              <option value="desaparecido" {% if p.estado == 'desaparecido' %}selected{% endif %}>Desaparecido</option>
-              <option value="encontrado"   {% if p.estado == 'encontrado' %}selected{% endif %}>Encontrado</option>
-              <option value="en_proceso"   {% if p.estado == 'en_proceso' %}selected{% endif %}>En proceso</option>
-              <option value="localizado"   {% if p.estado == 'localizado' %}selected{% endif %}>Localizado</option>
-            </select>
-            <button type="submit">✓</button>
-          </form>
-          <div class="estado-popover" id="estado-popover-{{ p.id }}" style="display:none;">
-            <div class="estado-popover-title">Cambiar estado a: <strong class="estado-popover-nuevo"></strong></div>
-            <textarea class="estado-popover-desc" rows="2" placeholder="Descripción del cambio (opcional)..."></textarea>
-            <div class="estado-popover-actions">
-              <button type="button" class="estado-popover-confirm">Confirmar</button>
-              <button type="button" class="estado-popover-cancel">Cancelar</button>
-            </div>
-          </div>
-        </td>
-        <td>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;">
-            <button onclick="abrirEditarPersona(this)"
-                    data-id="{{ p.id }}"
-                    data-nombre="{{ p.nombres_apellidos }}"
-                    data-cedula="{{ p.cedula or '' }}"
-                    data-ubicacion="{{ p.ultima_ubicacion or '' }}"
-                    data-descripcion="{{ p.descripcion or '' }}"
-                    data-contacto="{{ p.numero_contacto or '' }}"
-                    data-contacto2="{{ p.numero_contacto_2 or '' }}"
-                    data-quien="{{ p.quien_ayudo or '' }}"
-                    data-contacto-quien="{{ p.contacto_quien_ayudo or '' }}"
-                    data-estado="{{ p.estado }}"
-                    data-tipo="{{ p.tipo_reporte }}"
-                    data-clinico="{{ p.estado_clinico or '' }}"
-                    data-sexo="{{ p.sexo or '' }}"
-                    data-edad="{{ p.edad_aproximada or '' }}"
-                    style="font-size:11px;padding:4px 10px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
-              ✏️ Editar
-            </button>
-            <button onclick="eliminarPersona({{ p.id }}, this)"
-                    style="font-size:11px;padding:4px 10px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
-              Eliminar
-            </button>
-          </div>
-        </td>
-        <td>
-          <button onclick="toggleDetalle({{ p.id }}, this)"
-                  style="font-size:11px;padding:4px 10px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
-            Ver más
-          </button>
-        </td>
-      </tr>
-      <tr id="detalle-{{ p.id }}" class="detalle-row" style="display:none;">
-        <td colspan="11" style="background:#fafafa;padding:12px 18px 16px;">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;font-size:13px;">
-
-            <!-- Tipo reportante -->
-            <div>
-              <strong style="color:#374151;display:block;margin-bottom:4px;">Tipo de reportante</strong>
-              {% if p.tipo_reportante %}
-              <span class="rep-badge rep-{{ p.tipo_reportante }}">{{ {'familiar':'Familiar/Conocido','personal_salud':'Personal de Salud','rescatista':'Rescatista','testigo':'Testigo'}.get(p.tipo_reportante, p.tipo_reportante) }}</span>
-              {% else %}<span style="color:#9ca3af;">No indicado</span>{% endif %}
-            </div>
-
-            <!-- Estado clínico -->
-            <div>
-              <strong style="color:#374151;display:block;margin-bottom:4px;">Estado clínico</strong>
-              {% if p.estado_clinico %}
-              <span class="clinico-badge clinico-{{ p.estado_clinico }}">{{ {'atrapado':'Atrapado/a','herido':'Herido/a','inconsciente':'Inconsciente','fallecido':'Fallecido/a','sin_informacion':'Sin información'}.get(p.estado_clinico, p.estado_clinico) }}</span>
-              {% else %}<span style="color:#9ca3af;">No registrado</span>{% endif %}
-              {% if p.sin_documentos %}&nbsp;<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;text-transform:uppercase;">Sin documentos</span>{% endif %}
-            </div>
-
-            <!-- Señas físicas -->
-            <div style="grid-column:1/-1;">
-              <strong style="color:#374151;display:block;margin-bottom:6px;">Señas físicas</strong>
-              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px 16px;">
-                <div><span style="color:#9ca3af;font-size:11px;">SEXO</span><br>{{ {'masculino':'Masculino','femenino':'Femenino','no_determinado':'No determinado'}.get(p.sexo, p.sexo or '—') }}</div>
-                <div><span style="color:#9ca3af;font-size:11px;">EDAD</span><br>{{ {'menor':'Menor 0-17','adulto':'Adulto 18-60','adulto_mayor':'Adulto mayor 60+','no_sabe':'No sé'}.get(p.edad_aproximada, p.edad_aproximada or '—') }}</div>
-                <div><span style="color:#9ca3af;font-size:11px;">CONTEXTURA</span><br>{{ {'delgada':'Delgada','media':'Media','robusta':'Robusta','no_sabe':'No sé'}.get(p.contextura, p.contextura or '—') }}</div>
-                <div><span style="color:#9ca3af;font-size:11px;">CABELLO</span><br>{{ {'corto':'Corto','largo':'Largo','calvo':'Calvo/a','canoso':'Canoso/a','no_sabe':'No sé'}.get(p.cabello, p.cabello or '—') }}</div>
-                <div style="grid-column:1/-1;"><span style="color:#9ca3af;font-size:11px;">ROPA</span><br>{{ p.ropa_aproximada or '—' }}</div>
-              </div>
-            </div>
-
-            <!-- Descripción -->
-            <div>
-              <strong style="color:#374151;display:block;margin-bottom:4px;">Descripción</strong>
-              <span style="color:#6b7280;">{{ p.descripcion or 'Sin descripción' }}</span>
-            </div>
-
-            <!-- Quién ayuda -->
-            <div>
-              <strong style="color:#374151;display:block;margin-bottom:4px;">Quién ayuda</strong>
-              <span style="color:#6b7280;">{{ p.quien_ayudo or 'No registrado' }}</span>
-              {% if p.contacto_quien_ayudo %} — Tel: <span style="color:#6b7280;">{{ p.contacto_quien_ayudo }}</span>{% endif %}
-            </div>
-
-            {% if p.numero_contacto_2 %}
-            <!-- Contacto adicional -->
-            <div>
-              <strong style="color:#374151;display:block;margin-bottom:4px;">Contacto adicional</strong>
-              <span style="color:#6b7280;">{{ p.numero_contacto_2 }}</span>
-            </div>
-            {% endif %}
-
-            <!-- Tipo de reporte -->
-            <div>
-              <strong style="color:#374151;display:block;margin-bottom:4px;">Tipo de reporte</strong>
-              <span style="color:#6b7280;">{{ 'Encontrado vivo' if p.tipo_reporte == 'encontrado_vivo' else 'Desaparecido' }}</span>
-            </div>
-
-            {% if p.foto_url_2 or p.foto_url_3 %}
-            <div style="grid-column:1/-1;">
-              <strong style="color:#374151;display:block;margin-bottom:6px;">Fotos adicionales</strong>
-              <div style="display:flex;gap:8px;">
-                {% if p.foto_url_2 %}<a href="{{ p.foto_url_2 }}" target="_blank"><img src="{{ p.foto_url_2 }}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;" alt="foto 2"></a>{% endif %}
-                {% if p.foto_url_3 %}<a href="{{ p.foto_url_3 }}" target="_blank"><img src="{{ p.foto_url_3 }}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;" alt="foto 3"></a>{% endif %}
-              </div>
-            </div>
-            {% endif %}
-
-            {% if p.descripcion %}
-            <div style="grid-column:1/-1;">
-              <strong style="color:#374151;display:block;margin-bottom:6px;">📝 Observaciones / Historial de cambios</strong>
-              <div style="color:#6b7280;white-space:pre-wrap;">{{ p.descripcion }}</div>
-            </div>
-            {% endif %}
-          </div>
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="11" style="text-align:center;color:#6b7280;padding:32px;">Sin registros</td></tr>
-      {% endfor %}
+    <tbody id="per-tbody">
+      <tr><td colspan="11" style="text-align:center;color:#6b7280;padding:40px;">Cargando personas...</td></tr>
     </tbody>
   </table>
+</div>
+<div id="per-contador" class="per-contador"></div>
+<div id="per-paginacion" class="per-paginacion" style="display:none;">
+  <button id="per-btn-prev" onclick="cambiarPagPersonas(-1)" disabled>← Anterior</button>
+  <span id="per-pag-info" class="per-pag-info">Página 1 de 1</span>
+  <button id="per-btn-next" onclick="cambiarPagPersonas(1)">Siguiente →</button>
 </div>
 
 <!-- Modal: Editar Persona -->
@@ -1275,39 +1127,6 @@ function eliminarPersona(id, btn) {
     .catch(() => alert('Error al eliminar. Intenta de nuevo.'));
 }
 
-(function () {
-  const nombre  = document.getElementById('buscar-nombre');
-  const cedula  = document.getElementById('buscar-cedula');
-  const estado  = document.getElementById('filtrar-estado');
-  const tipo    = document.getElementById('filtrar-tipo');
-  const clinico = document.getElementById('filtrar-clinico');
-  const filas   = document.querySelectorAll('#tabla-personas tbody tr[data-nombre]');
-
-  function filtrar() {
-    const n  = nombre.value.toLowerCase();
-    const c  = cedula.value.toLowerCase();
-    const e  = estado.value;
-    const t  = tipo.value;
-    const cl = clinico.value;
-    filas.forEach(tr => {
-      const ok = (!n  || tr.dataset.nombre.includes(n))
-               && (!c  || tr.dataset.cedula.toLowerCase().includes(c))
-               && (!e  || tr.dataset.estado === e)
-               && (!t  || tr.dataset.tipo === t)
-               && (!cl || tr.dataset.clinico === cl);
-      tr.style.display = ok ? '' : 'none';
-      const det = document.getElementById('detalle-' + tr.dataset.id);
-      if (det && !ok) det.style.display = 'none';
-    });
-  }
-
-  nombre.addEventListener('input', filtrar);
-  cedula.addEventListener('input', filtrar);
-  estado.addEventListener('change', filtrar);
-  tipo.addEventListener('change', filtrar);
-  clinico.addEventListener('change', filtrar);
-})();
-
 /* ---- MATCHES ---- */
 var _matchesPanelOpen = false;
 var _matchesLoaded    = false;
@@ -1600,76 +1419,89 @@ function actualizarContadorDup() {
   document.getElementById('dup-count').textContent = n;
 }
 
-/* Intercepta los forms de estado para abrir un popover de confirmación con descripción opcional */
+/* Intercepta los forms de estado para abrir un popover de confirmación con descripción opcional.
+   Las filas de #tabla-personas se recrean en cada render paginado, así que los forms se
+   re-vinculan en cada renderPersonasTable() y el cierre por click-afuera usa un único
+   listener delegado en document (en vez de uno por form) para no acumular listeners. */
 var ESTADO_LABELS = {
   desaparecido: 'Desaparecido',
   encontrado: 'Encontrado',
   en_proceso: 'En proceso',
   localizado: 'Localizado'
 };
+var _estadoPopoverAbierto = null;
 
-document.querySelectorAll('.estado-form').forEach(function(form) {
-  var personaId = form.dataset.personaId;
-  var select = form.querySelector('select[name="estado"]');
-  var popover = document.getElementById('estado-popover-' + personaId);
-  var nuevoLabel = popover.querySelector('.estado-popover-nuevo');
-  var descTextarea = popover.querySelector('.estado-popover-desc');
-  var btnConfirm = popover.querySelector('.estado-popover-confirm');
-  var btnCancel = popover.querySelector('.estado-popover-cancel');
-  var estadoActual = select.value;
+function cerrarEstadoPopover() {
+  if (!_estadoPopoverAbierto) return;
+  var st = _estadoPopoverAbierto;
+  st.popover.style.display = 'none';
+  st.select.value = st.estadoActual;
+  st.descTextarea.value = '';
+  _estadoPopoverAbierto = null;
+}
 
-  function cerrarPopover() {
-    popover.style.display = 'none';
-    select.value = estadoActual;
-    descTextarea.value = '';
+function bindEstadoForms() {
+  document.querySelectorAll('.estado-form').forEach(function(form) {
+    var personaId = form.dataset.personaId;
+    var select = form.querySelector('select[name="estado"]');
+    var popover = document.getElementById('estado-popover-' + personaId);
+    var nuevoLabel = popover.querySelector('.estado-popover-nuevo');
+    var descTextarea = popover.querySelector('.estado-popover-desc');
+    var btnConfirm = popover.querySelector('.estado-popover-confirm');
+    var btnCancel = popover.querySelector('.estado-popover-cancel');
+    var estadoActual = select.value;
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      cerrarEstadoPopover();
+      nuevoLabel.textContent = ESTADO_LABELS[select.value] || select.value;
+      popover.style.display = 'block';
+      descTextarea.focus();
+      _estadoPopoverAbierto = { popover: popover, form: form, select: select, estadoActual: estadoActual, descTextarea: descTextarea };
+    });
+
+    btnCancel.addEventListener('click', cerrarEstadoPopover);
+
+    btnConfirm.addEventListener('click', async function() {
+      var estado = select.value;
+      var descripcion = descTextarea.value.trim();
+      btnConfirm.disabled = true; btnConfirm.textContent = 'Guardando…';
+      try {
+        var body = 'estado=' + encodeURIComponent(estado);
+        if (descripcion) body += '&descripcion_cambio=' + encodeURIComponent(descripcion);
+        var res = await fetch(form.action, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content
+          },
+          body: body
+        });
+        if (!res.ok) throw new Error();
+        estadoActual = estado;
+        if (_estadoPopoverAbierto && _estadoPopoverAbierto.popover === popover) _estadoPopoverAbierto.estadoActual = estado;
+        var tr = form.closest('tr');
+        var badge = tr.querySelector('.estado-badge');
+        badge.className = 'estado-badge estado-' + estado;
+        badge.textContent = estado.replace('_', ' ');
+        tr.dataset.estado = estado;
+        popover.style.display = 'none';
+        descTextarea.value = '';
+        _estadoPopoverAbierto = null;
+        showToast('✅ Estado actualizado');
+      } catch (e) {
+        alert('Error al cambiar estado. Intenta de nuevo.');
+      } finally {
+        btnConfirm.disabled = false; btnConfirm.textContent = 'Confirmar';
+      }
+    });
+  });
+}
+
+document.addEventListener('click', function(e) {
+  if (_estadoPopoverAbierto && !_estadoPopoverAbierto.popover.contains(e.target) && !_estadoPopoverAbierto.form.contains(e.target)) {
+    cerrarEstadoPopover();
   }
-
-  form.addEventListener('submit', function(e) {
-    e.preventDefault();
-    nuevoLabel.textContent = ESTADO_LABELS[select.value] || select.value;
-    popover.style.display = 'block';
-    descTextarea.focus();
-  });
-
-  btnCancel.addEventListener('click', cerrarPopover);
-
-  btnConfirm.addEventListener('click', async function() {
-    var estado = select.value;
-    var descripcion = descTextarea.value.trim();
-    btnConfirm.disabled = true; btnConfirm.textContent = 'Guardando…';
-    try {
-      var body = 'estado=' + encodeURIComponent(estado);
-      if (descripcion) body += '&descripcion_cambio=' + encodeURIComponent(descripcion);
-      var res = await fetch(form.action, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'X-Csrf-Token': document.querySelector('meta[name="csrf-token"]').content
-        },
-        body: body
-      });
-      if (!res.ok) throw new Error();
-      estadoActual = estado;
-      var tr = form.closest('tr');
-      var badge = tr.querySelector('.estado-badge');
-      badge.className = 'estado-badge estado-' + estado;
-      badge.textContent = estado.replace('_', ' ');
-      tr.dataset.estado = estado;
-      popover.style.display = 'none';
-      descTextarea.value = '';
-      showToast('✅ Estado actualizado');
-    } catch (e) {
-      alert('Error al cambiar estado. Intenta de nuevo.');
-    } finally {
-      btnConfirm.disabled = false; btnConfirm.textContent = 'Confirmar';
-    }
-  });
-
-  document.addEventListener('click', function(e) {
-    if (popover.style.display === 'block' && !popover.contains(e.target) && !form.contains(e.target)) {
-      cerrarPopover();
-    }
-  });
 });
 
 /* Carga el conteo de duplicados en el botón al iniciar */
@@ -1823,6 +1655,12 @@ function actualizarContadorPacDup() {
 })();
 
 /* ---- TABS ---- */
+var _personasLoaded = false;
+var _personasData = [];
+var _personasPage = 1;
+var _personasPorPagina = 100;
+var _personasTotal = 0;
+var _perFiltroTimer = null;
 var _pacientesLoaded = false;
 var _pacientesData = [];
 var _pacientesPage = 1;
@@ -1845,6 +1683,7 @@ function switchTab(tab) {
   document.getElementById('tab-bomberos').className  = 'dash-tab' + (tab === 'bomberos'  ? ' active-fire' : '');
   document.getElementById('tab-acopio').className    = 'dash-tab' + (tab === 'acopio'    ? ' active-green' : '');
   document.getElementById('tab-casos').className     = 'dash-tab' + (tab === 'casos'     ? ' active-purple' : '');
+  if (tab === 'personas' && !_personasLoaded) loadPersonas();
   if (tab === 'pacientes' && !_pacientesLoaded) loadPacientes();
   if (tab === 'bomberos') {
     if (!_bomberosLoaded) loadBomberos();
@@ -1865,6 +1704,274 @@ function switchTab(tab) {
     stopCasoRefresh();
   }
 }
+
+/* ---- PERSONAS TAB ---- */
+var _TIPO_REPORTANTE_LABELS = { familiar:'Familiar/Conocido', personal_salud:'Personal de Salud', rescatista:'Rescatista', testigo:'Testigo' };
+var _CLINICO_LABELS = { atrapado:'Atrapado/a', herido:'Herido/a', inconsciente:'Inconsciente', fallecido:'Fallecido/a', sin_informacion:'Sin información' };
+var _SEXO_LABELS = { masculino:'Masculino', femenino:'Femenino', no_determinado:'No determinado' };
+var _EDAD_LABELS = { menor:'Menor 0-17', adulto:'Adulto 18-60', adulto_mayor:'Adulto mayor 60+', no_sabe:'No sé' };
+var _CONTEXTURA_LABELS = { delgada:'Delgada', media:'Media', robusta:'Robusta', no_sabe:'No sé' };
+var _CABELLO_LABELS = { corto:'Corto', largo:'Largo', calvo:'Calvo/a', canoso:'Canoso/a', no_sabe:'No sé' };
+
+function _getPersonasFiltros() {
+  return {
+    nombre: document.getElementById('buscar-nombre').value,
+    cedula: document.getElementById('buscar-cedula').value,
+    estado: document.getElementById('filtrar-estado').value,
+    tipo_reporte: document.getElementById('filtrar-tipo').value
+  };
+}
+
+function _personasFiltroParams(filtros) {
+  var p = new URLSearchParams();
+  if (filtros.nombre)       p.set('nombre', filtros.nombre);
+  if (filtros.cedula)       p.set('cedula', filtros.cedula);
+  if (filtros.estado)       p.set('estado', filtros.estado);
+  if (filtros.tipo_reporte) p.set('tipo_reporte', filtros.tipo_reporte);
+  return p;
+}
+
+async function loadPersonas() {
+  var key = getApiKey();
+  if (!key) return;
+  _personasPage = 1;
+  await _cargarPaginaPersonas(key);
+}
+
+async function _cargarPaginaPersonas(key) {
+  var filtros = _getPersonasFiltros();
+  var skip = (_personasPage - 1) * _personasPorPagina;
+  var dataParams = _personasFiltroParams(filtros);
+  dataParams.set('skip', skip);
+  dataParams.set('limit', _personasPorPagina);
+  var countParams = _personasFiltroParams(filtros);
+  try {
+    var responses = await Promise.all([
+      fetch('/api/personas/count?' + countParams.toString(), { headers: { 'X-Api-Key': key } }),
+      fetch('/api/personas/?' + dataParams.toString(), { headers: { 'X-Api-Key': key } })
+    ]);
+    if (responses[1].status === 401) {
+      sessionStorage.removeItem('vr_api_key');
+      document.getElementById('per-tbody').innerHTML = '<tr><td colspan="11" style="color:#dc2626;padding:20px;text-align:center;">API Key inválida.</td></tr>';
+      return;
+    }
+    var countData = await responses[0].json();
+    _personasTotal = countData.total;
+    _personasData  = await responses[1].json();
+    _personasLoaded = true;
+    renderPersonasTable(_personasData);
+    updatePersonasPaginacion();
+  } catch(e) {
+    document.getElementById('per-tbody').innerHTML = '<tr><td colspan="11" style="color:#dc2626;padding:20px;text-align:center;">Error al cargar. Intenta de nuevo.</td></tr>';
+  }
+}
+
+function updatePersonasPaginacion() {
+  var totalPages = Math.max(1, Math.ceil(_personasTotal / _personasPorPagina));
+  var from = _personasTotal === 0 ? 0 : (_personasPage - 1) * _personasPorPagina + 1;
+  var to   = Math.min(_personasPage * _personasPorPagina, _personasTotal);
+  document.getElementById('per-contador').textContent =
+    _personasTotal > 0 ? 'Mostrando ' + from + '-' + to + ' de ' + _personasTotal + ' personas' : '';
+  document.getElementById('per-pag-info').textContent = 'Página ' + _personasPage + ' de ' + totalPages;
+  document.getElementById('per-btn-prev').disabled = _personasPage <= 1;
+  document.getElementById('per-btn-next').disabled = _personasPage >= totalPages;
+  document.getElementById('per-paginacion').style.display = _personasTotal > _personasPorPagina ? '' : 'none';
+}
+
+function cambiarPagPersonas(dir) {
+  var totalPages = Math.max(1, Math.ceil(_personasTotal / _personasPorPagina));
+  _personasPage = Math.max(1, Math.min(totalPages, _personasPage + dir));
+  var key = sessionStorage.getItem('vr_api_key');
+  if (key) _cargarPaginaPersonas(key);
+}
+
+function filtrarPersonas() {
+  clearTimeout(_perFiltroTimer);
+  _perFiltroTimer = setTimeout(function() {
+    _personasPage = 1;
+    var key = sessionStorage.getItem('vr_api_key') || getApiKey();
+    if (key) _cargarPaginaPersonas(key);
+  }, 350);
+}
+
+function renderPersonasTable(arr) {
+  var tbody = document.getElementById('per-tbody');
+  if (!arr.length) { tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#6b7280;padding:32px;">Sin registros</td></tr>'; return; }
+  tbody.innerHTML = arr.map(function(p) { return renderPersonaRow(p); }).join('');
+  bindEstadoForms();
+}
+
+function renderPersonaRow(p) {
+  var fotoCell = p.foto_url
+    ? '<a href="'+esc(p.foto_url)+'" target="_blank"><img src="'+esc(p.foto_url)+'" class="foto-thumb" alt="foto"></a>'
+    : '—';
+  var cedulaCell = esc(p.cedula || '—') +
+    (p.sin_documentos ? '<br><span style="display:inline-block;padding:1px 6px;border-radius:20px;font-size:9px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;text-transform:uppercase;">Sin doc.</span>' : '');
+  var tipoBadgeTxt = p.tipo_reporte === 'encontrado_vivo' ? 'ENCONTRADO VIVO' : 'DESAPARECIDO';
+  var fecha = p.created_at ? fmtDate(p.created_at) : '—';
+
+  var html = '<tr' +
+    ' data-nombre="'+esc((p.nombres_apellidos||'').toLowerCase())+'"' +
+    ' data-cedula="'+esc(p.cedula||'')+'"' +
+    ' data-estado="'+esc(p.estado)+'"' +
+    ' data-tipo="'+esc(p.tipo_reporte)+'"' +
+    ' data-clinico="'+esc(p.estado_clinico||'')+'"' +
+    ' data-id="'+p.id+'"' +
+  '>' +
+    '<td>'+p.id+'</td>' +
+    '<td>'+fotoCell+'</td>' +
+    '<td><strong>'+esc(p.nombres_apellidos)+'</strong></td>' +
+    '<td>'+cedulaCell+'</td>' +
+    '<td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(p.ultima_ubicacion||'')+'">'+esc(p.ultima_ubicacion||'')+'</td>' +
+    '<td>'+esc(p.numero_contacto||'')+'</td>' +
+    '<td>' +
+      '<span class="estado-badge estado-'+esc(p.estado)+'">'+esc((p.estado||'').replace('_',' '))+'</span><br>' +
+      '<span class="tipo-badge tipo-'+esc(p.tipo_reporte)+'">'+tipoBadgeTxt+'</span>' +
+    '</td>' +
+    '<td style="white-space:nowrap;">'+fecha+'</td>' +
+    '<td style="position:relative;">' +
+      '<form class="estado-form" method="post" action="/admin/personas/'+p.id+'/estado" data-persona-id="'+p.id+'">' +
+        '<select name="estado">' +
+          '<option value="desaparecido"'+(p.estado==='desaparecido'?' selected':'')+'>Desaparecido</option>' +
+          '<option value="encontrado"'+(p.estado==='encontrado'?' selected':'')+'>Encontrado</option>' +
+          '<option value="en_proceso"'+(p.estado==='en_proceso'?' selected':'')+'>En proceso</option>' +
+          '<option value="localizado"'+(p.estado==='localizado'?' selected':'')+'>Localizado</option>' +
+        '</select>' +
+        '<button type="submit">✓</button>' +
+      '</form>' +
+      '<div class="estado-popover" id="estado-popover-'+p.id+'" style="display:none;">' +
+        '<div class="estado-popover-title">Cambiar estado a: <strong class="estado-popover-nuevo"></strong></div>' +
+        '<textarea class="estado-popover-desc" rows="2" placeholder="Descripción del cambio (opcional)..."></textarea>' +
+        '<div class="estado-popover-actions">' +
+          '<button type="button" class="estado-popover-confirm">Confirmar</button>' +
+          '<button type="button" class="estado-popover-cancel">Cancelar</button>' +
+        '</div>' +
+      '</div>' +
+    '</td>' +
+    '<td>' +
+      '<div style="display:flex;gap:4px;flex-wrap:wrap;">' +
+        '<button onclick="abrirEditarPersona(this)" data-id="'+p.id+'"' +
+          ' data-nombre="'+esc(p.nombres_apellidos)+'"' +
+          ' data-cedula="'+esc(p.cedula||'')+'"' +
+          ' data-ubicacion="'+esc(p.ultima_ubicacion||'')+'"' +
+          ' data-descripcion="'+esc(p.descripcion||'')+'"' +
+          ' data-contacto="'+esc(p.numero_contacto||'')+'"' +
+          ' data-contacto2="'+esc(p.numero_contacto_2||'')+'"' +
+          ' data-quien="'+esc(p.quien_ayudo||'')+'"' +
+          ' data-contacto-quien="'+esc(p.contacto_quien_ayudo||'')+'"' +
+          ' data-estado="'+esc(p.estado)+'"' +
+          ' data-tipo="'+esc(p.tipo_reporte)+'"' +
+          ' data-clinico="'+esc(p.estado_clinico||'')+'"' +
+          ' data-sexo="'+esc(p.sexo||'')+'"' +
+          ' data-edad="'+esc(p.edad_aproximada||'')+'"' +
+          ' style="font-size:11px;padding:4px 10px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">' +
+          '✏️ Editar' +
+        '</button>' +
+        '<button onclick="eliminarPersona('+p.id+', this)" style="font-size:11px;padding:4px 10px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">' +
+          'Eliminar' +
+        '</button>' +
+      '</div>' +
+    '</td>' +
+    '<td>' +
+      '<button onclick="toggleDetalle('+p.id+', this)" style="font-size:11px;padding:4px 10px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">' +
+        'Ver más' +
+      '</button>' +
+    '</td>' +
+  '</tr>';
+
+  html += '<tr id="detalle-'+p.id+'" class="detalle-row" style="display:none;">' +
+    '<td colspan="11" style="background:#fafafa;padding:12px 18px 16px;">' +
+      renderDetallePersona(p) +
+    '</td>' +
+  '</tr>';
+
+  return html;
+}
+
+function renderDetallePersona(p) {
+  var senasHtml =
+    '<div><span style="color:#9ca3af;font-size:11px;">SEXO</span><br>'+esc(_SEXO_LABELS[p.sexo] || p.sexo || '—')+'</div>' +
+    '<div><span style="color:#9ca3af;font-size:11px;">EDAD</span><br>'+esc(_EDAD_LABELS[p.edad_aproximada] || p.edad_aproximada || '—')+'</div>' +
+    '<div><span style="color:#9ca3af;font-size:11px;">CONTEXTURA</span><br>'+esc(_CONTEXTURA_LABELS[p.contextura] || p.contextura || '—')+'</div>' +
+    '<div><span style="color:#9ca3af;font-size:11px;">CABELLO</span><br>'+esc(_CABELLO_LABELS[p.cabello] || p.cabello || '—')+'</div>' +
+    '<div style="grid-column:1/-1;"><span style="color:#9ca3af;font-size:11px;">ROPA</span><br>'+esc(p.ropa_aproximada || '—')+'</div>';
+
+  var fotosAdicionales = '';
+  if (p.foto_url_2 || p.foto_url_3) {
+    fotosAdicionales =
+      '<div style="grid-column:1/-1;">' +
+        '<strong style="color:#374151;display:block;margin-bottom:6px;">Fotos adicionales</strong>' +
+        '<div style="display:flex;gap:8px;">' +
+          (p.foto_url_2 ? '<a href="'+esc(p.foto_url_2)+'" target="_blank"><img src="'+esc(p.foto_url_2)+'" style="width:60px;height:60px;object-fit:cover;border-radius:6px;" alt="foto 2"></a>' : '') +
+          (p.foto_url_3 ? '<a href="'+esc(p.foto_url_3)+'" target="_blank"><img src="'+esc(p.foto_url_3)+'" style="width:60px;height:60px;object-fit:cover;border-radius:6px;" alt="foto 3"></a>' : '') +
+        '</div>' +
+      '</div>';
+  }
+
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;font-size:13px;">' +
+    '<div>' +
+      '<strong style="color:#374151;display:block;margin-bottom:4px;">Tipo de reportante</strong>' +
+      (p.tipo_reportante ? '<span class="rep-badge rep-'+esc(p.tipo_reportante)+'">'+esc(_TIPO_REPORTANTE_LABELS[p.tipo_reportante] || p.tipo_reportante)+'</span>' : '<span style="color:#9ca3af;">No indicado</span>') +
+    '</div>' +
+    '<div>' +
+      '<strong style="color:#374151;display:block;margin-bottom:4px;">Estado clínico</strong>' +
+      (p.estado_clinico ? '<span class="clinico-badge clinico-'+esc(p.estado_clinico)+'">'+esc(_CLINICO_LABELS[p.estado_clinico] || p.estado_clinico)+'</span>' : '<span style="color:#9ca3af;">No registrado</span>') +
+      (p.sin_documentos ? '&nbsp;<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;text-transform:uppercase;">Sin documentos</span>' : '') +
+    '</div>' +
+    '<div style="grid-column:1/-1;">' +
+      '<strong style="color:#374151;display:block;margin-bottom:6px;">Señas físicas</strong>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px 16px;">' + senasHtml + '</div>' +
+    '</div>' +
+    '<div>' +
+      '<strong style="color:#374151;display:block;margin-bottom:4px;">Descripción</strong>' +
+      '<span style="color:#6b7280;">'+esc(p.descripcion || 'Sin descripción')+'</span>' +
+    '</div>' +
+    '<div>' +
+      '<strong style="color:#374151;display:block;margin-bottom:4px;">Quién ayuda</strong>' +
+      '<span style="color:#6b7280;">'+esc(p.quien_ayudo || 'No registrado')+'</span>' +
+      (p.contacto_quien_ayudo ? ' — Tel: <span style="color:#6b7280;">'+esc(p.contacto_quien_ayudo)+'</span>' : '') +
+    '</div>' +
+    (p.numero_contacto_2 ? (
+      '<div>' +
+        '<strong style="color:#374151;display:block;margin-bottom:4px;">Contacto adicional</strong>' +
+        '<span style="color:#6b7280;">'+esc(p.numero_contacto_2)+'</span>' +
+      '</div>'
+    ) : '') +
+    '<div>' +
+      '<strong style="color:#374151;display:block;margin-bottom:4px;">Tipo de reporte</strong>' +
+      '<span style="color:#6b7280;">'+(p.tipo_reporte === 'encontrado_vivo' ? 'Encontrado vivo' : 'Desaparecido')+'</span>' +
+    '</div>' +
+    fotosAdicionales +
+    (p.descripcion ? (
+      '<div style="grid-column:1/-1;">' +
+        '<strong style="color:#374151;display:block;margin-bottom:6px;">📝 Observaciones / Historial de cambios</strong>' +
+        '<div style="color:#6b7280;white-space:pre-wrap;">'+esc(p.descripcion)+'</div>' +
+      '</div>'
+    ) : '') +
+  '</div>';
+}
+
+async function exportPersonasCSV() {
+  var key = sessionStorage.getItem('vr_api_key') || getApiKey();
+  if (!key) return;
+  var filtros = _getPersonasFiltros();
+  var params = _personasFiltroParams(filtros);
+  params.set('skip', '0');
+  params.set('limit', '5000');
+  try {
+    var res  = await fetch('/api/personas/?' + params.toString(), { headers: { 'X-Api-Key': key } });
+    var data = await res.json();
+    var rows = [['ID','Nombres y Apellidos','Cedula','Ultima Ubicacion','Foto URL','Descripcion','Numero Contacto','Numero Contacto 2','Quien Ayudo','Contacto Quien Ayudo','Estado','Fecha Registro']];
+    data.forEach(function(p) {
+      rows.push([p.id, p.nombres_apellidos||'', p.cedula||'', p.ultima_ubicacion||'', p.foto_url||'', (p.descripcion||'').replace(/\n/g,' '), p.numero_contacto||'', p.numero_contacto_2||'', p.quien_ayudo||'', p.contacto_quien_ayudo||'', p.estado||'', p.created_at||'']);
+    });
+    var csv = rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+    var blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'personas_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+  } catch(e) { alert('Error al exportar. Intenta de nuevo.'); }
+}
+
+loadPersonas();
 
 /* ---- PACIENTES TAB ---- */
 var _ESTADO_PAC_LABELS = { ingresado:'Ingresado', estable:'Estable', grave:'Grave', critico:'Crítico', alta:'De Alta', trasladado:'Trasladado', fallecido:'Fallecido' };

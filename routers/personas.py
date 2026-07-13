@@ -70,6 +70,27 @@ def listar_personas(
         resultado.append(item)
     return resultado
 
+@router.get("/count")
+def contar_personas(
+    nombre: Optional[str] = Query(None),
+    cedula: Optional[str] = Query(None),
+    estado: Optional[str] = Query(None),
+    tipo_reporte: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    query = db.query(models.PersonaDesaparecida)
+    if nombre:
+        query = query.filter(models.PersonaDesaparecida.nombres_apellidos.ilike(f"%{nombre}%"))
+    if cedula:
+        query = query.filter(models.PersonaDesaparecida.cedula == cedula)
+    if estado:
+        query = query.filter(models.PersonaDesaparecida.estado == estado)
+    if tipo_reporte:
+        query = query.filter(models.PersonaDesaparecida.tipo_reporte == tipo_reporte)
+    return {"total": query.count()}
+
+
 @router.get("/{persona_id}", response_model=schemas.PersonaResponse)
 def obtener_persona(persona_id: int, db: Session = Depends(get_db), _: str = Depends(verify_api_key)):
     persona = db.query(models.PersonaDesaparecida).filter(models.PersonaDesaparecida.id == persona_id).first()
