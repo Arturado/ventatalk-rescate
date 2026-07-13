@@ -26,9 +26,9 @@ class PersonaDesaparecida(Base):
     cabello = Column(String(20), nullable=True)
     ropa_aproximada = Column(String(200), nullable=True)
     estado_clinico = Column(String(30), nullable=True)
-    sin_documentos = Column(Boolean, nullable=False, default=False)
+    sin_documentos = Column(Boolean, nullable=False, default=False, server_default='false')
     email_reportante = Column(String(200), nullable=True)
-    es_menor = Column(Boolean, nullable=False, default=False)
+    es_menor = Column(Boolean, nullable=False, default=False, server_default='false')
 
 class AdminUser(Base):
     __tablename__ = "admin_users"
@@ -47,7 +47,7 @@ class Hospital(Base):
     telefono = Column(String(50), nullable=True)
     tipo = Column(String(50), nullable=True)
     # tipo valores: "publico", "privado", "clinica", "ambulatorio", "refugio_medico"
-    activo = Column(Boolean, nullable=False, default=True)
+    activo = Column(Boolean, nullable=False, default=True, server_default='true')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class PacienteHospitalizado(Base):
@@ -75,14 +75,14 @@ class PacienteHospitalizado(Base):
     # valores: "ingresado", "estable", "grave", "critico", "alta", "trasladado", "fallecido"
     reportado_por = Column(String(200), nullable=True)
     # Nombre del médico/enfermero que carga (sin auth, voluntario)
-    necesita_ayuda = Column(Boolean, nullable=False, default=False)
+    necesita_ayuda = Column(Boolean, nullable=False, default=False, server_default='false')
     tipo_ayuda = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     telefono = Column(String(30), nullable=True)
     nombre_variantes = Column(Text, nullable=True)
     batch_date = Column(String(20), nullable=True)
     fuente = Column(String(30), nullable=True, default="manual")
-    es_menor = Column(Boolean, nullable=False, default=False)
+    es_menor = Column(Boolean, nullable=False, default=False, server_default='false')
 
 class BomberoReporte(Base):
     __tablename__ = "bombero_reportes"
@@ -113,7 +113,7 @@ class CentroAcopio(Base):
     nombre = Column(String(200), nullable=False, index=True)
     direccion = Column(String(500), nullable=True)
     zona = Column(String(100), nullable=True)
-    activo = Column(Boolean, nullable=False, default=True)
+    activo = Column(Boolean, nullable=False, default=True, server_default='true')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     latitud = Column(String(30), nullable=True)
     longitud = Column(String(30), nullable=True)
@@ -205,7 +205,7 @@ class CasoAyuda(Base):
     avalado_en = Column(DateTime(timezone=True), nullable=True)
     adjuntos = Column(Text, nullable=True)
     # JSON array de URLs: ["https://...", "https://..."]
-    consentimiento_publicacion = Column(Boolean, nullable=False, default=False)
+    consentimiento_publicacion = Column(Boolean, nullable=False, default=False, server_default='false')
     fecha_ultima_confirmacion = Column(DateTime(timezone=True),
         server_default=func.now())
     creado_por = Column(String(200), nullable=False, default="anonimo")
