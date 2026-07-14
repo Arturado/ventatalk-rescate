@@ -1,0 +1,1248 @@
+{
+  "info": {
+    "_postman_id": "c2e1a002-6859-4ae5-a54d-70c8c7190452",
+    "name": "ventatalk-rescate — Albergues (admin + api)",
+    "description": "Suite de pruebas para /api/albergues/* y /admin/albergues/*. Cubre auth publica, x-api-key y sesion web humana (con soporte dual reciente en los 4 endpoints admin de solicitudes/centros).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Auth - Sesion web (humano)",
+      "item": [
+        {
+          "name": "1. GET Login page (captura csrf_login)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "login"
+              ]
+            },
+            "description": "Trae el formulario de login y extrae el csrf_token embebido en el input hidden, necesario para el POST siguiente."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const m = pm.response.text().match(/name=\"csrf_token\" value=\"([^\"]+)\"/);",
+                  "if (m) { pm.collectionVariables.set('csrf_login', m[1]); }",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. POST Login (crea cookie de sesion)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "login"
+              ]
+            },
+            "description": "Login humano. admin_user/admin_pass deben apuntar a un ADMIN_1_USER/ADMIN_1_PASS valido de tu .env. La cookie de sesion queda guardada en el cookie jar de Postman para las siguientes requests del mismo dominio.",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "{{admin_user}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{admin_pass}}",
+                  "type": "text"
+                },
+                {
+                  "key": "csrf_token",
+                  "value": "{{csrf_login}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login redirige (303) o entra (200)', () => {",
+                  "  pm.expect([200, 303]).to.include(pm.response.code);",
+                  "});",
+                  "// Postman guarda la cookie rescate_session automaticamente en su cookie jar."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. GET Dashboard (captura csrf_admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "dashboard"
+              ]
+            },
+            "description": "Requiere haber corrido el login antes (usa la cookie de sesion). Extrae el csrf-token que el server embebe en <meta name=\"csrf-token\"> para usarlo en los POST/DELETE que se autentican por sesion."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const m = pm.response.text().match(/name=\"csrf-token\" content=\"([^\"]+)\"/);",
+                  "if (m) { pm.collectionVariables.set('csrf_admin', m[1]); }",
+                  "pm.test('200 OK (sesion activa)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. GET Logout",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "logout"
+              ]
+            },
+            "description": "Cierra la sesion (borra la cookie rescate_session)."
+          },
+          "response": []
+        }
+      ],
+      "description": "Flujo de login humano sin tocar: sesion + cookie + CSRF. Corre estas 4 en orden antes de probar el bloque 'sesion' de los endpoints admin."
+    },
+    {
+      "name": "2. Admin / Albergues (dual: sesion o x-api-key)",
+      "item": [
+        {
+          "name": "GET Listar solicitudes pendientes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/albergues/solicitudes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "albergues",
+                "solicitudes"
+              ]
+            },
+            "description": "DUAL: acepta x-api-key (activo por defecto) o sesion+cookie (sin CSRF, es GET). Para probar via sesion: desactiva el header x-api-key y corre el flujo de login antes."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (Array.isArray(data) && data.length > 0) {",
+                  "  pm.collectionVariables.set('solicitud_id', data[0].id);",
+                  "}",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Aprobar solicitud",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_admin}}",
+                "type": "text",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/albergues/solicitudes/{{solicitud_id}}/aprobar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "albergues",
+                "solicitudes",
+                "{{solicitud_id}}",
+                "aprobar"
+              ]
+            },
+            "description": "DUAL. Con x-api-key no hace falta CSRF. Para probar via sesion: desactiva x-api-key, activa x-csrf-token (valor capturado en el paso 3 del folder de Auth) y corre el login antes."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Rechazar solicitud",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_admin}}",
+                "type": "text",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/albergues/solicitudes/{{solicitud_id}}/rechazar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "albergues",
+                "solicitudes",
+                "{{solicitud_id}}",
+                "rechazar"
+              ]
+            },
+            "description": "DUAL. Usa un solicitud_id distinto al que ya aprobaste (una solicitud pendiente se consume al aprobar/rechazar). Mismo patron de auth que 'Aprobar'."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Crear centro nuevo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_admin}}",
+                "type": "text",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/albergues/centros/nuevo",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "albergues",
+                "centros",
+                "nuevo"
+              ]
+            },
+            "description": "DUAL. Crea el centro directamente activo (a diferencia de /api/albergues/solicitar-centro que crea una solicitud pendiente).",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "nombre",
+                  "value": "Centro de prueba Postman",
+                  "type": "text"
+                },
+                {
+                  "key": "zona",
+                  "value": "Caracas - Libertador",
+                  "type": "text"
+                },
+                {
+                  "key": "direccion",
+                  "value": "Direccion de prueba",
+                  "type": "text"
+                },
+                {
+                  "key": "latitud",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "longitud",
+                  "value": "",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.id) { pm.collectionVariables.set('centro_id', data.id); }",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE Desactivar centro (solo sesion)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_admin}}",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/albergues/centros/{{centro_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "albergues",
+                "centros",
+                "{{centro_id}}"
+              ]
+            },
+            "description": "OJO: este endpoint NO fue incluido en el soporte dual (no estaba en el alcance pedido). Solo funciona via sesion humana + CSRF; x-api-key aqui da 401."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE Eliminar reporte (solo sesion)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_admin}}",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/albergues/reportes/{{reporte_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "albergues",
+                "reportes",
+                "{{reporte_id}}"
+              ]
+            },
+            "description": "OJO: este endpoint NO fue incluido en el soporte dual. Solo funciona via sesion humana + CSRF."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Los primeros 4 endpoints aceptan x-api-key ademas de la sesion web (cambio reciente). Los dos DELETE al final siguen siendo solo-sesion, fuera del alcance del ticket."
+    },
+    {
+      "name": "3. API Albergues - Publico (sin auth)",
+      "item": [
+        {
+          "name": "GET Listar centros (publico)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/centros?zona=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "centros"
+              ],
+              "query": [
+                {
+                  "key": "zona",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Sin auth. Lista centros activos, filtro opcional por zona."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (Array.isArray(data) && data.length > 0 && !pm.collectionVariables.get('centro_id')) {",
+                  "  pm.collectionVariables.set('centro_id', data[0].id);",
+                  "}",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Centro por ID (publico)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/centros/{{centro_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "centros",
+                "{{centro_id}}"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Crear reporte de centro (publico)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/reportes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "reportes"
+              ]
+            },
+            "description": "Sin auth. Rate limit: 30/hour. Requiere centro_id de un centro activo.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "centro_id",
+                  "value": "{{centro_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "hombres",
+                  "value": "5",
+                  "type": "text"
+                },
+                {
+                  "key": "mujeres",
+                  "value": "8",
+                  "type": "text"
+                },
+                {
+                  "key": "ninos",
+                  "value": "3",
+                  "type": "text"
+                },
+                {
+                  "key": "lactantes",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "necesitan",
+                  "value": "agua, pañales",
+                  "type": "text"
+                },
+                {
+                  "key": "no_necesitan",
+                  "value": "ropa",
+                  "type": "text"
+                },
+                {
+                  "key": "notas",
+                  "value": "Reporte de prueba desde Postman",
+                  "type": "text"
+                },
+                {
+                  "key": "reportado_por",
+                  "value": "Tester Postman",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.id) { pm.collectionVariables.set('reporte_id', data.id); }",
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Estado general de centros (publico)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/estado",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "estado"
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Solicitar centro nuevo (publico)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/solicitar-centro",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "solicitar-centro"
+              ]
+            },
+            "description": "Sin auth. Rate limit: 10/hour. Esta es la solicitud que despues aparece en GET /admin/albergues/solicitudes para aprobar/rechazar.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "nombre",
+                  "value": "Centro solicitado desde Postman",
+                  "type": "text"
+                },
+                {
+                  "key": "direccion",
+                  "value": "Direccion de prueba",
+                  "type": "text"
+                },
+                {
+                  "key": "zona",
+                  "value": "Caracas - Sucre",
+                  "type": "text"
+                },
+                {
+                  "key": "reportado_por",
+                  "value": "Tester Postman",
+                  "type": "text"
+                },
+                {
+                  "key": "notas",
+                  "value": "Solicitud de prueba",
+                  "type": "text"
+                },
+                {
+                  "key": "latitud",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "longitud",
+                  "value": "",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Orden por ID (publico)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/ordenes/{{orden_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "ordenes",
+                "{{orden_id}}"
+              ]
+            },
+            "description": "Sin auth. Necesitas una orden_id existente (las ordenes se crean por otro flujo interno, no hay POST publico de creacion en este router)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 o 404 si aun no hay ordenes', () => pm.expect([200,404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Confirmar entrega de orden (publico)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/ordenes/{{orden_id}}/confirmar-entrega",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "ordenes",
+                "{{orden_id}}",
+                "confirmar-entrega"
+              ]
+            },
+            "description": "Sin auth. Rate limit: 10/hour. Falla con 400 si la orden ya tenia entrega confirmada.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "nombre_receptor",
+                  "value": "Receptor de prueba",
+                  "type": "text"
+                },
+                {
+                  "key": "notas_entrega",
+                  "value": "Entrega de prueba desde Postman",
+                  "type": "text"
+                },
+                {
+                  "key": "foto_entrega",
+                  "value": "",
+                  "type": "file",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 o 400 si ya fue confirmada', () => pm.expect([201,400]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Endpoints de /api/albergues/* pensados para personal de campo / repartidores, sin autenticacion."
+    },
+    {
+      "name": "4. API Albergues - Protegido (x-api-key)",
+      "item": [
+        {
+          "name": "GET Historial de reportes de un centro",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/reportes/{{centro_id}}/historial?limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "reportes",
+                "{{centro_id}}",
+                "historial"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH Editar centro",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/centros/{{centro_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "centros",
+                "{{centro_id}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Centro editado via Postman\",\n  \"zona\": \"Caracas - Libertador\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Listar ordenes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/ordenes?centro_id=&estado=&reporte_id=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "ordenes"
+              ],
+              "query": [
+                {
+                  "key": "centro_id",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "estado",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "reporte_id",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (Array.isArray(data) && data.length > 0) {",
+                  "  pm.collectionVariables.set('orden_id', data[0].id);",
+                  "}",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH Cambiar estado de orden",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/ordenes/{{orden_id}}/estado",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "ordenes",
+                "{{orden_id}}",
+                "estado"
+              ]
+            },
+            "description": "estado debe ser uno de: preparando, en_camino, entregado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"en_camino\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH Editar reporte",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/reportes/{{reporte_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "reportes",
+                "{{reporte_id}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notas\": \"Notas editadas via Postman\",\n  \"hombres\": 6\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE Eliminar orden",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/ordenes/{{orden_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "ordenes",
+                "{{orden_id}}"
+              ]
+            },
+            "description": "Destructivo (hard-delete). Correr al final."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE Eliminar reporte",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/reportes/{{reporte_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "reportes",
+                "{{reporte_id}}"
+              ]
+            },
+            "description": "Destructivo (hard-delete). Correr al final."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE Desactivar centro",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/centros/{{centro_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "centros",
+                "{{centro_id}}"
+              ]
+            },
+            "description": "Destructivo (soft-delete: pone activo=false). Correr al final."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Endpoints de /api/albergues/* que ya requerian x-api-key desde antes de este cambio (referencia/regresion)."
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8010",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admin_user",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admin_pass",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "csrf_login",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "csrf_admin",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "centro_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "reporte_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orden_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "solicitud_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
