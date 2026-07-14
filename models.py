@@ -113,10 +113,19 @@ class CentroAcopio(Base):
     nombre = Column(String(200), nullable=False, index=True)
     direccion = Column(String(500), nullable=True)
     zona = Column(String(100), nullable=True)
+    reportado_por = Column(String(200), nullable=True)
+    notas = Column(Text, nullable=True)
     activo = Column(Boolean, nullable=False, default=True, server_default='true')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     latitud = Column(String(30), nullable=True)
     longitud = Column(String(30), nullable=True)
+    before_submit_version = Column(String(100), nullable=True)
+    before_submit_title = Column(String(200), nullable=True)
+    before_submit_description = Column(Text, nullable=True)
+    before_submit_items_json = Column(Text, nullable=True)
+    before_submit_confirmations_json = Column(Text, nullable=True)
+    before_submit_acknowledged_at = Column(String(40), nullable=True)
+    before_submit_source = Column(String(50), nullable=True)
 
 class AcopioReporte(Base):
     __tablename__ = "acopio_reportes"
@@ -164,6 +173,13 @@ class CentroAcopioSolicitud(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     latitud = Column(String(30), nullable=True)
     longitud = Column(String(30), nullable=True)
+    before_submit_version = Column(String(100), nullable=True)
+    before_submit_title = Column(String(200), nullable=True)
+    before_submit_description = Column(Text, nullable=True)
+    before_submit_items_json = Column(Text, nullable=True)
+    before_submit_confirmations_json = Column(Text, nullable=True)
+    before_submit_acknowledged_at = Column(String(40), nullable=True)
+    before_submit_source = Column(String(50), nullable=True)
 
 class AcopioOrden(Base):
     __tablename__ = "acopio_ordenes"

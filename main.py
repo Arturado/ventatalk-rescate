@@ -24,6 +24,7 @@ from routers.bomberos import router as bomberos_router
 from routers.albergues import router as albergues_router
 from routers.casos_ayuda import router as casos_ayuda_router
 from sqlalchemy import text as sql_text
+from sqlalchemy import inspect
 
 templates = Jinja2Templates(directory="templates")
 limiter = Limiter(key_func=get_remote_address)
@@ -139,9 +140,50 @@ def seed_hospitales(db: Session):
     print(f"Seed: {len(hospitales_data)} hospitales insertados")
 
 
+def ensure_optional_columns():
+    columns_by_table = {
+        "centros_acopio": {
+            "reportado_por": "VARCHAR(200)",
+            "notas": "TEXT",
+            "before_submit_version": "VARCHAR(100)",
+            "before_submit_title": "VARCHAR(200)",
+            "before_submit_description": "TEXT",
+            "before_submit_items_json": "TEXT",
+            "before_submit_confirmations_json": "TEXT",
+            "before_submit_acknowledged_at": "VARCHAR(40)",
+            "before_submit_source": "VARCHAR(50)",
+        },
+        "centros_acopio_solicitudes": {
+            "before_submit_version": "VARCHAR(100)",
+            "before_submit_title": "VARCHAR(200)",
+            "before_submit_description": "TEXT",
+            "before_submit_items_json": "TEXT",
+            "before_submit_confirmations_json": "TEXT",
+            "before_submit_acknowledged_at": "VARCHAR(40)",
+            "before_submit_source": "VARCHAR(50)",
+        },
+    }
+
+    inspector = inspect(engine)
+
+    with engine.begin() as conn:
+        for table_name, columns in columns_by_table.items():
+            existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+            for column_name, column_type in columns.items():
+                if column_name in existing_columns:
+                    continue
+
+                conn.execute(
+                    sql_text(
+                        f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+                    )
+                )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     models.Base.metadata.create_all(bind=engine)
+    ensure_optional_columns()
     db = SessionLocal()
     try:
         seed_admin_users(db)

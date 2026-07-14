@@ -260,6 +260,13 @@ class CentroSolicitudResponse(BaseModel):
     zona: Optional[str] = None
     reportado_por: Optional[str] = None
     notas: Optional[str] = None
+    before_submit_version: Optional[str] = None
+    before_submit_title: Optional[str] = None
+    before_submit_description: Optional[str] = None
+    before_submit_items_json: Optional[str] = None
+    before_submit_confirmations_json: Optional[str] = None
+    before_submit_acknowledged_at: Optional[str] = None
+    before_submit_source: Optional[str] = None
     estado: str
     created_at: datetime
 
