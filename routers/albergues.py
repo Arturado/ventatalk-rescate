@@ -35,6 +35,47 @@ ESTADOS_ORDEN_VALIDOS = {"preparando", "en_camino", "entregado"}
 class OrdenEstadoUpdate(BaseModel):
     estado: str
 
+
+def _crear_reporte_en_centro(
+    *,
+    db: Session,
+    centro_id: int,
+    hombres: int = 0,
+    mujeres: int = 0,
+    ninos: int = 0,
+    lactantes: int = 0,
+    necesitan: Optional[str] = None,
+    no_necesitan: Optional[str] = None,
+    necesitan_extra: Optional[str] = None,
+    no_necesitan_extra: Optional[str] = None,
+    notas: Optional[str] = None,
+    reportado_por: Optional[str] = None,
+):
+    centro = db.query(models.CentroAcopio).filter(
+        models.CentroAcopio.id == centro_id,
+        models.CentroAcopio.activo == True
+    ).first()
+    if not centro:
+        raise HTTPException(status_code=404, detail="Centro no encontrado")
+
+    reporte = models.AcopioReporte(
+        centro_id=centro_id,
+        hombres=hombres,
+        mujeres=mujeres,
+        ninos=ninos,
+        lactantes=lactantes,
+        necesitan=necesitan,
+        no_necesitan=no_necesitan,
+        necesitan_extra=necesitan_extra,
+        no_necesitan_extra=no_necesitan_extra,
+        notas=notas,
+        reportado_por=reportado_por,
+    )
+    db.add(reporte)
+    db.commit()
+    db.refresh(reporte)
+    return reporte
+
 # ── Centros ────────────────────────────────────────────────
 
 @router.get("/centros", response_model=List[schemas.CentroAcopioResponse])
@@ -77,14 +118,8 @@ async def crear_reporte(
     db: Session = Depends(get_db)
 ):
     """Público — personal de campo crea reporte sin auth"""
-    centro = db.query(models.CentroAcopio).filter(
-        models.CentroAcopio.id == centro_id,
-        models.CentroAcopio.activo == True
-    ).first()
-    if not centro:
-        raise HTTPException(status_code=404, detail="Centro no encontrado")
-
-    reporte = models.AcopioReporte(
+    return _crear_reporte_en_centro(
+        db=db,
         centro_id=centro_id,
         hombres=hombres,
         mujeres=mujeres,
@@ -97,10 +132,39 @@ async def crear_reporte(
         notas=notas,
         reportado_por=reportado_por,
     )
-    db.add(reporte)
-    db.commit()
-    db.refresh(reporte)
-    return reporte
+
+
+@router.post("/reportes/secure", response_model=schemas.AcopioReporteResponse, status_code=201)
+async def crear_reporte_seguro(
+    centro_id: int = Form(...),
+    hombres: int = Form(0),
+    mujeres: int = Form(0),
+    ninos: int = Form(0),
+    lactantes: int = Form(0),
+    necesitan: str = Form(None),
+    no_necesitan: str = Form(None),
+    necesitan_extra: str = Form(None),
+    no_necesitan_extra: str = Form(None),
+    notas: str = Form(None),
+    reportado_por: str = Form(None),
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    """Protegido — reporte autenticado vía Firebase Functions."""
+    return _crear_reporte_en_centro(
+        db=db,
+        centro_id=centro_id,
+        hombres=hombres,
+        mujeres=mujeres,
+        ninos=ninos,
+        lactantes=lactantes,
+        necesitan=necesitan,
+        no_necesitan=no_necesitan,
+        necesitan_extra=necesitan_extra,
+        no_necesitan_extra=no_necesitan_extra,
+        notas=notas,
+        reportado_por=reportado_por,
+    )
 
 @router.get("/estado", response_model=List[schemas.CentroAcopioConReporteResponse])
 def estado_general(db: Session = Depends(get_db)):
