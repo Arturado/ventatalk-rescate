@@ -215,7 +215,7 @@ def editar_centro(
     centro_id: int,
     data: schemas.CentroAcopioUpdate,
     db: Session = Depends(get_db),
-    _: str = Depends(verify_api_key),
+    actor_id: str = Depends(verify_api_key),
 ):
     centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
     if not centro:
@@ -254,7 +254,7 @@ def editar_centro(
             tipo_cambio=campo,
             valor_anterior=str(anterior) if anterior is not None else None,
             valor_nuevo=str(valor) if valor is not None else None,
-            cambiado_por="api_key",
+            cambiado_por=actor_id,
         )
 
     sync_centro_activation_state(centro)
@@ -266,7 +266,7 @@ def editar_centro(
 def desactivar_centro(
     centro_id: int,
     db: Session = Depends(get_db),
-    _: str = Depends(verify_api_key),
+    actor_id: str = Depends(verify_api_key),
 ):
     centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
     if not centro:
@@ -280,7 +280,7 @@ def desactivar_centro(
         tipo_cambio="estado",
         valor_anterior=estado_anterior,
         valor_nuevo=centro.estado,
-        cambiado_por="api_key",
+        cambiado_por=actor_id,
     )
     db.commit()
     return {"ok": True, "id": centro_id}
@@ -303,6 +303,65 @@ def listar_responsables_centro(
     if not incluir_removidos:
         q = q.filter(models.CentroResponsable.estado != "removido")
     return q.order_by(desc(models.CentroResponsable.asignado_en)).all()
+
+
+@router.get("/responsables", response_model=List[schemas.CentroResponsableResponse])
+def listar_responsabilidades_usuario(
+    usuario_id: str = Query(...),
+    incluir_removidos: bool = Query(False),
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    usuario_normalizado = (usuario_id or "").strip().lower()
+    if not usuario_normalizado:
+        raise HTTPException(status_code=400, detail="usuario_id es obligatorio")
+
+    q = db.query(models.CentroResponsable).filter(
+        models.CentroResponsable.usuario_id == usuario_normalizado
+    )
+    if not incluir_removidos:
+        q = q.filter(models.CentroResponsable.estado != "removido")
+    return q.order_by(desc(models.CentroResponsable.asignado_en)).all()
+
+
+@router.post("/responsables/activar")
+def activar_responsabilidades_usuario(
+    usuario_id: str = Form(...),
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    usuario_normalizado = (usuario_id or "").strip().lower()
+    if not usuario_normalizado:
+        raise HTTPException(status_code=400, detail="usuario_id es obligatorio")
+
+    responsabilidades = db.query(models.CentroResponsable).filter(
+        models.CentroResponsable.usuario_id == usuario_normalizado,
+        models.CentroResponsable.estado == "invitado",
+    ).all()
+
+    activados = []
+    for responsable in responsabilidades:
+        responsable.estado = "activo"
+        activados.append({
+            "responsable_id": responsable.id,
+            "centro_id": responsable.centro_id,
+        })
+        log_centro_history(
+            db,
+            centro_id=responsable.centro_id,
+            tipo_cambio="responsable",
+            valor_anterior=f"{responsable.usuario_id}:{responsable.rol_en_centro}:invitado",
+            valor_nuevo=f"{responsable.usuario_id}:{responsable.rol_en_centro}:activo",
+            cambiado_por=usuario_normalizado,
+            descripcion="Invitación aceptada por el responsable al iniciar sesión.",
+        )
+
+    db.commit()
+    return {
+        "ok": True,
+        "activados": len(activados),
+        "items": activados,
+    }
 
 
 @router.get("/centros/{centro_id}/historial", response_model=List[schemas.CentroHistorialResponse])

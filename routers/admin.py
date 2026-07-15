@@ -26,6 +26,7 @@ import schemas as _schemas
 from database import SessionLocal, get_db
 from services.images import read_limited, compress_image_async
 from cache import _hospitales_cache, cache_clear
+from dependencies import normalize_actor_id
 from routers.casos_ayuda import TRANSICIONES_VALIDAS, NIVELES_VALIDOS, NIVELES_ORDEN, parse_adjuntos
 from services.before_submit import build_before_submit_metadata
 from services.shelter_centers import (
@@ -100,10 +101,11 @@ def _require_admin_or_api_key(require_csrf: bool):
         request: Request,
         x_csrf_token: str = Header(""),
         x_api_key: Optional[str] = Header(None),
+        x_actor_id: Optional[str] = Header(None),
     ) -> str:
         expected_api_key = os.getenv("API_KEY")
         if x_api_key and expected_api_key and x_api_key == expected_api_key:
-            return "api_key"
+            return normalize_actor_id(x_actor_id) or "api_key"
         admin = get_current_admin(request)
         if not admin:
             raise HTTPException(status_code=401, detail="No autorizado")
