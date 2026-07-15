@@ -28,6 +28,16 @@ from services.images import read_limited, compress_image_async
 from cache import _hospitales_cache, cache_clear
 from routers.casos_ayuda import TRANSICIONES_VALIDAS, NIVELES_VALIDOS, NIVELES_ORDEN, parse_adjuntos
 from services.before_submit import build_before_submit_metadata
+from services.shelter_centers import (
+    DEFAULT_ORGANIZACION_ID,
+    log_centro_history,
+    normalize_centro_tipo,
+    normalize_organizacion_id,
+    normalize_responsable_estado,
+    normalize_responsable_rol,
+    sync_centro_activation_state,
+    utcnow,
+)
 
 BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
 UPLOAD_DIR = "uploads/capturas"
@@ -926,6 +936,8 @@ async def get_import_job(job_id: str, request: Request):
 async def nuevo_centro_acopio(
     request: Request,
     nombre: str = Form(...),
+    tipo: Optional[str] = Form(None),
+    organizacion_id: Optional[str] = Form(None),
     zona: Optional[str] = Form(None),
     direccion: Optional[str] = Form(None),
     latitud: Optional[str] = Form(None),
@@ -952,8 +964,17 @@ async def nuevo_centro_acopio(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    try:
+        tipo_normalizado = normalize_centro_tipo(tipo)
+        organizacion_id_normalizado = normalize_organizacion_id(organizacion_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     centro = models.CentroAcopio(
         nombre=nombre,
+        tipo=tipo_normalizado,
+        organizacion_id=organizacion_id_normalizado,
+        estado="activo",
         zona=zona or None,
         direccion=direccion or None,
         reportado_por=reportado_por or None,
@@ -963,6 +984,15 @@ async def nuevo_centro_acopio(
         **before_submit,
     )
     db.add(centro)
+    db.flush()
+    log_centro_history(
+        db,
+        centro_id=centro.id,
+        tipo_cambio="creacion",
+        valor_nuevo=centro.estado,
+        cambiado_por=_admin,
+        descripcion="Centro creado desde el panel administrativo.",
+    )
     db.commit()
     db.refresh(centro)
     return {"ok": True, "id": centro.id, "nombre": centro.nombre}
@@ -979,7 +1009,18 @@ async def desactivar_centro_acopio(
     ).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
-    centro.activo = False
+    estado_anterior = centro.estado
+    centro.estado = "inactivo"
+    sync_centro_activation_state(centro)
+    log_centro_history(
+        db,
+        centro_id=centro.id,
+        tipo_cambio="estado",
+        valor_anterior=estado_anterior,
+        valor_nuevo=centro.estado,
+        cambiado_por=_admin,
+        descripcion="Centro desactivado desde el panel administrativo.",
+    )
     db.commit()
     return {"ok": True}
 
@@ -1028,6 +1069,9 @@ async def aprobar_solicitud_acopio(
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
     centro = models.CentroAcopio(
         nombre=solicitud.nombre,
+        tipo="albergue",
+        organizacion_id=DEFAULT_ORGANIZACION_ID,
+        estado="activo",
         zona=solicitud.zona or None,
         direccion=solicitud.direccion or None,
         latitud=solicitud.latitud or None,
@@ -1043,6 +1087,15 @@ async def aprobar_solicitud_acopio(
         before_submit_source=solicitud.before_submit_source or None,
     )
     db.add(centro)
+    db.flush()
+    log_centro_history(
+        db,
+        centro_id=centro.id,
+        tipo_cambio="creacion",
+        valor_nuevo=centro.estado,
+        cambiado_por=_admin,
+        descripcion=f"Centro creado al aprobar la solicitud #{solicitud.id}.",
+    )
     solicitud.estado = "aprobado"
     db.commit()
     db.refresh(centro)
@@ -1064,6 +1117,94 @@ async def rechazar_solicitud_acopio(
     solicitud.estado = "rechazado"
     db.commit()
     return {"ok": True}
+
+
+@router.post("/albergues/centros/{centro_id}/responsables")
+async def asignar_responsable_centro(
+    centro_id: int,
+    usuario_id: str = Form(...),
+    rol_en_centro: Optional[str] = Form("coordinador"),
+    estado: Optional[str] = Form("activo"),
+    descripcion: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_or_api_key),
+):
+    centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
+    if not centro:
+        raise HTTPException(status_code=404, detail="Centro no encontrado")
+
+    usuario_normalizado = (usuario_id or "").strip().lower()
+    if not usuario_normalizado:
+        raise HTTPException(status_code=400, detail="usuario_id es obligatorio")
+
+    try:
+        rol_normalizado = normalize_responsable_rol(rol_en_centro)
+        estado_normalizado = normalize_responsable_estado(estado)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    existente = db.query(models.CentroResponsable).filter(
+        models.CentroResponsable.centro_id == centro_id,
+        models.CentroResponsable.usuario_id == usuario_normalizado,
+        models.CentroResponsable.estado != "removido",
+    ).first()
+    if existente:
+        raise HTTPException(status_code=409, detail="Ese usuario ya tiene una asignación activa o pendiente en este centro")
+
+    responsable = models.CentroResponsable(
+        centro_id=centro_id,
+        usuario_id=usuario_normalizado,
+        rol_en_centro=rol_normalizado,
+        estado=estado_normalizado,
+        asignado_por_id=_admin,
+    )
+    db.add(responsable)
+    db.flush()
+    log_centro_history(
+        db,
+        centro_id=centro_id,
+        tipo_cambio="responsable",
+        valor_nuevo=f"{usuario_normalizado}:{rol_normalizado}:{estado_normalizado}",
+        cambiado_por=_admin,
+        descripcion=descripcion or "Responsable asignado al centro.",
+    )
+    db.commit()
+    db.refresh(responsable)
+    return _schemas.CentroResponsableResponse.model_validate(responsable)
+
+
+@router.post("/albergues/centros/{centro_id}/responsables/{responsable_id}/remover")
+async def remover_responsable_centro(
+    centro_id: int,
+    responsable_id: int,
+    descripcion: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_or_api_key),
+):
+    responsable = db.query(models.CentroResponsable).filter(
+        models.CentroResponsable.id == responsable_id,
+        models.CentroResponsable.centro_id == centro_id,
+    ).first()
+    if not responsable:
+        raise HTTPException(status_code=404, detail="Responsable no encontrado")
+    if responsable.estado == "removido":
+        raise HTTPException(status_code=400, detail="Ese responsable ya fue removido")
+
+    estado_anterior = responsable.estado
+    responsable.estado = "removido"
+    responsable.removido_por_id = _admin
+    responsable.removido_en = utcnow()
+    log_centro_history(
+        db,
+        centro_id=centro_id,
+        tipo_cambio="responsable",
+        valor_anterior=f"{responsable.usuario_id}:{responsable.rol_en_centro}:{estado_anterior}",
+        valor_nuevo=f"{responsable.usuario_id}:{responsable.rol_en_centro}:removido",
+        cambiado_por=_admin,
+        descripcion=descripcion or "Responsable removido del centro.",
+    )
+    db.commit()
+    return {"ok": True, "responsable_id": responsable_id}
 
 
 # --- Notificaciones de personas localizadas ---

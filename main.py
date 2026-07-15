@@ -25,6 +25,7 @@ from routers.albergues import router as albergues_router
 from routers.casos_ayuda import router as casos_ayuda_router
 from sqlalchemy import text as sql_text
 from sqlalchemy import inspect
+from services.shelter_centers import DEFAULT_ORGANIZACION_ID
 
 templates = Jinja2Templates(directory="templates")
 limiter = Limiter(key_func=get_remote_address)
@@ -143,6 +144,9 @@ def seed_hospitales(db: Session):
 def ensure_optional_columns():
     columns_by_table = {
         "centros_acopio": {
+            "tipo": "VARCHAR(30) DEFAULT 'albergue'",
+            "organizacion_id": f"VARCHAR(100) DEFAULT '{DEFAULT_ORGANIZACION_ID}'",
+            "estado": "VARCHAR(30) DEFAULT 'activo'",
             "reportado_por": "VARCHAR(200)",
             "notas": "TEXT",
             "before_submit_version": "VARCHAR(100)",
@@ -178,6 +182,36 @@ def ensure_optional_columns():
                         f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
                     )
                 )
+
+        conn.execute(
+            sql_text(
+                "UPDATE centros_acopio "
+                "SET tipo = 'albergue' "
+                "WHERE tipo IS NULL OR tipo = ''"
+            )
+        )
+        conn.execute(
+            sql_text(
+                "UPDATE centros_acopio "
+                "SET tipo = 'albergue' "
+                "WHERE tipo = 'refugio'"
+            )
+        )
+        conn.execute(
+            sql_text(
+                "UPDATE centros_acopio "
+                "SET organizacion_id = :organizacion_id "
+                "WHERE organizacion_id IS NULL OR organizacion_id = ''"
+            ),
+            {"organizacion_id": DEFAULT_ORGANIZACION_ID},
+        )
+        conn.execute(
+            sql_text(
+                "UPDATE centros_acopio "
+                "SET estado = CASE WHEN COALESCE(activo, true) THEN 'activo' ELSE 'inactivo' END "
+                "WHERE estado IS NULL OR estado = ''"
+            )
+        )
 
 
 @asynccontextmanager

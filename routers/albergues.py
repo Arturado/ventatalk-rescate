@@ -12,6 +12,13 @@ from database import get_db
 from dependencies import verify_api_key
 from services.images import read_limited, compress_image_async
 from services.before_submit import build_before_submit_metadata
+from services.shelter_centers import (
+    log_centro_history,
+    normalize_centro_estado,
+    normalize_centro_tipo,
+    normalize_organizacion_id,
+    sync_centro_activation_state,
+)
 import models, schemas
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -149,8 +156,44 @@ def editar_centro(
     centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
-    for campo, valor in data.model_dump(exclude_unset=True).items():
+    updates = data.model_dump(exclude_unset=True)
+
+    if "tipo" in updates:
+        try:
+            updates["tipo"] = normalize_centro_tipo(updates["tipo"], default=centro.tipo)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if "organizacion_id" in updates:
+        updates["organizacion_id"] = normalize_organizacion_id(
+            updates["organizacion_id"],
+            default=centro.organizacion_id,
+        )
+
+    if "estado" in updates:
+        try:
+            updates["estado"] = normalize_centro_estado(updates["estado"], default=centro.estado)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if "activo" in updates and "estado" not in updates:
+        updates["estado"] = "activo" if updates["activo"] else "inactivo"
+
+    for campo, valor in updates.items():
+        anterior = getattr(centro, campo)
+        if anterior == valor:
+            continue
         setattr(centro, campo, valor)
+        log_centro_history(
+            db,
+            centro_id=centro.id,
+            tipo_cambio=campo,
+            valor_anterior=str(anterior) if anterior is not None else None,
+            valor_nuevo=str(valor) if valor is not None else None,
+            cambiado_por="api_key",
+        )
+
+    sync_centro_activation_state(centro)
     db.commit()
     db.refresh(centro)
     return centro
@@ -164,9 +207,54 @@ def desactivar_centro(
     centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
+    estado_anterior = centro.estado
     centro.activo = False
+    centro.estado = "inactivo"
+    log_centro_history(
+        db,
+        centro_id=centro.id,
+        tipo_cambio="estado",
+        valor_anterior=estado_anterior,
+        valor_nuevo=centro.estado,
+        cambiado_por="api_key",
+    )
     db.commit()
     return {"ok": True, "id": centro_id}
+
+
+@router.get("/centros/{centro_id}/responsables", response_model=List[schemas.CentroResponsableResponse])
+def listar_responsables_centro(
+    centro_id: int,
+    incluir_removidos: bool = Query(False),
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
+    if not centro:
+        raise HTTPException(status_code=404, detail="Centro no encontrado")
+
+    q = db.query(models.CentroResponsable).filter(
+        models.CentroResponsable.centro_id == centro_id
+    )
+    if not incluir_removidos:
+        q = q.filter(models.CentroResponsable.estado != "removido")
+    return q.order_by(desc(models.CentroResponsable.asignado_en)).all()
+
+
+@router.get("/centros/{centro_id}/historial", response_model=List[schemas.CentroHistorialResponse])
+def listar_historial_centro(
+    centro_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
+    if not centro:
+        raise HTTPException(status_code=404, detail="Centro no encontrado")
+
+    return db.query(models.CentroHistorial).filter(
+        models.CentroHistorial.centro_id == centro_id
+    ).order_by(desc(models.CentroHistorial.cambiado_en)).limit(limit).all()
 
 @router.patch("/reportes/{reporte_id}", response_model=schemas.AcopioReporteResponse)
 def editar_reporte(
