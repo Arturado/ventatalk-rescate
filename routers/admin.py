@@ -1042,6 +1042,10 @@ async def aprobar_solicitud_acopio(
         nombre=solicitud.nombre,
         zona=solicitud.zona or None,
         direccion=solicitud.direccion or None,
+        latitud=solicitud.latitud or None,
+        longitud=solicitud.longitud or None,
+        reportado_por=solicitud.reportado_por or None,
+        notas=solicitud.notas or None,
     )
     db.add(centro)
     solicitud.estado = "aprobado"
