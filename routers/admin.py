@@ -1034,6 +1034,13 @@ async def aprobar_solicitud_acopio(
         longitud=solicitud.longitud or None,
         reportado_por=solicitud.reportado_por or None,
         notas=solicitud.notas or None,
+        before_submit_version=solicitud.before_submit_version or None,
+        before_submit_title=solicitud.before_submit_title or None,
+        before_submit_description=solicitud.before_submit_description or None,
+        before_submit_items_json=solicitud.before_submit_items_json or None,
+        before_submit_confirmations_json=solicitud.before_submit_confirmations_json or None,
+        before_submit_acknowledged_at=solicitud.before_submit_acknowledged_at or None,
+        before_submit_source=solicitud.before_submit_source or None,
     )
     db.add(centro)
     solicitud.estado = "aprobado"

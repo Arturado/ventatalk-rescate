@@ -129,6 +129,8 @@ class CentroAcopioResponse(BaseModel):
     nombre: str
     direccion: Optional[str] = None
     zona: Optional[str] = None
+    reportado_por: Optional[str] = None
+    notas: Optional[str] = None
     activo: bool
     created_at: datetime
     latitud: Optional[str] = None
