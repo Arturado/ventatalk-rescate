@@ -11,6 +11,7 @@ from datetime import datetime, timezone, timedelta
 from database import get_db
 from dependencies import verify_api_key
 from services.images import read_limited, compress_image_async
+from services.before_submit import build_before_submit_metadata
 import models, schemas
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -207,9 +208,26 @@ async def solicitar_centro(
     notas: Optional[str] = Form(None),
     latitud: Optional[str] = Form(None),
     longitud: Optional[str] = Form(None),
+    before_submit_version: Optional[str] = Form(None),
+    before_submit_title: Optional[str] = Form(None),
+    before_submit_description: Optional[str] = Form(None),
+    before_submit_items: Optional[str] = Form(None),
+    before_submit_confirmations: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     """Público — solicitar agregar un centro de albergue nuevo"""
+    try:
+        before_submit = build_before_submit_metadata(
+            version=before_submit_version,
+            title=before_submit_title,
+            description=before_submit_description,
+            items=before_submit_items,
+            confirmations=before_submit_confirmations,
+            source="public_shelter_form",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     solicitud = models.CentroAcopioSolicitud(
         nombre=nombre,
         direccion=direccion or None,
@@ -218,6 +236,7 @@ async def solicitar_centro(
         notas=notas or None,
         latitud=latitud or None,
         longitud=longitud or None,
+        **before_submit,
     )
     db.add(solicitud)
     db.commit()

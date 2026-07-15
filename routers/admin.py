@@ -27,6 +27,7 @@ from database import SessionLocal, get_db
 from services.images import read_limited, compress_image_async
 from cache import _hospitales_cache, cache_clear
 from routers.casos_ayuda import TRANSICIONES_VALIDAS, NIVELES_VALIDOS, NIVELES_ORDEN, parse_adjuntos
+from services.before_submit import build_before_submit_metadata
 
 BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
 UPLOAD_DIR = "uploads/capturas"
@@ -929,15 +930,37 @@ async def nuevo_centro_acopio(
     direccion: Optional[str] = Form(None),
     latitud: Optional[str] = Form(None),
     longitud: Optional[str] = Form(None),
+    reportado_por: Optional[str] = Form(None),
+    notas: Optional[str] = Form(None),
+    before_submit_version: Optional[str] = Form(None),
+    before_submit_title: Optional[str] = Form(None),
+    before_submit_description: Optional[str] = Form(None),
+    before_submit_items: Optional[str] = Form(None),
+    before_submit_confirmations: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
 ):
+    try:
+        before_submit = build_before_submit_metadata(
+            version=before_submit_version,
+            title=before_submit_title,
+            description=before_submit_description,
+            items=before_submit_items,
+            confirmations=before_submit_confirmations,
+            source="admin_shelter_form",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     centro = models.CentroAcopio(
         nombre=nombre,
         zona=zona or None,
         direccion=direccion or None,
+        reportado_por=reportado_por or None,
+        notas=notas or None,
         latitud=latitud or None,
         longitud=longitud or None,
+        **before_submit,
     )
     db.add(centro)
     db.commit()
