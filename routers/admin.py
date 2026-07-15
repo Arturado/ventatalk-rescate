@@ -1299,12 +1299,22 @@ async def nueva_orden_acopio(
     except (TypeError, ValueError):
         raise HTTPException(status_code=422, detail="items_ordenados debe ser un JSON válido")
 
+    centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
+    if not centro:
+        raise HTTPException(status_code=404, detail="Centro no encontrado")
+
+    reporte = db.query(models.AcopioReporte).filter(models.AcopioReporte.id == reporte_id).first()
+    if not reporte:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+    if reporte.centro_id != centro_id:
+        raise HTTPException(status_code=400, detail="El reporte indicado no pertenece a ese centro")
+
     orden = models.AcopioOrden(
         reporte_id=reporte_id,
         centro_id=centro_id,
         items_ordenados=items_ordenados,
         nota_repartidor=nota_repartidor or None,
-        creado_por=creado_por or None,
+        creado_por=creado_por or _admin or None,
         estado="preparando",
     )
     db.add(orden)
