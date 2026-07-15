@@ -971,15 +971,9 @@ async def nuevo_centro_acopio(
 @router.delete("/albergues/centros/{centro_id}")
 async def desactivar_centro_acopio(
     centro_id: int,
-    request: Request,
-    x_csrf_token: str = Header(""),
     db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_or_api_key),
 ):
-    admin = get_current_admin(request)
-    if not admin:
-        raise HTTPException(status_code=401, detail="No autorizado")
-    if not validate_csrf(request, x_csrf_token, admin):
-        raise HTTPException(status_code=403, detail="CSRF token inválido")
     centro = db.query(models.CentroAcopio).filter(
         models.CentroAcopio.id == centro_id
     ).first()
@@ -993,15 +987,9 @@ async def desactivar_centro_acopio(
 @router.delete("/albergues/reportes/{reporte_id}")
 async def eliminar_acopio_reporte(
     reporte_id: int,
-    request: Request,
-    x_csrf_token: str = Header(""),
     db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_or_api_key),
 ):
-    admin = get_current_admin(request)
-    if not admin:
-        raise HTTPException(status_code=401, detail="No autorizado")
-    if not validate_csrf(request, x_csrf_token, admin):
-        raise HTTPException(status_code=403, detail="CSRF token inválido")
     reporte = db.query(models.AcopioReporte).filter(
         models.AcopioReporte.id == reporte_id
     ).first()
@@ -1148,21 +1136,14 @@ async def confirmar_notificacion_localizado(
 
 @router.post("/albergues/ordenes/nueva")
 async def nueva_orden_acopio(
-    request: Request,
     reporte_id: int = Form(...),
     centro_id: int = Form(...),
     items_ordenados: str = Form(...),
     nota_repartidor: Optional[str] = Form(None),
     creado_por: Optional[str] = Form(None),
-    x_csrf_token: str = Header(""),
     db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_or_api_key),
 ):
-    admin = get_current_admin(request)
-    if not admin:
-        raise HTTPException(status_code=401, detail="No autorizado")
-    if not validate_csrf(request, x_csrf_token, admin):
-        raise HTTPException(status_code=403, detail="CSRF token inválido")
-
     try:
         json.loads(items_ordenados)
     except (TypeError, ValueError):
@@ -1189,16 +1170,9 @@ async def nueva_orden_acopio(
 @router.delete("/albergues/ordenes/{orden_id}")
 async def eliminar_orden_acopio(
     orden_id: int,
-    request: Request,
-    x_csrf_token: str = Header(""),
     db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_or_api_key),
 ):
-    admin = get_current_admin(request)
-    if not admin:
-        raise HTTPException(status_code=401, detail="No autorizado")
-    if not validate_csrf(request, x_csrf_token, admin):
-        raise HTTPException(status_code=403, detail="CSRF token inválido")
-
     orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
     if not orden:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
