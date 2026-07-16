@@ -124,7 +124,7 @@ class MovimientoResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-class CentroAcopioResponse(BaseModel):
+class CentroResponse(BaseModel):
     id: int
     nombre: str
     tipo: str = "albergue"
@@ -149,7 +149,7 @@ class CentroAcopioResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-class AcopioReporteResponse(BaseModel):
+class CentroReporteResponse(BaseModel):
     id: int
     centro_id: int
     hombres: Optional[int] = 0
@@ -174,9 +174,9 @@ class AcopioReporteResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-class CentroAcopioConReporteResponse(BaseModel):
-    centro: CentroAcopioResponse
-    ultimo_reporte: Optional[AcopioReporteResponse] = None
+class CentroConReporteResponse(BaseModel):
+    centro: CentroResponse
+    ultimo_reporte: Optional[CentroReporteResponse] = None
     total_reportes_hoy: int = 0
     model_config = {"from_attributes": True}
 
@@ -220,7 +220,7 @@ class EstadoPersonaUpdate(BaseModel):
     estado: str
     descripcion_cambio: Optional[str] = None
 
-class CentroAcopioUpdate(BaseModel):
+class CentroUpdate(BaseModel):
     nombre: Optional[str] = None
     tipo: Optional[str] = None
     organizacion_id: Optional[str] = None
@@ -233,7 +233,7 @@ class CentroAcopioUpdate(BaseModel):
     latitud: Optional[str] = None
     longitud: Optional[str] = None
 
-class AcopioReporteUpdate(BaseModel):
+class CentroReporteUpdate(BaseModel):
     hombres: Optional[int] = None
     mujeres: Optional[int] = None
     ninos: Optional[int] = None
@@ -334,7 +334,7 @@ class CentroHistorialResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-class AcopioOrdenResponse(BaseModel):
+class CentroOrdenResponse(BaseModel):
     id: int
     reporte_id: int
     centro_id: int
@@ -343,7 +343,7 @@ class AcopioOrdenResponse(BaseModel):
     estado: str
     creado_por: Optional[str] = None
     created_at: datetime
-    entrega: Optional["AcopioEntregaResponse"] = None
+    entrega: Optional["CentroEntregaResponse"] = None
 
     @field_serializer('created_at')
     def serialize_created_at(self, value: datetime) -> str:
@@ -355,7 +355,7 @@ class AcopioOrdenResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-class AcopioEntregaResponse(BaseModel):
+class CentroEntregaResponse(BaseModel):
     id: int
     orden_id: int
     nombre_receptor: str
@@ -373,7 +373,7 @@ class AcopioEntregaResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-AcopioOrdenResponse.model_rebuild()
+CentroOrdenResponse.model_rebuild()
 
 class CasoAyudaResponse(BaseModel):
     id: int

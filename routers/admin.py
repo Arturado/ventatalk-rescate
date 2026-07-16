@@ -972,7 +972,7 @@ async def nuevo_centro_acopio(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    centro = models.CentroAcopio(
+    centro = models.Centro(
         nombre=nombre,
         tipo=tipo_normalizado,
         organizacion_id=organizacion_id_normalizado,
@@ -1006,8 +1006,8 @@ async def desactivar_centro_acopio(
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
 ):
-    centro = db.query(models.CentroAcopio).filter(
-        models.CentroAcopio.id == centro_id
+    centro = db.query(models.Centro).filter(
+        models.Centro.id == centro_id
     ).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
@@ -1033,8 +1033,8 @@ async def eliminar_acopio_reporte(
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
 ):
-    reporte = db.query(models.AcopioReporte).filter(
-        models.AcopioReporte.id == reporte_id
+    reporte = db.query(models.CentroReporte).filter(
+        models.CentroReporte.id == reporte_id
     ).first()
     if not reporte:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
@@ -1052,14 +1052,14 @@ async def listar_solicitudes_acopio(
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key_read),
 ):
-    solicitudes = db.query(models.CentroAcopioSolicitud).filter(
-        models.CentroAcopioSolicitud.estado == "pendiente"
+    solicitudes = db.query(models.CentroSolicitud).filter(
+        models.CentroSolicitud.estado == "pendiente"
     )
     if organizacion_id:
         solicitudes = solicitudes.filter(
-            models.CentroAcopioSolicitud.organizacion_id == normalize_organizacion_id(organizacion_id)
+            models.CentroSolicitud.organizacion_id == normalize_organizacion_id(organizacion_id)
         )
-    solicitudes = solicitudes.order_by(sqldesc(models.CentroAcopioSolicitud.created_at)).all()
+    solicitudes = solicitudes.order_by(sqldesc(models.CentroSolicitud.created_at)).all()
     return [_schemas.CentroSolicitudResponse.model_validate(s) for s in solicitudes]
 
 
@@ -1070,8 +1070,8 @@ async def aprobar_solicitud_acopio(
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
 ):
-    solicitud = db.query(models.CentroAcopioSolicitud).filter(
-        models.CentroAcopioSolicitud.id == solicitud_id
+    solicitud = db.query(models.CentroSolicitud).filter(
+        models.CentroSolicitud.id == solicitud_id
     ).first()
     if not solicitud:
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
@@ -1079,7 +1079,7 @@ async def aprobar_solicitud_acopio(
         organizacion_id or solicitud.organizacion_id,
         default=DEFAULT_ORGANIZACION_ID,
     )
-    centro = models.CentroAcopio(
+    centro = models.Centro(
         nombre=solicitud.nombre,
         tipo="albergue",
         organizacion_id=organizacion_id_normalizado,
@@ -1121,8 +1121,8 @@ async def rechazar_solicitud_acopio(
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
 ):
-    solicitud = db.query(models.CentroAcopioSolicitud).filter(
-        models.CentroAcopioSolicitud.id == solicitud_id
+    solicitud = db.query(models.CentroSolicitud).filter(
+        models.CentroSolicitud.id == solicitud_id
     ).first()
     if not solicitud:
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
@@ -1141,7 +1141,7 @@ async def asignar_responsable_centro(
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
 ):
-    centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
+    centro = db.query(models.Centro).filter(models.Centro.id == centro_id).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
 
@@ -1309,17 +1309,17 @@ async def nueva_orden_acopio(
     except (TypeError, ValueError):
         raise HTTPException(status_code=422, detail="items_ordenados debe ser un JSON válido")
 
-    centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
+    centro = db.query(models.Centro).filter(models.Centro.id == centro_id).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
 
-    reporte = db.query(models.AcopioReporte).filter(models.AcopioReporte.id == reporte_id).first()
+    reporte = db.query(models.CentroReporte).filter(models.CentroReporte.id == reporte_id).first()
     if not reporte:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
     if reporte.centro_id != centro_id:
         raise HTTPException(status_code=400, detail="El reporte indicado no pertenece a ese centro")
 
-    orden = models.AcopioOrden(
+    orden = models.CentroOrden(
         reporte_id=reporte_id,
         centro_id=centro_id,
         items_ordenados=items_ordenados,
@@ -1352,13 +1352,13 @@ async def eliminar_orden_acopio(
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
 ):
-    orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
+    orden = db.query(models.CentroOrden).filter(models.CentroOrden.id == orden_id).first()
     if not orden:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
     estado_anterior = orden.estado
     centro_id = orden.centro_id
-    entrega_existente = db.query(models.AcopioEntrega).filter(models.AcopioEntrega.orden_id == orden_id).first()
-    db.query(models.AcopioEntrega).filter(models.AcopioEntrega.orden_id == orden_id).delete()
+    entrega_existente = db.query(models.CentroEntrega).filter(models.CentroEntrega.orden_id == orden_id).first()
+    db.query(models.CentroEntrega).filter(models.CentroEntrega.orden_id == orden_id).delete()
     db.delete(orden)
     log_centro_history(
         db,

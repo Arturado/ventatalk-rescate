@@ -51,14 +51,14 @@ def _crear_reporte_en_centro(
     notas: Optional[str] = None,
     reportado_por: Optional[str] = None,
 ):
-    centro = db.query(models.CentroAcopio).filter(
-        models.CentroAcopio.id == centro_id,
-        models.CentroAcopio.activo == True
+    centro = db.query(models.Centro).filter(
+        models.Centro.id == centro_id,
+        models.Centro.activo == True
     ).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
 
-    reporte = models.AcopioReporte(
+    reporte = models.CentroReporte(
         centro_id=centro_id,
         hombres=hombres,
         mujeres=mujeres,
@@ -78,21 +78,21 @@ def _crear_reporte_en_centro(
 
 # ── Centros ────────────────────────────────────────────────
 
-@router.get("/centros", response_model=List[schemas.CentroAcopioResponse])
+@router.get("/centros", response_model=List[schemas.CentroResponse])
 def listar_centros(
     zona: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """Público — lista centros de albergue activos"""
-    q = db.query(models.CentroAcopio).filter(models.CentroAcopio.activo == True)
+    q = db.query(models.Centro).filter(models.Centro.activo == True)
     if zona:
-        q = q.filter(models.CentroAcopio.zona.ilike(f"%{zona}%"))
-    return q.order_by(models.CentroAcopio.zona, models.CentroAcopio.nombre).all()
+        q = q.filter(models.Centro.zona.ilike(f"%{zona}%"))
+    return q.order_by(models.Centro.zona, models.Centro.nombre).all()
 
-@router.get("/centros/{centro_id}", response_model=schemas.CentroAcopioResponse)
+@router.get("/centros/{centro_id}", response_model=schemas.CentroResponse)
 def obtener_centro(centro_id: int, db: Session = Depends(get_db)):
-    centro = db.query(models.CentroAcopio).filter(
-        models.CentroAcopio.id == centro_id
+    centro = db.query(models.Centro).filter(
+        models.Centro.id == centro_id
     ).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
@@ -100,7 +100,7 @@ def obtener_centro(centro_id: int, db: Session = Depends(get_db)):
 
 # ── Reportes públicos ──────────────────────────────────────
 
-@router.post("/reportes", response_model=schemas.AcopioReporteResponse, status_code=201)
+@router.post("/reportes", response_model=schemas.CentroReporteResponse, status_code=201)
 @limiter.limit("30/hour")
 async def crear_reporte(
     request: Request,
@@ -134,7 +134,7 @@ async def crear_reporte(
     )
 
 
-@router.post("/reportes/secure", response_model=schemas.AcopioReporteResponse, status_code=201)
+@router.post("/reportes/secure", response_model=schemas.CentroReporteResponse, status_code=201)
 async def crear_reporte_seguro(
     centro_id: int = Form(...),
     hombres: int = Form(0),
@@ -166,30 +166,30 @@ async def crear_reporte_seguro(
         reportado_por=reportado_por,
     )
 
-@router.get("/estado", response_model=List[schemas.CentroAcopioConReporteResponse])
+@router.get("/estado", response_model=List[schemas.CentroConReporteResponse])
 def estado_general(db: Session = Depends(get_db)):
     """
     Público — estado actual de todos los centros con su último reporte.
     Para mostrar en venezuelarescate.com y en /albergues.
     """
-    centros = db.query(models.CentroAcopio).filter(
-        models.CentroAcopio.activo == True
-    ).order_by(models.CentroAcopio.zona, models.CentroAcopio.nombre).all()
+    centros = db.query(models.Centro).filter(
+        models.Centro.activo == True
+    ).order_by(models.Centro.zona, models.Centro.nombre).all()
 
     hoy = datetime.now(VE_TZ).date()
     resultado = []
 
     for centro in centros:
-        ultimo = db.query(models.AcopioReporte).filter(
-            models.AcopioReporte.centro_id == centro.id
-        ).order_by(desc(models.AcopioReporte.created_at)).first()
+        ultimo = db.query(models.CentroReporte).filter(
+            models.CentroReporte.centro_id == centro.id
+        ).order_by(desc(models.CentroReporte.created_at)).first()
 
-        total_hoy = db.query(sqlfunc.count(models.AcopioReporte.id)).filter(
-            models.AcopioReporte.centro_id == centro.id,
-            sqlfunc.date(models.AcopioReporte.created_at) == hoy
+        total_hoy = db.query(sqlfunc.count(models.CentroReporte.id)).filter(
+            models.CentroReporte.centro_id == centro.id,
+            sqlfunc.date(models.CentroReporte.created_at) == hoy
         ).scalar()
 
-        resultado.append(schemas.CentroAcopioConReporteResponse(
+        resultado.append(schemas.CentroConReporteResponse(
             centro=centro,
             ultimo_reporte=ultimo,
             total_reportes_hoy=total_hoy or 0
@@ -198,7 +198,7 @@ def estado_general(db: Session = Depends(get_db)):
     return resultado
 
 @router.get("/reportes/{centro_id}/historial",
-            response_model=List[schemas.AcopioReporteResponse])
+            response_model=List[schemas.CentroReporteResponse])
 def historial_centro(
     centro_id: int,
     limit: int = Query(20, ge=1, le=100),
@@ -206,18 +206,18 @@ def historial_centro(
     _: str = Depends(verify_api_key)
 ):
     """Protegido — historial de reportes de un centro. Para el colega."""
-    return db.query(models.AcopioReporte).filter(
-        models.AcopioReporte.centro_id == centro_id
-    ).order_by(desc(models.AcopioReporte.created_at)).limit(limit).all()
+    return db.query(models.CentroReporte).filter(
+        models.CentroReporte.centro_id == centro_id
+    ).order_by(desc(models.CentroReporte.created_at)).limit(limit).all()
 
-@router.patch("/centros/{centro_id}", response_model=schemas.CentroAcopioResponse)
+@router.patch("/centros/{centro_id}", response_model=schemas.CentroResponse)
 def editar_centro(
     centro_id: int,
-    data: schemas.CentroAcopioUpdate,
+    data: schemas.CentroUpdate,
     db: Session = Depends(get_db),
     actor_id: str = Depends(verify_api_key),
 ):
-    centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
+    centro = db.query(models.Centro).filter(models.Centro.id == centro_id).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
     updates = data.model_dump(exclude_unset=True)
@@ -268,7 +268,7 @@ def desactivar_centro(
     db: Session = Depends(get_db),
     actor_id: str = Depends(verify_api_key),
 ):
-    centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
+    centro = db.query(models.Centro).filter(models.Centro.id == centro_id).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
     estado_anterior = centro.estado
@@ -293,7 +293,7 @@ def listar_responsables_centro(
     db: Session = Depends(get_db),
     _: str = Depends(verify_api_key),
 ):
-    centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
+    centro = db.query(models.Centro).filter(models.Centro.id == centro_id).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
 
@@ -371,7 +371,7 @@ def listar_historial_centro(
     db: Session = Depends(get_db),
     _: str = Depends(verify_api_key),
 ):
-    centro = db.query(models.CentroAcopio).filter(models.CentroAcopio.id == centro_id).first()
+    centro = db.query(models.Centro).filter(models.Centro.id == centro_id).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
 
@@ -379,14 +379,14 @@ def listar_historial_centro(
         models.CentroHistorial.centro_id == centro_id
     ).order_by(desc(models.CentroHistorial.cambiado_en)).limit(limit).all()
 
-@router.patch("/reportes/{reporte_id}", response_model=schemas.AcopioReporteResponse)
+@router.patch("/reportes/{reporte_id}", response_model=schemas.CentroReporteResponse)
 def editar_reporte(
     reporte_id: int,
-    data: schemas.AcopioReporteUpdate,
+    data: schemas.CentroReporteUpdate,
     db: Session = Depends(get_db),
     _: str = Depends(verify_api_key),
 ):
-    reporte = db.query(models.AcopioReporte).filter(models.AcopioReporte.id == reporte_id).first()
+    reporte = db.query(models.CentroReporte).filter(models.CentroReporte.id == reporte_id).first()
     if not reporte:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
     for campo, valor in data.model_dump(exclude_unset=True).items():
@@ -401,7 +401,7 @@ def eliminar_reporte(
     db: Session = Depends(get_db),
     _: str = Depends(verify_api_key),
 ):
-    reporte = db.query(models.AcopioReporte).filter(models.AcopioReporte.id == reporte_id).first()
+    reporte = db.query(models.CentroReporte).filter(models.CentroReporte.id == reporte_id).first()
     if not reporte:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
     db.delete(reporte)
@@ -440,7 +440,7 @@ async def solicitar_centro(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    solicitud = models.CentroAcopioSolicitud(
+    solicitud = models.CentroSolicitud(
         nombre=nombre,
         organizacion_id=normalize_organizacion_id(organizacion_id),
         direccion=direccion or None,
@@ -457,7 +457,7 @@ async def solicitar_centro(
 
 # ── Órdenes de albergues ──────────────────────────────────────
 
-@router.get("/ordenes", response_model=List[schemas.AcopioOrdenResponse])
+@router.get("/ordenes", response_model=List[schemas.CentroOrdenResponse])
 def listar_ordenes(
     centro_id: Optional[int] = Query(None),
     estado: Optional[str] = Query(None),
@@ -466,23 +466,23 @@ def listar_ordenes(
     _: str = Depends(verify_api_key),
 ):
     """Protegido — lista órdenes de albergues con filtros opcionales"""
-    q = db.query(models.AcopioOrden)
+    q = db.query(models.CentroOrden)
     if centro_id is not None:
-        q = q.filter(models.AcopioOrden.centro_id == centro_id)
+        q = q.filter(models.CentroOrden.centro_id == centro_id)
     if estado is not None:
-        q = q.filter(models.AcopioOrden.estado == estado)
+        q = q.filter(models.CentroOrden.estado == estado)
     if reporte_id is not None:
-        q = q.filter(models.AcopioOrden.reporte_id == reporte_id)
-    ordenes = q.order_by(desc(models.AcopioOrden.created_at)).all()
+        q = q.filter(models.CentroOrden.reporte_id == reporte_id)
+    ordenes = q.order_by(desc(models.CentroOrden.created_at)).all()
 
     resultado = []
     for orden in ordenes:
-        resp = schemas.AcopioOrdenResponse.model_validate(orden)
-        entrega = db.query(models.AcopioEntrega).filter(
-            models.AcopioEntrega.orden_id == orden.id
+        resp = schemas.CentroOrdenResponse.model_validate(orden)
+        entrega = db.query(models.CentroEntrega).filter(
+            models.CentroEntrega.orden_id == orden.id
         ).first()
         if entrega:
-            resp.entrega = schemas.AcopioEntregaResponse.model_validate(entrega)
+            resp.entrega = schemas.CentroEntregaResponse.model_validate(entrega)
         resultado.append(resp)
     return resultado
 
@@ -495,7 +495,7 @@ async def obtener_orden(
     db: Session = Depends(get_db),
 ):
     """Público — el repartidor consulta el detalle del pedido, sin API key"""
-    orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
+    orden = db.query(models.CentroOrden).filter(models.CentroOrden.id == orden_id).first()
     if not orden:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
 
@@ -504,16 +504,16 @@ async def obtener_orden(
     except (TypeError, ValueError):
         items = []
 
-    entrega = db.query(models.AcopioEntrega).filter(
-        models.AcopioEntrega.orden_id == orden.id
+    entrega = db.query(models.CentroEntrega).filter(
+        models.CentroEntrega.orden_id == orden.id
     ).first()
 
-    centro = db.query(models.CentroAcopio).filter(
-        models.CentroAcopio.id == orden.centro_id
+    centro = db.query(models.Centro).filter(
+        models.Centro.id == orden.centro_id
     ).first()
 
-    reporte = db.query(models.AcopioReporte).filter(
-        models.AcopioReporte.id == orden.reporte_id
+    reporte = db.query(models.CentroReporte).filter(
+        models.CentroReporte.id == orden.reporte_id
     ).first()
 
     created_at = orden.created_at
@@ -529,7 +529,7 @@ async def obtener_orden(
         "estado": orden.estado,
         "creado_por": orden.creado_por,
         "created_at": created_at.astimezone(VE_TZ).isoformat() if created_at else None,
-        "entrega": schemas.AcopioEntregaResponse.model_validate(entrega) if entrega else None,
+        "entrega": schemas.CentroEntregaResponse.model_validate(entrega) if entrega else None,
         "centro": {
             "nombre": centro.nombre,
             "direccion": centro.direccion,
@@ -543,7 +543,7 @@ async def obtener_orden(
 
 
 @router.post("/ordenes/{orden_id}/confirmar-entrega",
-             response_model=schemas.AcopioEntregaResponse, status_code=201)
+             response_model=schemas.CentroEntregaResponse, status_code=201)
 @limiter.limit("10/hour")
 async def confirmar_entrega(
     request: Request,
@@ -554,12 +554,12 @@ async def confirmar_entrega(
     db: Session = Depends(get_db),
 ):
     """Público — el repartidor confirma la entrega del pedido, sin API key"""
-    orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
+    orden = db.query(models.CentroOrden).filter(models.CentroOrden.id == orden_id).first()
     if not orden:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
 
-    existente = db.query(models.AcopioEntrega).filter(
-        models.AcopioEntrega.orden_id == orden_id
+    existente = db.query(models.CentroEntrega).filter(
+        models.CentroEntrega.orden_id == orden_id
     ).first()
     if existente:
         raise HTTPException(status_code=400, detail="Esta orden ya fue confirmada")
@@ -576,7 +576,7 @@ async def confirmar_entrega(
                 f.write(compressed)
             foto_url = f"{BASE_URL}/uploads/albergue_entregas/{filename}"
 
-    entrega = models.AcopioEntrega(
+    entrega = models.CentroEntrega(
         orden_id=orden_id,
         nombre_receptor=nombre_receptor,
         foto_entrega_url=foto_url,
@@ -599,14 +599,14 @@ async def confirmar_entrega(
     return entrega
 
 
-@router.patch("/ordenes/{orden_id}/estado", response_model=schemas.AcopioOrdenResponse)
+@router.patch("/ordenes/{orden_id}/estado", response_model=schemas.CentroOrdenResponse)
 def cambiar_estado_orden(
     orden_id: int,
     data: OrdenEstadoUpdate,
     db: Session = Depends(get_db),
     actor_id: str = Depends(verify_api_key),
 ):
-    orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
+    orden = db.query(models.CentroOrden).filter(models.CentroOrden.id == orden_id).first()
     if not orden:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
     if data.estado not in ESTADOS_ORDEN_VALIDOS:
@@ -626,12 +626,12 @@ def cambiar_estado_orden(
     db.commit()
     db.refresh(orden)
 
-    resp = schemas.AcopioOrdenResponse.model_validate(orden)
-    entrega = db.query(models.AcopioEntrega).filter(
-        models.AcopioEntrega.orden_id == orden.id
+    resp = schemas.CentroOrdenResponse.model_validate(orden)
+    entrega = db.query(models.CentroEntrega).filter(
+        models.CentroEntrega.orden_id == orden.id
     ).first()
     if entrega:
-        resp.entrega = schemas.AcopioEntregaResponse.model_validate(entrega)
+        resp.entrega = schemas.CentroEntregaResponse.model_validate(entrega)
     return resp
 
 
@@ -641,13 +641,13 @@ def eliminar_orden(
     db: Session = Depends(get_db),
     actor_id: str = Depends(verify_api_key),
 ):
-    orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
+    orden = db.query(models.CentroOrden).filter(models.CentroOrden.id == orden_id).first()
     if not orden:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
     estado_anterior = orden.estado
     centro_id = orden.centro_id
-    entrega_existente = db.query(models.AcopioEntrega).filter(models.AcopioEntrega.orden_id == orden_id).first()
-    db.query(models.AcopioEntrega).filter(models.AcopioEntrega.orden_id == orden_id).delete()
+    entrega_existente = db.query(models.CentroEntrega).filter(models.CentroEntrega.orden_id == orden_id).first()
+    db.query(models.CentroEntrega).filter(models.CentroEntrega.orden_id == orden_id).delete()
     db.delete(orden)
     log_centro_history(
         db,
