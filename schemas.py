@@ -124,9 +124,12 @@ class MovimientoResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-class CentroAcopioResponse(BaseModel):
+class CentroResponse(BaseModel):
     id: int
     nombre: str
+    tipo: str = "albergue"
+    organizacion_id: str = "venezuela-rescate"
+    estado: str = "activo"
     direccion: Optional[str] = None
     zona: Optional[str] = None
     reportado_por: Optional[str] = None
@@ -146,7 +149,7 @@ class CentroAcopioResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-class AcopioReporteResponse(BaseModel):
+class CentroReporteResponse(BaseModel):
     id: int
     centro_id: int
     hombres: Optional[int] = 0
@@ -171,9 +174,9 @@ class AcopioReporteResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-class CentroAcopioConReporteResponse(BaseModel):
-    centro: CentroAcopioResponse
-    ultimo_reporte: Optional[AcopioReporteResponse] = None
+class CentroConReporteResponse(BaseModel):
+    centro: CentroResponse
+    ultimo_reporte: Optional[CentroReporteResponse] = None
     total_reportes_hoy: int = 0
     model_config = {"from_attributes": True}
 
@@ -217,13 +220,20 @@ class EstadoPersonaUpdate(BaseModel):
     estado: str
     descripcion_cambio: Optional[str] = None
 
-class CentroAcopioUpdate(BaseModel):
+class CentroUpdate(BaseModel):
     nombre: Optional[str] = None
+    tipo: Optional[str] = None
+    organizacion_id: Optional[str] = None
+    estado: Optional[str] = None
     direccion: Optional[str] = None
     zona: Optional[str] = None
     activo: Optional[bool] = None
+    reportado_por: Optional[str] = None
+    notas: Optional[str] = None
+    latitud: Optional[str] = None
+    longitud: Optional[str] = None
 
-class AcopioReporteUpdate(BaseModel):
+class CentroReporteUpdate(BaseModel):
     hombres: Optional[int] = None
     mujeres: Optional[int] = None
     ninos: Optional[int] = None
@@ -258,6 +268,7 @@ class NotificacionLocalizadoResponse(BaseModel):
 class CentroSolicitudResponse(BaseModel):
     id: int
     nombre: str
+    organizacion_id: Optional[str] = None
     direccion: Optional[str] = None
     zona: Optional[str] = None
     reportado_por: Optional[str] = None
@@ -282,7 +293,48 @@ class CentroSolicitudResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-class AcopioOrdenResponse(BaseModel):
+class CentroResponsableResponse(BaseModel):
+    id: int
+    centro_id: int
+    usuario_id: str
+    rol_en_centro: str
+    estado: str
+    asignado_por_id: Optional[str] = None
+    asignado_en: datetime
+    removido_por_id: Optional[str] = None
+    removido_en: Optional[datetime] = None
+
+    @field_serializer('asignado_en', 'removido_en')
+    def serialize_dt(self, value: Optional[datetime]) -> Optional[str]:
+        from datetime import timezone, timedelta
+        VE_TZ = timezone(timedelta(hours=-4))
+        if value and value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(VE_TZ).isoformat() if value else None
+
+    model_config = {"from_attributes": True}
+
+class CentroHistorialResponse(BaseModel):
+    id: int
+    centro_id: int
+    tipo_cambio: str
+    valor_anterior: Optional[str] = None
+    valor_nuevo: Optional[str] = None
+    cambiado_por: Optional[str] = None
+    descripcion: Optional[str] = None
+    cambiado_en: datetime
+
+    @field_serializer('cambiado_en')
+    def serialize_historial_dt(self, value: datetime) -> str:
+        from datetime import timezone, timedelta
+        VE_TZ = timezone(timedelta(hours=-4))
+        if value and value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(VE_TZ).isoformat() if value else None
+
+    model_config = {"from_attributes": True}
+
+class CentroOrdenResponse(BaseModel):
     id: int
     reporte_id: int
     centro_id: int
@@ -291,7 +343,7 @@ class AcopioOrdenResponse(BaseModel):
     estado: str
     creado_por: Optional[str] = None
     created_at: datetime
-    entrega: Optional["AcopioEntregaResponse"] = None
+    entrega: Optional["CentroEntregaResponse"] = None
 
     @field_serializer('created_at')
     def serialize_created_at(self, value: datetime) -> str:
@@ -303,7 +355,7 @@ class AcopioOrdenResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-class AcopioEntregaResponse(BaseModel):
+class CentroEntregaResponse(BaseModel):
     id: int
     orden_id: int
     nombre_receptor: str
@@ -321,7 +373,7 @@ class AcopioEntregaResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-AcopioOrdenResponse.model_rebuild()
+CentroOrdenResponse.model_rebuild()
 
 class CasoAyudaResponse(BaseModel):
     id: int

@@ -25,6 +25,7 @@ from routers.albergues import router as albergues_router
 from routers.casos_ayuda import router as casos_ayuda_router
 from sqlalchemy import text as sql_text
 from sqlalchemy import inspect
+from services.shelter_centers import DEFAULT_ORGANIZACION_ID
 
 templates = Jinja2Templates(directory="templates")
 limiter = Limiter(key_func=get_remote_address)
@@ -46,12 +47,12 @@ def seed_admin_users(db: Session):
     db.commit()
 
 
-def seed_centros_acopio(db: Session):
-    count = db.execute(sql_text("SELECT COUNT(*) FROM centros_acopio")).scalar()
+def seed_centros(db: Session):
+    count = db.execute(sql_text("SELECT COUNT(*) FROM centros")).scalar()
     if count > 0:
         return
 
-    centros_acopio_data = [
+    centros_data = [
         # Chacao / Sucre
         {"nombre": "Parque Alí Primera / Parque del Oeste", "direccion": "Catia / Gato Negro", "zona": "Caracas - Libertador"},
         {"nombre": "Parque Francisco de Miranda / Parque del Este", "direccion": "Municipio Sucre", "zona": "Caracas - Sucre"},
@@ -75,10 +76,10 @@ def seed_centros_acopio(db: Session):
         {"nombre": "Polideportivo La Trinidad", "direccion": "La Trinidad, Caracas", "zona": "Caracas - Baruta"},
     ]
 
-    for c in centros_acopio_data:
-        db.add(models.CentroAcopio(**c))
+    for c in centros_data:
+        db.add(models.Centro(**c))
     db.commit()
-    print(f"Seed: {len(centros_acopio_data)} centros de acopio insertados")
+    print(f"Seed: {len(centros_data)} centros insertados")
 
 
 def seed_hospitales(db: Session):
@@ -142,7 +143,10 @@ def seed_hospitales(db: Session):
 
 def ensure_optional_columns():
     columns_by_table = {
-        "centros_acopio": {
+        "centros": {
+            "tipo": "VARCHAR(30) DEFAULT 'albergue'",
+            "organizacion_id": f"VARCHAR(100) DEFAULT '{DEFAULT_ORGANIZACION_ID}'",
+            "estado": "VARCHAR(30) DEFAULT 'activo'",
             "reportado_por": "VARCHAR(200)",
             "notas": "TEXT",
             "before_submit_version": "VARCHAR(100)",
@@ -153,7 +157,8 @@ def ensure_optional_columns():
             "before_submit_acknowledged_at": "VARCHAR(40)",
             "before_submit_source": "VARCHAR(50)",
         },
-        "centros_acopio_solicitudes": {
+        "centros_solicitudes": {
+            "organizacion_id": f"VARCHAR(100) DEFAULT '{DEFAULT_ORGANIZACION_ID}'",
             "before_submit_version": "VARCHAR(100)",
             "before_submit_title": "VARCHAR(200)",
             "before_submit_description": "TEXT",
@@ -179,6 +184,44 @@ def ensure_optional_columns():
                     )
                 )
 
+        conn.execute(
+            sql_text(
+                "UPDATE centros "
+                "SET tipo = 'albergue' "
+                "WHERE tipo IS NULL OR tipo = ''"
+            )
+        )
+        conn.execute(
+            sql_text(
+                "UPDATE centros "
+                "SET tipo = 'albergue' "
+                "WHERE tipo = 'refugio'"
+            )
+        )
+        conn.execute(
+            sql_text(
+                "UPDATE centros "
+                "SET organizacion_id = :organizacion_id "
+                "WHERE organizacion_id IS NULL OR organizacion_id = ''"
+            ),
+            {"organizacion_id": DEFAULT_ORGANIZACION_ID},
+        )
+        conn.execute(
+            sql_text(
+                "UPDATE centros "
+                "SET estado = CASE WHEN COALESCE(activo, true) THEN 'activo' ELSE 'inactivo' END "
+                "WHERE estado IS NULL OR estado = ''"
+            )
+        )
+        conn.execute(
+            sql_text(
+                "UPDATE centros_solicitudes "
+                "SET organizacion_id = :organizacion_id "
+                "WHERE organizacion_id IS NULL OR organizacion_id = ''"
+            ),
+            {"organizacion_id": DEFAULT_ORGANIZACION_ID},
+        )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -188,7 +231,7 @@ async def lifespan(app: FastAPI):
     try:
         seed_admin_users(db)
         seed_hospitales(db)
-        seed_centros_acopio(db)
+        seed_centros(db)
     finally:
         db.close()
     yield

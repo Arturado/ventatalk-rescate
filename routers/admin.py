@@ -12,7 +12,7 @@ from typing import Optional
 import openpyxl
 
 import bcrypt
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -26,8 +26,19 @@ import schemas as _schemas
 from database import SessionLocal, get_db
 from services.images import read_limited, compress_image_async
 from cache import _hospitales_cache, cache_clear
+from dependencies import normalize_actor_id
 from routers.casos_ayuda import TRANSICIONES_VALIDAS, NIVELES_VALIDOS, NIVELES_ORDEN, parse_adjuntos
 from services.before_submit import build_before_submit_metadata
+from services.shelter_centers import (
+    DEFAULT_ORGANIZACION_ID,
+    log_centro_history,
+    normalize_centro_tipo,
+    normalize_organizacion_id,
+    normalize_responsable_estado,
+    normalize_responsable_rol,
+    sync_centro_activation_state,
+    utcnow,
+)
 
 BASE_URL = os.getenv("BASE_URL", "https://rescate.ventatalk.com")
 UPLOAD_DIR = "uploads/capturas"
@@ -90,10 +101,11 @@ def _require_admin_or_api_key(require_csrf: bool):
         request: Request,
         x_csrf_token: str = Header(""),
         x_api_key: Optional[str] = Header(None),
+        x_actor_id: Optional[str] = Header(None),
     ) -> str:
         expected_api_key = os.getenv("API_KEY")
         if x_api_key and expected_api_key and x_api_key == expected_api_key:
-            return "api_key"
+            return normalize_actor_id(x_actor_id) or "api_key"
         admin = get_current_admin(request)
         if not admin:
             raise HTTPException(status_code=401, detail="No autorizado")
@@ -926,6 +938,8 @@ async def get_import_job(job_id: str, request: Request):
 async def nuevo_centro_acopio(
     request: Request,
     nombre: str = Form(...),
+    tipo: Optional[str] = Form(None),
+    organizacion_id: Optional[str] = Form(None),
     zona: Optional[str] = Form(None),
     direccion: Optional[str] = Form(None),
     latitud: Optional[str] = Form(None),
@@ -952,8 +966,17 @@ async def nuevo_centro_acopio(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    centro = models.CentroAcopio(
+    try:
+        tipo_normalizado = normalize_centro_tipo(tipo)
+        organizacion_id_normalizado = normalize_organizacion_id(organizacion_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    centro = models.Centro(
         nombre=nombre,
+        tipo=tipo_normalizado,
+        organizacion_id=organizacion_id_normalizado,
+        estado="activo",
         zona=zona or None,
         direccion=direccion or None,
         reportado_por=reportado_por or None,
@@ -963,6 +986,15 @@ async def nuevo_centro_acopio(
         **before_submit,
     )
     db.add(centro)
+    db.flush()
+    log_centro_history(
+        db,
+        centro_id=centro.id,
+        tipo_cambio="creacion",
+        valor_nuevo=centro.estado,
+        cambiado_por=_admin,
+        descripcion="Centro creado desde el panel administrativo.",
+    )
     db.commit()
     db.refresh(centro)
     return {"ok": True, "id": centro.id, "nombre": centro.nombre}
@@ -974,12 +1006,23 @@ async def desactivar_centro_acopio(
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
 ):
-    centro = db.query(models.CentroAcopio).filter(
-        models.CentroAcopio.id == centro_id
+    centro = db.query(models.Centro).filter(
+        models.Centro.id == centro_id
     ).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
-    centro.activo = False
+    estado_anterior = centro.estado
+    centro.estado = "inactivo"
+    sync_centro_activation_state(centro)
+    log_centro_history(
+        db,
+        centro_id=centro.id,
+        tipo_cambio="estado",
+        valor_anterior=estado_anterior,
+        valor_nuevo=centro.estado,
+        cambiado_por=_admin,
+        descripcion="Centro desactivado desde el panel administrativo.",
+    )
     db.commit()
     return {"ok": True}
 
@@ -990,8 +1033,8 @@ async def eliminar_acopio_reporte(
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
 ):
-    reporte = db.query(models.AcopioReporte).filter(
-        models.AcopioReporte.id == reporte_id
+    reporte = db.query(models.CentroReporte).filter(
+        models.CentroReporte.id == reporte_id
     ).first()
     if not reporte:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
@@ -1005,29 +1048,42 @@ async def eliminar_acopio_reporte(
 @router.get("/albergues/solicitudes")
 async def listar_solicitudes_acopio(
     request: Request,
+    organizacion_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key_read),
 ):
-    solicitudes = db.query(models.CentroAcopioSolicitud).filter(
-        models.CentroAcopioSolicitud.estado == "pendiente"
-    ).order_by(sqldesc(models.CentroAcopioSolicitud.created_at)).all()
+    solicitudes = db.query(models.CentroSolicitud).filter(
+        models.CentroSolicitud.estado == "pendiente"
+    )
+    if organizacion_id:
+        solicitudes = solicitudes.filter(
+            models.CentroSolicitud.organizacion_id == normalize_organizacion_id(organizacion_id)
+        )
+    solicitudes = solicitudes.order_by(sqldesc(models.CentroSolicitud.created_at)).all()
     return [_schemas.CentroSolicitudResponse.model_validate(s) for s in solicitudes]
 
 
 @router.post("/albergues/solicitudes/{solicitud_id}/aprobar")
 async def aprobar_solicitud_acopio(
     solicitud_id: int,
-    request: Request,
+    organizacion_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
 ):
-    solicitud = db.query(models.CentroAcopioSolicitud).filter(
-        models.CentroAcopioSolicitud.id == solicitud_id
+    solicitud = db.query(models.CentroSolicitud).filter(
+        models.CentroSolicitud.id == solicitud_id
     ).first()
     if not solicitud:
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
-    centro = models.CentroAcopio(
+    organizacion_id_normalizado = normalize_organizacion_id(
+        organizacion_id or solicitud.organizacion_id,
+        default=DEFAULT_ORGANIZACION_ID,
+    )
+    centro = models.Centro(
         nombre=solicitud.nombre,
+        tipo="albergue",
+        organizacion_id=organizacion_id_normalizado,
+        estado="activo",
         zona=solicitud.zona or None,
         direccion=solicitud.direccion or None,
         latitud=solicitud.latitud or None,
@@ -1043,6 +1099,15 @@ async def aprobar_solicitud_acopio(
         before_submit_source=solicitud.before_submit_source or None,
     )
     db.add(centro)
+    db.flush()
+    log_centro_history(
+        db,
+        centro_id=centro.id,
+        tipo_cambio="creacion",
+        valor_nuevo=centro.estado,
+        cambiado_por=_admin,
+        descripcion=f"Centro creado al aprobar la solicitud #{solicitud.id}.",
+    )
     solicitud.estado = "aprobado"
     db.commit()
     db.refresh(centro)
@@ -1056,14 +1121,102 @@ async def rechazar_solicitud_acopio(
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
 ):
-    solicitud = db.query(models.CentroAcopioSolicitud).filter(
-        models.CentroAcopioSolicitud.id == solicitud_id
+    solicitud = db.query(models.CentroSolicitud).filter(
+        models.CentroSolicitud.id == solicitud_id
     ).first()
     if not solicitud:
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
     solicitud.estado = "rechazado"
     db.commit()
     return {"ok": True}
+
+
+@router.post("/albergues/centros/{centro_id}/responsables")
+async def asignar_responsable_centro(
+    centro_id: int,
+    usuario_id: str = Form(...),
+    rol_en_centro: Optional[str] = Form("coordinador"),
+    estado: Optional[str] = Form("activo"),
+    descripcion: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_or_api_key),
+):
+    centro = db.query(models.Centro).filter(models.Centro.id == centro_id).first()
+    if not centro:
+        raise HTTPException(status_code=404, detail="Centro no encontrado")
+
+    usuario_normalizado = (usuario_id or "").strip().lower()
+    if not usuario_normalizado:
+        raise HTTPException(status_code=400, detail="usuario_id es obligatorio")
+
+    try:
+        rol_normalizado = normalize_responsable_rol(rol_en_centro)
+        estado_normalizado = normalize_responsable_estado(estado)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    existente = db.query(models.CentroResponsable).filter(
+        models.CentroResponsable.centro_id == centro_id,
+        models.CentroResponsable.usuario_id == usuario_normalizado,
+        models.CentroResponsable.estado != "removido",
+    ).first()
+    if existente:
+        raise HTTPException(status_code=409, detail="Ese usuario ya tiene una asignación activa o pendiente en este centro")
+
+    responsable = models.CentroResponsable(
+        centro_id=centro_id,
+        usuario_id=usuario_normalizado,
+        rol_en_centro=rol_normalizado,
+        estado=estado_normalizado,
+        asignado_por_id=_admin,
+    )
+    db.add(responsable)
+    db.flush()
+    log_centro_history(
+        db,
+        centro_id=centro_id,
+        tipo_cambio="responsable",
+        valor_nuevo=f"{usuario_normalizado}:{rol_normalizado}:{estado_normalizado}",
+        cambiado_por=_admin,
+        descripcion=descripcion or "Responsable asignado al centro.",
+    )
+    db.commit()
+    db.refresh(responsable)
+    return _schemas.CentroResponsableResponse.model_validate(responsable)
+
+
+@router.post("/albergues/centros/{centro_id}/responsables/{responsable_id}/remover")
+async def remover_responsable_centro(
+    centro_id: int,
+    responsable_id: int,
+    descripcion: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    _admin: str = Depends(require_admin_or_api_key),
+):
+    responsable = db.query(models.CentroResponsable).filter(
+        models.CentroResponsable.id == responsable_id,
+        models.CentroResponsable.centro_id == centro_id,
+    ).first()
+    if not responsable:
+        raise HTTPException(status_code=404, detail="Responsable no encontrado")
+    if responsable.estado == "removido":
+        raise HTTPException(status_code=400, detail="Ese responsable ya fue removido")
+
+    estado_anterior = responsable.estado
+    responsable.estado = "removido"
+    responsable.removido_por_id = _admin
+    responsable.removido_en = utcnow()
+    log_centro_history(
+        db,
+        centro_id=centro_id,
+        tipo_cambio="responsable",
+        valor_anterior=f"{responsable.usuario_id}:{responsable.rol_en_centro}:{estado_anterior}",
+        valor_nuevo=f"{responsable.usuario_id}:{responsable.rol_en_centro}:removido",
+        cambiado_por=_admin,
+        descripcion=descripcion or "Responsable removido del centro.",
+    )
+    db.commit()
+    return {"ok": True, "responsable_id": responsable_id}
 
 
 # --- Notificaciones de personas localizadas ---
@@ -1156,15 +1309,34 @@ async def nueva_orden_acopio(
     except (TypeError, ValueError):
         raise HTTPException(status_code=422, detail="items_ordenados debe ser un JSON válido")
 
-    orden = models.AcopioOrden(
+    centro = db.query(models.Centro).filter(models.Centro.id == centro_id).first()
+    if not centro:
+        raise HTTPException(status_code=404, detail="Centro no encontrado")
+
+    reporte = db.query(models.CentroReporte).filter(models.CentroReporte.id == reporte_id).first()
+    if not reporte:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+    if reporte.centro_id != centro_id:
+        raise HTTPException(status_code=400, detail="El reporte indicado no pertenece a ese centro")
+
+    orden = models.CentroOrden(
         reporte_id=reporte_id,
         centro_id=centro_id,
         items_ordenados=items_ordenados,
         nota_repartidor=nota_repartidor or None,
-        creado_por=creado_por or None,
+        creado_por=creado_por or _admin or None,
         estado="preparando",
     )
     db.add(orden)
+    db.flush()
+    log_centro_history(
+        db,
+        centro_id=centro_id,
+        tipo_cambio="orden_creada",
+        valor_nuevo=f"{orden.id}:preparando",
+        cambiado_por=_admin,
+        descripcion=f"Pedido #{orden.id} creado desde el reporte #{reporte_id}.",
+    )
     db.commit()
     db.refresh(orden)
     return {
@@ -1180,11 +1352,25 @@ async def eliminar_orden_acopio(
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
 ):
-    orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
+    orden = db.query(models.CentroOrden).filter(models.CentroOrden.id == orden_id).first()
     if not orden:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
-    db.query(models.AcopioEntrega).filter(models.AcopioEntrega.orden_id == orden_id).delete()
+    estado_anterior = orden.estado
+    centro_id = orden.centro_id
+    entrega_existente = db.query(models.CentroEntrega).filter(models.CentroEntrega.orden_id == orden_id).first()
+    db.query(models.CentroEntrega).filter(models.CentroEntrega.orden_id == orden_id).delete()
     db.delete(orden)
+    log_centro_history(
+        db,
+        centro_id=centro_id,
+        tipo_cambio="orden_eliminada",
+        valor_anterior=f"{orden_id}:{estado_anterior}",
+        cambiado_por=_admin,
+        descripcion=(
+            f"Pedido #{orden_id} eliminado."
+            + (" También se removió la confirmación de entrega asociada." if entrega_existente else "")
+        ),
+    )
     db.commit()
     return {"ok": True}
 

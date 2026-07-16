@@ -107,10 +107,13 @@ class PacienteMovimiento(Base):
     batch_date_nuevo = Column(String(20), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-class CentroAcopio(Base):
-    __tablename__ = "centros_acopio"
+class Centro(Base):
+    __tablename__ = "centros"
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(200), nullable=False, index=True)
+    tipo = Column(String(30), nullable=False, default="albergue", server_default="albergue")
+    organizacion_id = Column(String(100), nullable=False, default="venezuela-rescate", server_default="venezuela-rescate")
+    estado = Column(String(30), nullable=False, default="activo", server_default="activo")
     direccion = Column(String(500), nullable=True)
     zona = Column(String(100), nullable=True)
     reportado_por = Column(String(200), nullable=True)
@@ -127,8 +130,8 @@ class CentroAcopio(Base):
     before_submit_acknowledged_at = Column(String(40), nullable=True)
     before_submit_source = Column(String(50), nullable=True)
 
-class AcopioReporte(Base):
-    __tablename__ = "acopio_reportes"
+class CentroReporte(Base):
+    __tablename__ = "centro_reportes"
     id = Column(Integer, primary_key=True, index=True)
     centro_id = Column(Integer, nullable=False, index=True)
     # Población
@@ -160,10 +163,11 @@ class PersonaNotificacionLocalizado(Base):
     # valores: "pendiente", "confirmado", "rechazado"
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-class CentroAcopioSolicitud(Base):
-    __tablename__ = "centros_acopio_solicitudes"
+class CentroSolicitud(Base):
+    __tablename__ = "centros_solicitudes"
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(200), nullable=False)
+    organizacion_id = Column(String(100), nullable=False, default="venezuela-rescate", server_default="venezuela-rescate")
     direccion = Column(String(500), nullable=True)
     zona = Column(String(100), nullable=True)
     reportado_por = Column(String(200), nullable=True)
@@ -181,8 +185,31 @@ class CentroAcopioSolicitud(Base):
     before_submit_acknowledged_at = Column(String(40), nullable=True)
     before_submit_source = Column(String(50), nullable=True)
 
-class AcopioOrden(Base):
-    __tablename__ = "acopio_ordenes"
+class CentroResponsable(Base):
+    __tablename__ = "centro_responsables"
+    id = Column(Integer, primary_key=True, index=True)
+    centro_id = Column(Integer, nullable=False, index=True)
+    usuario_id = Column(String(200), nullable=False, index=True)
+    rol_en_centro = Column(String(30), nullable=False, default="coordinador", server_default="coordinador")
+    estado = Column(String(20), nullable=False, default="activo", server_default="activo")
+    asignado_por_id = Column(String(200), nullable=True)
+    asignado_en = Column(DateTime(timezone=True), server_default=func.now())
+    removido_por_id = Column(String(200), nullable=True)
+    removido_en = Column(DateTime(timezone=True), nullable=True)
+
+class CentroHistorial(Base):
+    __tablename__ = "centro_historial"
+    id = Column(Integer, primary_key=True, index=True)
+    centro_id = Column(Integer, nullable=False, index=True)
+    tipo_cambio = Column(String(50), nullable=False)
+    valor_anterior = Column(String(200), nullable=True)
+    valor_nuevo = Column(String(200), nullable=True)
+    cambiado_por = Column(String(200), nullable=True)
+    descripcion = Column(Text, nullable=True)
+    cambiado_en = Column(DateTime(timezone=True), server_default=func.now())
+
+class CentroOrden(Base):
+    __tablename__ = "centro_ordenes"
     id = Column(Integer, primary_key=True, index=True)
     reporte_id = Column(Integer, nullable=False, index=True)
     centro_id = Column(Integer, nullable=False, index=True)
@@ -194,8 +221,8 @@ class AcopioOrden(Base):
     creado_por = Column(String(200), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-class AcopioEntrega(Base):
-    __tablename__ = "acopio_entregas"
+class CentroEntrega(Base):
+    __tablename__ = "centro_entregas"
     id = Column(Integer, primary_key=True, index=True)
     orden_id = Column(Integer, nullable=False, index=True, unique=True)
     nombre_receptor = Column(String(200), nullable=False)
