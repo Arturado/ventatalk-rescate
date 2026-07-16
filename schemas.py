@@ -268,6 +268,7 @@ class NotificacionLocalizadoResponse(BaseModel):
 class CentroSolicitudResponse(BaseModel):
     id: int
     nombre: str
+    organizacion_id: Optional[str] = None
     direccion: Optional[str] = None
     zona: Optional[str] = None
     reportado_por: Optional[str] = None

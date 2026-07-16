@@ -158,6 +158,7 @@ def ensure_optional_columns():
             "before_submit_source": "VARCHAR(50)",
         },
         "centros_acopio_solicitudes": {
+            "organizacion_id": f"VARCHAR(100) DEFAULT '{DEFAULT_ORGANIZACION_ID}'",
             "before_submit_version": "VARCHAR(100)",
             "before_submit_title": "VARCHAR(200)",
             "before_submit_description": "TEXT",
@@ -211,6 +212,14 @@ def ensure_optional_columns():
                 "SET estado = CASE WHEN COALESCE(activo, true) THEN 'activo' ELSE 'inactivo' END "
                 "WHERE estado IS NULL OR estado = ''"
             )
+        )
+        conn.execute(
+            sql_text(
+                "UPDATE centros_acopio_solicitudes "
+                "SET organizacion_id = :organizacion_id "
+                "WHERE organizacion_id IS NULL OR organizacion_id = ''"
+            ),
+            {"organizacion_id": DEFAULT_ORGANIZACION_ID},
         )
 
 

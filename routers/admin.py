@@ -12,7 +12,7 @@ from typing import Optional
 import openpyxl
 
 import bcrypt
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -1048,19 +1048,25 @@ async def eliminar_acopio_reporte(
 @router.get("/albergues/solicitudes")
 async def listar_solicitudes_acopio(
     request: Request,
+    organizacion_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key_read),
 ):
     solicitudes = db.query(models.CentroAcopioSolicitud).filter(
         models.CentroAcopioSolicitud.estado == "pendiente"
-    ).order_by(sqldesc(models.CentroAcopioSolicitud.created_at)).all()
+    )
+    if organizacion_id:
+        solicitudes = solicitudes.filter(
+            models.CentroAcopioSolicitud.organizacion_id == normalize_organizacion_id(organizacion_id)
+        )
+    solicitudes = solicitudes.order_by(sqldesc(models.CentroAcopioSolicitud.created_at)).all()
     return [_schemas.CentroSolicitudResponse.model_validate(s) for s in solicitudes]
 
 
 @router.post("/albergues/solicitudes/{solicitud_id}/aprobar")
 async def aprobar_solicitud_acopio(
     solicitud_id: int,
-    request: Request,
+    organizacion_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
 ):
@@ -1069,10 +1075,14 @@ async def aprobar_solicitud_acopio(
     ).first()
     if not solicitud:
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+    organizacion_id_normalizado = normalize_organizacion_id(
+        organizacion_id or solicitud.organizacion_id,
+        default=DEFAULT_ORGANIZACION_ID,
+    )
     centro = models.CentroAcopio(
         nombre=solicitud.nombre,
         tipo="albergue",
-        organizacion_id=DEFAULT_ORGANIZACION_ID,
+        organizacion_id=organizacion_id_normalizado,
         estado="activo",
         zona=solicitud.zona or None,
         direccion=solicitud.direccion or None,
@@ -1318,6 +1328,15 @@ async def nueva_orden_acopio(
         estado="preparando",
     )
     db.add(orden)
+    db.flush()
+    log_centro_history(
+        db,
+        centro_id=centro_id,
+        tipo_cambio="orden_creada",
+        valor_nuevo=f"{orden.id}:preparando",
+        cambiado_por=_admin,
+        descripcion=f"Pedido #{orden.id} creado desde el reporte #{reporte_id}.",
+    )
     db.commit()
     db.refresh(orden)
     return {
@@ -1336,8 +1355,22 @@ async def eliminar_orden_acopio(
     orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
     if not orden:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
+    estado_anterior = orden.estado
+    centro_id = orden.centro_id
+    entrega_existente = db.query(models.AcopioEntrega).filter(models.AcopioEntrega.orden_id == orden_id).first()
     db.query(models.AcopioEntrega).filter(models.AcopioEntrega.orden_id == orden_id).delete()
     db.delete(orden)
+    log_centro_history(
+        db,
+        centro_id=centro_id,
+        tipo_cambio="orden_eliminada",
+        valor_anterior=f"{orden_id}:{estado_anterior}",
+        cambiado_por=_admin,
+        descripcion=(
+            f"Pedido #{orden_id} eliminado."
+            + (" También se removió la confirmación de entrega asociada." if entrega_existente else "")
+        ),
+    )
     db.commit()
     return {"ok": True}
 

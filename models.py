@@ -167,6 +167,7 @@ class CentroAcopioSolicitud(Base):
     __tablename__ = "centros_acopio_solicitudes"
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(200), nullable=False)
+    organizacion_id = Column(String(100), nullable=False, default="venezuela-rescate", server_default="venezuela-rescate")
     direccion = Column(String(500), nullable=True)
     zona = Column(String(100), nullable=True)
     reportado_por = Column(String(200), nullable=True)

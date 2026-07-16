@@ -413,6 +413,7 @@ def eliminar_reporte(
 async def solicitar_centro(
     request: Request,
     nombre: str = Form(...),
+    organizacion_id: Optional[str] = Form(None),
     direccion: Optional[str] = Form(None),
     zona: Optional[str] = Form(None),
     reportado_por: Optional[str] = Form(None),
@@ -441,6 +442,7 @@ async def solicitar_centro(
 
     solicitud = models.CentroAcopioSolicitud(
         nombre=nombre,
+        organizacion_id=normalize_organizacion_id(organizacion_id),
         direccion=direccion or None,
         zona=zona or None,
         reportado_por=reportado_por or None,
@@ -581,7 +583,17 @@ async def confirmar_entrega(
         notas_entrega=notas_entrega,
     )
     db.add(entrega)
+    estado_anterior = orden.estado
     orden.estado = "entregado"
+    log_centro_history(
+        db,
+        centro_id=orden.centro_id,
+        tipo_cambio="orden_entrega",
+        valor_anterior=f"{orden.id}:{estado_anterior}",
+        valor_nuevo=f"{orden.id}:entregado",
+        cambiado_por=(nombre_receptor or "").strip() or "entrega_publica",
+        descripcion=f"Entrega confirmada vía link público por {nombre_receptor}.",
+    )
     db.commit()
     db.refresh(entrega)
     return entrega
@@ -592,7 +604,7 @@ def cambiar_estado_orden(
     orden_id: int,
     data: OrdenEstadoUpdate,
     db: Session = Depends(get_db),
-    _: str = Depends(verify_api_key),
+    actor_id: str = Depends(verify_api_key),
 ):
     orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
     if not orden:
@@ -600,7 +612,17 @@ def cambiar_estado_orden(
     if data.estado not in ESTADOS_ORDEN_VALIDOS:
         raise HTTPException(status_code=422, detail="Estado inválido")
 
+    estado_anterior = orden.estado
     orden.estado = data.estado
+    log_centro_history(
+        db,
+        centro_id=orden.centro_id,
+        tipo_cambio="orden_estado",
+        valor_anterior=f"{orden.id}:{estado_anterior}",
+        valor_nuevo=f"{orden.id}:{orden.estado}",
+        cambiado_por=actor_id,
+        descripcion=f"Estado del pedido #{orden.id} actualizado.",
+    )
     db.commit()
     db.refresh(orden)
 
@@ -617,12 +639,26 @@ def cambiar_estado_orden(
 def eliminar_orden(
     orden_id: int,
     db: Session = Depends(get_db),
-    _: str = Depends(verify_api_key),
+    actor_id: str = Depends(verify_api_key),
 ):
     orden = db.query(models.AcopioOrden).filter(models.AcopioOrden.id == orden_id).first()
     if not orden:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
+    estado_anterior = orden.estado
+    centro_id = orden.centro_id
+    entrega_existente = db.query(models.AcopioEntrega).filter(models.AcopioEntrega.orden_id == orden_id).first()
     db.query(models.AcopioEntrega).filter(models.AcopioEntrega.orden_id == orden_id).delete()
     db.delete(orden)
+    log_centro_history(
+        db,
+        centro_id=centro_id,
+        tipo_cambio="orden_eliminada",
+        valor_anterior=f"{orden_id}:{estado_anterior}",
+        cambiado_por=actor_id,
+        descripcion=(
+            f"Pedido #{orden_id} eliminado."
+            + (" También se removió la confirmación de entrega asociada." if entrega_existente else "")
+        ),
+    )
     db.commit()
     return {"ok": True}

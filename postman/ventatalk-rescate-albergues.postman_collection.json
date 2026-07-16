@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "c2e1a002-6859-4ae5-a54d-70c8c7190452",
     "name": "ventatalk-rescate — Albergues (admin + api)",
-    "description": "Suite de pruebas para /api/albergues/* y /admin/albergues/*. Cubre auth publica, x-api-key y sesion web humana, e incluye la base de Fase 1: tipo/organizacion/estado del centro, responsables por centro e historial auditado.",
+    "description": "Suite de pruebas para /api/albergues/* y /admin/albergues/*. Cubre auth publica, x-api-key y sesion web humana, e incluye Fase 1 y Fase 3: tipo/organizacion/estado del centro, responsables por centro, activacion de invitaciones, historial auditado y flujo de pedidos.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -231,7 +231,18 @@
                 "aprobar"
               ]
             },
-            "description": "DUAL. Con x-api-key no hace falta CSRF. Para probar via sesion: desactiva x-api-key, activa x-csrf-token (valor capturado en el paso 3 del folder de Auth) y corre el login antes. En Fase 1 este request ahora devuelve tambien el centro_id creado al aprobar."
+            "description": "DUAL. Con x-api-key no hace falta CSRF. Para probar via sesion: desactiva x-api-key, activa x-csrf-token (valor capturado en el paso 3 del folder de Auth) y corre el login antes. En Fase 1 este request ahora devuelve tambien el centro_id creado al aprobar.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "organizacion_id",
+                  "value": "",
+                  "type": "text",
+                  "description": "Opcional. Si lo dejas vacio, el backend toma la organización de la solicitud pendiente o la fuerza desde el scope del admin."
+                }
+              ]
+            }
           },
           "response": [],
           "event": [
@@ -412,13 +423,13 @@
                 "responsables"
               ]
             },
-            "description": "DUAL. Crea una asignacion en CentroResponsable y registra auditoria en CentroHistorial.",
+            "description": "DUAL. Crea una asignacion en CentroResponsable y registra auditoria en CentroHistorial. Usa estado=invitado para probar el flujo de activacion.",
             "body": {
               "mode": "formdata",
               "formdata": [
                 {
                   "key": "usuario_id",
-                  "value": "coordinador.fase1@example.com",
+                  "value": "{{responsable_email}}",
                   "type": "text"
                 },
                 {
@@ -513,15 +524,21 @@
           ]
         },
         {
-          "name": "DELETE Desactivar centro (solo sesion)",
+          "name": "DELETE Desactivar centro",
           "request": {
             "method": "DELETE",
             "header": [
               {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              },
+              {
                 "key": "x-csrf-token",
                 "value": "{{csrf_admin}}",
                 "type": "text",
-                "disabled": false
+                "disabled": true
               }
             ],
             "url": {
@@ -536,7 +553,7 @@
                 "{{centro_id}}"
               ]
             },
-            "description": "OJO: este endpoint NO fue incluido en el soporte dual (no estaba en el alcance pedido). Solo funciona via sesion humana + CSRF; x-api-key aqui da 401."
+            "description": "DUAL. Puedes usar x-api-key o sesion humana + CSRF. Soft-delete: sincroniza el centro a estado inactivo/activo=false."
           },
           "response": [],
           "event": [
@@ -552,15 +569,21 @@
           ]
         },
         {
-          "name": "DELETE Eliminar reporte (solo sesion)",
+          "name": "DELETE Eliminar reporte",
           "request": {
             "method": "DELETE",
             "header": [
               {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              },
+              {
                 "key": "x-csrf-token",
                 "value": "{{csrf_admin}}",
                 "type": "text",
-                "disabled": false
+                "disabled": true
               }
             ],
             "url": {
@@ -575,7 +598,129 @@
                 "{{reporte_id}}"
               ]
             },
-            "description": "OJO: este endpoint NO fue incluido en el soporte dual. Solo funciona via sesion humana + CSRF."
+            "description": "DUAL. Puedes usar x-api-key o sesion humana + CSRF. Hard-delete del reporte."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Crear pedido del albergue",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_admin}}",
+                "type": "text",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/albergues/ordenes/nueva",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "albergues",
+                "ordenes",
+                "nueva"
+              ]
+            },
+            "description": "DUAL. Genera el pedido desde un reporte existente del centro. Deja rastro en CentroHistorial como orden_creada y devuelve link_repartidor.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "reporte_id",
+                  "value": "{{reporte_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "centro_id",
+                  "value": "{{centro_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "items_ordenados",
+                  "value": "[{\"item\":\"Agua potable\",\"cantidad\":10},{\"item\":\"Pañales\",\"cantidad\":5}]",
+                  "type": "text"
+                },
+                {
+                  "key": "nota_repartidor",
+                  "value": "Pedido de prueba creado desde Postman",
+                  "type": "text"
+                },
+                {
+                  "key": "creado_por",
+                  "value": "{{responsable_email}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.orden_id) { pm.collectionVariables.set('orden_id', data.orden_id); }",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE Eliminar pedido del albergue",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_admin}}",
+                "type": "text",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/albergues/ordenes/{{orden_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "albergues",
+                "ordenes",
+                "{{orden_id}}"
+              ]
+            },
+            "description": "DUAL. Hard-delete del pedido. Si existe una confirmacion de entrega asociada, tambien se elimina y queda auditado en CentroHistorial."
           },
           "response": [],
           "event": [
@@ -815,6 +960,12 @@
                   "type": "text"
                 },
                 {
+                  "key": "organizacion_id",
+                  "value": "venezuela-rescate",
+                  "type": "text",
+                  "description": "Opcional. Si lo conoces, deja la organización responsable para que la solicitud quede segmentada desde el inicio."
+                },
+                {
                   "key": "zona",
                   "value": "Caracas - Sucre",
                   "type": "text"
@@ -978,7 +1129,7 @@
                 }
               ]
             },
-            "description": "Fase 1. Devuelve la auditoria del centro: creacion, cambios de campos, asignacion/remocion de responsables, etc."
+            "description": "Fase 1 + Fase 3. Devuelve la auditoria del centro: creacion, cambios de campos, asignacion/remocion de responsables, creacion/cambio/eliminacion de pedidos y confirmacion de entrega."
           },
           "response": [],
           "event": [
@@ -1040,6 +1191,105 @@
           ]
         },
         {
+          "name": "GET Responsabilidades de un usuario",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/responsables?usuario_id={{responsable_email}}&incluir_removidos=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "responsables"
+              ],
+              "query": [
+                {
+                  "key": "usuario_id",
+                  "value": "{{responsable_email}}"
+                },
+                {
+                  "key": "incluir_removidos",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Fase 3. Lista todos los centros asignados a un usuario. Sirve para validar invitaciones activas o pendientes por correo."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Activar responsabilidades invitadas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/albergues/responsables/activar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "albergues",
+                "responsables",
+                "activar"
+              ]
+            },
+            "description": "Fase 3. Cambia de invitado a activo todas las responsabilidades pendientes del usuario e inserta auditoria de aceptacion en CentroHistorial.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "usuario_id",
+                  "value": "{{responsable_email}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Respuesta incluye ok', () => pm.expect(data.ok).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "GET Historial de reportes de un centro",
           "request": {
             "method": "GET",
@@ -1070,7 +1320,7 @@
                 }
               ]
             },
-            "description": ""
+            "description": "Lista reportes historicos del centro. Usa el reporte_id capturado de aqui o del POST publico para luego crear pedidos administrativos."
           },
           "response": [],
           "event": [
@@ -1179,7 +1429,7 @@
                 }
               ]
             },
-            "description": ""
+            "description": "Lista pedidos del dominio de albergues. Puedes filtrar por centro_id, estado o reporte_id. Si devuelve elementos, captura orden_id para probar cambio de estado, borrado o GET publico del link."
           },
           "response": [],
           "event": [
@@ -1229,7 +1479,7 @@
                 "estado"
               ]
             },
-            "description": "estado debe ser uno de: preparando, en_camino, entregado.",
+            "description": "Cambia el estado del pedido. En Fase 3 este cambio tambien deja rastro en CentroHistorial con tipo orden_estado.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"estado\": \"en_camino\"\n}",
@@ -1331,7 +1581,7 @@
                 "{{orden_id}}"
               ]
             },
-            "description": "Destructivo (hard-delete). Correr al final."
+            "description": "Destructivo (hard-delete). En Fase 3 tambien deja auditoria tipo orden_eliminada en CentroHistorial. Correr al final."
           },
           "response": [],
           "event": [
@@ -1425,7 +1675,7 @@
           ]
         }
       ],
-      "description": "Endpoints de /api/albergues/* protegidos con x-api-key. En Fase 1 se suman historial auditado y responsables del centro."
+      "description": "Endpoints de /api/albergues/* protegidos con x-api-key. En Fase 1 se suman historial auditado y responsables del centro; en Fase 3, activacion de invitaciones y auditoria operativa de pedidos."
     }
   ],
   "variable": [
@@ -1482,6 +1732,11 @@
     {
       "key": "responsable_id",
       "value": "",
+      "type": "string"
+    },
+    {
+      "key": "responsable_email",
+      "value": "responsable.fase3@example.com",
       "type": "string"
     }
   ]
