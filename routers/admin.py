@@ -26,7 +26,7 @@ import schemas as _schemas
 from database import SessionLocal, get_db
 from services.images import read_limited, compress_image_async
 from cache import _hospitales_cache, cache_clear
-from dependencies import normalize_actor_id
+from dependencies import ActorOrgContext, get_actor_org_scope, normalize_actor_id
 from routers.casos_ayuda import TRANSICIONES_VALIDAS, NIVELES_VALIDOS, NIVELES_ORDEN, parse_adjuntos
 from services.before_submit import build_before_submit_metadata
 from services.shelter_centers import (
@@ -1051,11 +1051,16 @@ async def listar_solicitudes_acopio(
     organizacion_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key_read),
+    actor_org: Optional[ActorOrgContext] = Depends(get_actor_org_scope),
 ):
     solicitudes = db.query(models.CentroSolicitud).filter(
         models.CentroSolicitud.estado == "pendiente"
     )
-    if organizacion_id:
+    if actor_org and actor_org.is_org_scoped:
+        solicitudes = solicitudes.filter(
+            models.CentroSolicitud.organizacion_id == actor_org.organizacion_id
+        )
+    elif organizacion_id:
         solicitudes = solicitudes.filter(
             models.CentroSolicitud.organizacion_id == normalize_organizacion_id(organizacion_id)
         )
@@ -1069,15 +1074,21 @@ async def aprobar_solicitud_acopio(
     organizacion_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
+    actor_org: Optional[ActorOrgContext] = Depends(get_actor_org_scope),
 ):
     solicitud = db.query(models.CentroSolicitud).filter(
         models.CentroSolicitud.id == solicitud_id
     ).first()
     if not solicitud:
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
-    organizacion_id_normalizado = normalize_organizacion_id(
-        organizacion_id or solicitud.organizacion_id,
-        default=DEFAULT_ORGANIZACION_ID,
+
+    if actor_org and actor_org.is_org_scoped and solicitud.organizacion_id != actor_org.organizacion_id:
+        raise HTTPException(status_code=403, detail="No puedes aprobar una solicitud de otra organización")
+
+    organizacion_id_normalizado = (
+        actor_org.organizacion_id
+        if actor_org and actor_org.is_org_scoped
+        else normalize_organizacion_id(organizacion_id or solicitud.organizacion_id, default=DEFAULT_ORGANIZACION_ID)
     )
     centro = models.Centro(
         nombre=solicitud.nombre,
@@ -1140,10 +1151,14 @@ async def asignar_responsable_centro(
     descripcion: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
+    actor_org: Optional[ActorOrgContext] = Depends(get_actor_org_scope),
 ):
     centro = db.query(models.Centro).filter(models.Centro.id == centro_id).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
+
+    if actor_org and actor_org.is_org_scoped and centro.organizacion_id != actor_org.organizacion_id:
+        raise HTTPException(status_code=403, detail="No puedes asignar responsables en un centro de otra organización")
 
     usuario_normalizado = (usuario_id or "").strip().lower()
     if not usuario_normalizado:
@@ -1192,7 +1207,15 @@ async def remover_responsable_centro(
     descripcion: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     _admin: str = Depends(require_admin_or_api_key),
+    actor_org: Optional[ActorOrgContext] = Depends(get_actor_org_scope),
 ):
+    if actor_org and actor_org.is_org_scoped:
+        centro = db.query(models.Centro).filter(models.Centro.id == centro_id).first()
+        if not centro:
+            raise HTTPException(status_code=404, detail="Centro no encontrado")
+        if centro.organizacion_id != actor_org.organizacion_id:
+            raise HTTPException(status_code=403, detail="No puedes remover responsables de un centro de otra organización")
+
     responsable = db.query(models.CentroResponsable).filter(
         models.CentroResponsable.id == responsable_id,
         models.CentroResponsable.centro_id == centro_id,

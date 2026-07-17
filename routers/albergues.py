@@ -9,7 +9,7 @@ from sqlalchemy import func as sqlfunc, desc
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 from database import get_db
-from dependencies import verify_api_key
+from dependencies import ActorOrgContext, require_verified_actor_org, verify_api_key
 from services.images import read_limited, compress_image_async
 from services.before_submit import build_before_submit_metadata
 from services.shelter_centers import (
@@ -216,11 +216,19 @@ def editar_centro(
     data: schemas.CentroUpdate,
     db: Session = Depends(get_db),
     actor_id: str = Depends(verify_api_key),
+    actor_org: ActorOrgContext = Depends(require_verified_actor_org),
 ):
     centro = db.query(models.Centro).filter(models.Centro.id == centro_id).first()
     if not centro:
         raise HTTPException(status_code=404, detail="Centro no encontrado")
+
+    if actor_org.is_org_scoped and centro.organizacion_id != actor_org.organizacion_id:
+        raise HTTPException(status_code=403, detail="No puedes editar un centro de otra organización")
+
     updates = data.model_dump(exclude_unset=True)
+
+    if "organizacion_id" in updates and actor_org.is_org_scoped and updates["organizacion_id"] != actor_org.organizacion_id:
+        raise HTTPException(status_code=403, detail="No puedes mover un centro a otra organización")
 
     if "tipo" in updates:
         try:
@@ -311,10 +319,14 @@ def listar_responsabilidades_usuario(
     incluir_removidos: bool = Query(False),
     db: Session = Depends(get_db),
     _: str = Depends(verify_api_key),
+    actor_org: ActorOrgContext = Depends(require_verified_actor_org),
 ):
     usuario_normalizado = (usuario_id or "").strip().lower()
     if not usuario_normalizado:
         raise HTTPException(status_code=400, detail="usuario_id es obligatorio")
+
+    if usuario_normalizado != actor_org.email:
+        raise HTTPException(status_code=403, detail="Solo puedes consultar tus propias responsabilidades")
 
     q = db.query(models.CentroResponsable).filter(
         models.CentroResponsable.usuario_id == usuario_normalizado
@@ -329,10 +341,14 @@ def activar_responsabilidades_usuario(
     usuario_id: str = Form(...),
     db: Session = Depends(get_db),
     _: str = Depends(verify_api_key),
+    actor_org: ActorOrgContext = Depends(require_verified_actor_org),
 ):
     usuario_normalizado = (usuario_id or "").strip().lower()
     if not usuario_normalizado:
         raise HTTPException(status_code=400, detail="usuario_id es obligatorio")
+
+    if usuario_normalizado != actor_org.email:
+        raise HTTPException(status_code=403, detail="Solo puedes activar tus propias invitaciones")
 
     responsabilidades = db.query(models.CentroResponsable).filter(
         models.CentroResponsable.usuario_id == usuario_normalizado,
