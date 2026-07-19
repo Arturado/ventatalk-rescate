@@ -13,7 +13,7 @@ def normalize_actor_id(value: Optional[str]) -> Optional[str]:
 
 
 def verify_api_key(
-    x_api_key: str = Header(...),
+    x_api_key: Optional[str] = Header(None),
     x_actor_id: Optional[str] = Header(None),
 ) -> str:
     expected = os.getenv("API_KEY")
