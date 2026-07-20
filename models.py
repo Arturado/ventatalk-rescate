@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String, DateTime, Text, Float
+from sqlalchemy import Boolean, Column, Integer, String, DateTime, Text, Float, UniqueConstraint
 from sqlalchemy.sql import func
 from database import Base
 
@@ -276,3 +276,27 @@ class CasoAyudaHistorial(Base):
     cambiado_por = Column(String(200), nullable=True)
     descripcion = Column(Text, nullable=True)
     cambiado_en = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class OperacionIdempotenteAyuda(Base):
+    __tablename__ = "casos_ayuda_idempotencia"
+    __table_args__ = (
+        UniqueConstraint(
+            "actor_id",
+            "operacion",
+            "idempotency_key",
+            name="uq_casos_ayuda_idempotencia_scope",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    actor_id = Column(String(200), nullable=False, index=True)
+    organizacion_id = Column(String(100), nullable=True, index=True)
+    operacion = Column(String(40), nullable=False, index=True)
+    idempotency_key = Column(String(128), nullable=False)
+    request_hash = Column(String(64), nullable=False)
+    estado = Column(String(20), nullable=False, default="processing", server_default="processing")
+    response_status = Column(Integer, nullable=True)
+    response_body = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)

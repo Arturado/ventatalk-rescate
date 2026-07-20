@@ -4,7 +4,7 @@ import os
 import time
 from typing import Optional
 
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
 
 
 def normalize_actor_id(value: Optional[str]) -> Optional[str]:
@@ -23,6 +23,17 @@ def verify_api_key(
 
 
 ACTOR_ORG_SIGNATURE_MAX_AGE_SECONDS = 60
+SIGNED_ACTOR_ROLES = {
+    "donor",
+    "coordinador",
+    "authority",
+    "admin",
+    "super_admin",
+    "acopio",
+    "acopios",
+    "albergues_refugios",
+}
+CASE_ORGANIZATION_ROLES = {"coordinador", "admin", "super_admin"}
 
 
 class ActorOrgContext:
@@ -41,6 +52,14 @@ class ActorOrgContext:
     @property
     def is_org_scoped(self) -> bool:
         return bool(self.organizacion_id) and self.role != "super_admin"
+
+    @property
+    def can_access_public_cases(self) -> bool:
+        return self.role in SIGNED_ACTOR_ROLES
+
+    @property
+    def can_manage_organization_cases(self) -> bool:
+        return self.role in CASE_ORGANIZATION_ROLES
 
 
 def _actor_org_signature(organizacion_id: str, role: str, email: str, timestamp: str, secret: str) -> str:
@@ -78,7 +97,24 @@ def require_verified_actor_org(
     if not hmac.compare_digest(expected, x_actor_org_signature):
         raise HTTPException(status_code=401, detail="Firma de organización inválida")
 
+    if not email or "@" not in email:
+        raise HTTPException(status_code=401, detail="El actor firmado requiere un correo válido")
+    if role not in SIGNED_ACTOR_ROLES:
+        raise HTTPException(status_code=401, detail="Rol de actor firmado inválido")
+    if role == "donor" and organizacion_id:
+        raise HTTPException(status_code=401, detail="Un donante no puede declarar una organización administrativa")
+    if role == "coordinador" and not organizacion_id:
+        raise HTTPException(status_code=401, detail="Un coordinador requiere una organización")
+
     return ActorOrgContext(organizacion_id=organizacion_id, role=role, email=email)
+
+
+def require_verified_case_organization_actor(
+    actor: ActorOrgContext = Depends(require_verified_actor_org),
+) -> ActorOrgContext:
+    if not actor.can_manage_organization_cases:
+        raise HTTPException(status_code=403, detail="El actor no puede administrar casos de una organización")
+    return actor
 
 
 def get_actor_org_scope(
