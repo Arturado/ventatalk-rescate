@@ -23,6 +23,7 @@ from routers.hospitales import router as hospitales_router, pacientes_router
 from routers.bomberos import router as bomberos_router
 from routers.albergues import router as albergues_router
 from routers.casos_ayuda import router as casos_ayuda_router
+from routers.casos_ayuda_v2 import router as casos_ayuda_v2_router
 from sqlalchemy import text as sql_text
 from sqlalchemy import inspect
 from services.shelter_centers import DEFAULT_ORGANIZACION_ID
@@ -321,6 +322,7 @@ app.include_router(pacientes_router)
 app.include_router(bomberos_router)
 app.include_router(albergues_router)
 app.include_router(casos_ayuda_router)
+app.include_router(casos_ayuda_v2_router)
 app.include_router(admin_router)
 
 

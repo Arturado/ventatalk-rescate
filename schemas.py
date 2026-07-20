@@ -1,5 +1,6 @@
 from pydantic import BaseModel, field_serializer
 from datetime import datetime, timezone, timedelta
+from decimal import Decimal
 from typing import List, Optional
 
 VE_TZ = timezone(timedelta(hours=-4))
@@ -429,5 +430,23 @@ class CasoAyudaHistorialResponse(BaseModel):
         if value and value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
         return value.astimezone(VE_TZ).isoformat() if value else None
+
+    model_config = {"from_attributes": True}
+
+
+class CasoAyudaV2ResumenResponse(BaseModel):
+    id: int
+    public_id: str
+    organizacion_id: str
+    titulo_interno: str
+    categoria: str
+    meta_monto: Decimal
+    meta_moneda: str
+    monto_confirmado: Decimal
+    ayudas_confirmadas: int
+    estado: str
+    prioridad_especial: bool
+    created_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}

@@ -12,10 +12,16 @@ from services.help_cases import (
     CaseNotFoundError,
     CaseReadinessError,
     CaseStateError,
+    HelpCaseDomainError,
+    configure_help_case_publication,
     OrganizationAccessError,
     create_help_case,
+    list_help_cases,
     mark_help_case_ready,
+    register_beneficiary_verification,
+    register_help_case_consent,
     submit_help_case_for_validation,
+    update_help_case,
 )
 
 
@@ -272,3 +278,244 @@ def test_complete_case_becomes_ready_and_records_audit_event():
 
         assert ready.estado == "listo_publicar"
         assert db.query(models.AuditoriaCasoAyuda).filter_by(accion="caso_listo_publicar").count() == 1
+
+
+def test_list_cases_is_always_scoped_to_one_explicit_organization():
+    with TestingSessionLocal() as db:
+        first = create_draft(db, suffix="1", organization_id="org-1")
+        second = create_draft(db, suffix="2", organization_id="org-2")
+
+        scoped = list_help_cases(db, actor=actor(organization_id="org-1"))
+        global_for_org = list_help_cases(
+            db,
+            actor=actor(organization_id="", role="super_admin"),
+            organization_id="org-2",
+        )
+
+        assert [case.id for case in scoped] == [first.id]
+        assert [case.id for case in global_for_org] == [second.id]
+        with pytest.raises(OrganizationAccessError):
+            list_help_cases(db, actor=actor(organization_id="org-1"), organization_id="org-2")
+        with pytest.raises(HelpCaseDomainError):
+            list_help_cases(db, actor=actor(organization_id="", role="super_admin"))
+
+
+def test_list_cases_filters_status_and_applies_bounded_pagination():
+    with TestingSessionLocal() as db:
+        draft = create_draft(db, suffix="1")
+        submitted = create_draft(db, suffix="2")
+        submit_help_case_for_validation(db, case_id=submitted.id, actor=actor())
+
+        results = list_help_cases(
+            db,
+            actor=actor(),
+            status="pendiente_validacion",
+            skip=0,
+            limit=1,
+        )
+
+        assert draft.id != submitted.id
+        assert [case.id for case in results] == [submitted.id]
+
+
+def test_update_case_changes_only_editable_fields_and_audits():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+
+        updated = update_help_case(
+            db,
+            case_id=case.id,
+            actor=actor(),
+            internal_title="Titulo actualizado",
+            category="tratamiento",
+            goal_amount=Decimal("250.50"),
+            goal_currency="EUR",
+            private_story_encrypted="encrypted-story",
+        )
+
+        assert updated.titulo_interno == "Titulo actualizado"
+        assert updated.meta_monto == Decimal("250.50")
+        assert updated.meta_moneda == "EUR"
+        audit = db.query(models.AuditoriaCasoAyuda).filter_by(accion="caso_actualizado").one()
+        assert "encrypted-story" not in audit.metadata_json
+
+
+def test_guided_mutations_reject_another_organization_or_ready_case():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        add_complete_publication_requirements(db, case)
+        submit_help_case_for_validation(db, case_id=case.id, actor=actor())
+        mark_help_case_ready(db, case_id=case.id, actor=actor())
+
+        with pytest.raises(CaseNotFoundError):
+            update_help_case(db, case_id=case.id, actor=actor(organization_id="org-2"), category="otra")
+        with pytest.raises(CaseStateError):
+            update_help_case(db, case_id=case.id, actor=actor(), category="otra")
+
+
+def test_minor_verification_requires_complete_representative_authority():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+
+        with pytest.raises(HelpCaseDomainError):
+            register_beneficiary_verification(
+                db,
+                case_id=case.id,
+                actor=actor(),
+                verification_data_encrypted="encrypted-verification",
+                is_minor=True,
+            )
+
+        beneficiary = register_beneficiary_verification(
+            db,
+            case_id=case.id,
+            actor=actor(),
+            verification_data_encrypted="encrypted-verification",
+            is_minor=True,
+            representative_name_encrypted="encrypted-representative",
+            representative_relationship="madre",
+            representative_authority_verified=True,
+        )
+        assert beneficiary.representante_autoridad_verificada_por == "coordinador@example.com"
+        assert db.query(models.AuditoriaCasoAyuda).filter_by(accion="beneficiario_verificado").count() == 1
+
+
+def test_publication_configuration_is_upserted_with_increasing_version():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        first = configure_help_case_publication(
+            db,
+            case_id=case.id,
+            actor=actor(),
+            public_name="Ana",
+            public_title="Ayuda para tratamiento",
+            public_description="Descripcion inicial",
+            general_location="Caracas",
+            social_networks_json="{}",
+        )
+        second = configure_help_case_publication(
+            db,
+            case_id=case.id,
+            actor=actor(),
+            public_name="Ana",
+            public_title="Ayuda para nuevo tratamiento",
+            public_description="Descripcion actualizada",
+            general_location="Caracas",
+            social_networks_json="{}",
+        )
+
+        assert first.id == second.id
+        assert second.version == 2
+        assert db.query(models.PublicacionCasoAyuda).count() == 1
+        assert db.query(models.AuditoriaCasoAyuda).filter_by(accion="publicacion_configurada").count() == 2
+
+
+def test_consent_evidence_must_be_private_and_belong_to_case():
+    with TestingSessionLocal() as db:
+        first_case = create_draft(db, suffix="1")
+        second_case = create_draft(db, suffix="2")
+        evidence = models.DocumentoCasoAyuda(
+            caso_id=second_case.id,
+            document_key="consent-evidence",
+            version=1,
+            tipo="consentimiento",
+            clasificacion="privado",
+            estado_revision="aprobado",
+            storage_path="private/cases/other/consent.pdf",
+            content_type="application/pdf",
+            size_bytes=1024,
+            checksum_sha256="z" * 64,
+            cargado_por="coordinador@example.com",
+        )
+        db.add(evidence)
+        db.flush()
+
+        with pytest.raises(HelpCaseDomainError):
+            register_help_case_consent(
+                db,
+                case_id=first_case.id,
+                actor=actor(),
+                text_version="mvp1-v1",
+                scope_json="{}",
+                signer_name_encrypted="encrypted-signer",
+                signer_type="beneficiario",
+                evidence_document_id=evidence.id,
+            )
+
+
+def test_new_consent_version_retires_previous_consent_and_audits():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        evidence = models.DocumentoCasoAyuda(
+            caso_id=case.id,
+            document_key="consent-evidence",
+            version=1,
+            tipo="consentimiento",
+            clasificacion="privado",
+            estado_revision="aprobado",
+            storage_path="private/cases/current/consent.pdf",
+            content_type="application/pdf",
+            size_bytes=1024,
+            checksum_sha256="y" * 64,
+            cargado_por="coordinador@example.com",
+        )
+        db.add(evidence)
+        db.flush()
+        first = register_help_case_consent(
+            db,
+            case_id=case.id,
+            actor=actor(),
+            text_version="mvp1-v1",
+            scope_json="{}",
+            signer_name_encrypted="encrypted-signer",
+            signer_type="beneficiario",
+            evidence_document_id=evidence.id,
+        )
+        second = register_help_case_consent(
+            db,
+            case_id=case.id,
+            actor=actor(),
+            text_version="mvp1-v2",
+            scope_json="{}",
+            signer_name_encrypted="encrypted-signer",
+            signer_type="beneficiario",
+            evidence_document_id=evidence.id,
+        )
+
+        assert second.version == 2
+        assert first.vigente is False
+        assert first.retirado_at is not None
+        assert first.retirado_por == "coordinador@example.com"
+        assert db.query(models.AuditoriaCasoAyuda).filter_by(accion="consentimiento_registrado").count() == 2
+
+
+def test_representative_cannot_sign_without_verified_authority():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        evidence = models.DocumentoCasoAyuda(
+            caso_id=case.id,
+            document_key="consent-evidence",
+            version=1,
+            tipo="consentimiento",
+            clasificacion="privado",
+            estado_revision="aprobado",
+            storage_path="private/cases/representative/consent.pdf",
+            content_type="application/pdf",
+            size_bytes=1024,
+            checksum_sha256="x" * 64,
+            cargado_por="coordinador@example.com",
+        )
+        db.add(evidence)
+        db.flush()
+
+        with pytest.raises(HelpCaseDomainError):
+            register_help_case_consent(
+                db,
+                case_id=case.id,
+                actor=actor(),
+                text_version="mvp1-v1",
+                scope_json="{}",
+                signer_name_encrypted="encrypted-representative",
+                signer_type="representante",
+                evidence_document_id=evidence.id,
+            )
