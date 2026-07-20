@@ -1,0 +1,47 @@
+# Pruebas automatizadas de API con Postman
+
+La coleccion `ventatalk-rescate-api-tests.postman_collection.json` prueba flujos completos de:
+
+- salud y rechazo de requests no autenticados;
+- creacion, consulta, edicion, cambio de estado y eliminacion de personas;
+- directorio de hospitales y ciclo de vida de pacientes;
+- publicacion, privacidad, auditoria y eliminacion de casos de ayuda.
+
+El flujo de casos valida especificamente que el contacto rechaza solicitudes sin API key, con API key invalida y sobre casos no publicados antes de comprobar el acceso autorizado y su auditoria.
+
+Cada ejecucion genera un `run_id`, guarda los identificadores de los registros creados y los elimina al terminar el flujo. Debe ejecutarse contra una instancia local o de pruebas, nunca contra produccion.
+
+## Desde Postman
+
+1. Importa `ventatalk-rescate-api-tests.postman_collection.json`.
+2. Importa `ventatalk-rescate-local.postman_environment.json`.
+3. Asigna `api_key` como valor local y sensible en Postman.
+4. Selecciona el ambiente local y ejecuta la coleccion completa con Collection Runner.
+
+No ejecutes requests sueltos que dependan de variables como `persona_id`, `paciente_id` o `caso_id`; esas variables se capturan durante el flujo.
+
+## Desde terminal
+
+Con el backend levantado en `http://localhost:8010`:
+
+```bash
+make postman-test
+```
+
+Para ejecutar solamente el flujo de casos de ayuda:
+
+```bash
+make postman-test-casos-ayuda
+```
+
+El target usa `API_KEY` cargada por el `Makefile` desde `.env`, pero no la escribe en los archivos de Postman. Tambien puedes ejecutar Newman directamente:
+
+```bash
+npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \
+  --env-var base_url=http://localhost:8010 \
+  --env-var api_key="$API_KEY"
+```
+
+## Cobertura excluida
+
+La suite repetible no incluye endpoints que requieren cookie/CSRF de administrador, archivos reales, firma HMAC de organizacion o que crean datos sin una ruta segura de limpieza. Las pruebas de Postman complementan, pero no reemplazan, las pruebas aisladas de `tests/`. La coleccion manual `ventatalk-rescate-albergues.postman_collection.json` permanece disponible para exploracion controlada de albergues.

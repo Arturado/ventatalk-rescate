@@ -9,7 +9,7 @@ PRETTY := python3 -m json.tool
 .DEFAULT_GOAL := help
 
 .PHONY: help up down build restart logs ps health \
-	test-no-auth test-solicitudes test-aprobar test-rechazar test-nuevo-centro test-admin-dual
+	postman-test postman-test-casos-ayuda test-no-auth test-solicitudes test-aprobar test-rechazar test-nuevo-centro test-admin-dual
 
 help: ## Muestra esta ayuda
 	@grep -E '^[a-zA-Z_-]+:.*## ' Makefile | sort | awk 'BEGIN {FS = ":.*## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
@@ -35,3 +35,14 @@ ps: ## Estado de los contenedores
 
 health: ## Chequea GET /health
 	curl -sf $(BASE)/health && echo " OK"
+
+postman-test: ## Ejecuta la suite automatizada de API con Newman
+	@npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \
+		--env-var base_url=$(BASE) \
+		--env-var api_key="$(API_KEY)"
+
+postman-test-casos-ayuda: ## Ejecuta solo la integración de casos de ayuda
+	@npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \
+		--folder "03 - Casos de ayuda" \
+		--env-var base_url=$(BASE) \
+		--env-var api_key="$(API_KEY)"
