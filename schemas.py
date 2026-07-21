@@ -1,7 +1,7 @@
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, Field, field_serializer
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 VE_TZ = timezone(timedelta(hours=-4))
 
@@ -450,3 +450,78 @@ class CasoAyudaV2ResumenResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class CasoAyudaV2CreateRequest(BaseModel):
+    organizacion_id: Optional[str] = None
+    beneficiary_name: str = Field(min_length=2, max_length=500)
+    beneficiary_identity: str = Field(min_length=4, max_length=30)
+    internal_title: str = Field(min_length=3, max_length=250)
+    category: str = Field(min_length=2, max_length=80)
+    goal_amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    goal_currency: Literal["VES", "USD", "EUR"]
+
+
+class CasoAyudaV2UpdateRequest(BaseModel):
+    internal_title: Optional[str] = Field(default=None, min_length=3, max_length=250)
+    category: Optional[str] = Field(default=None, min_length=2, max_length=80)
+    goal_amount: Optional[Decimal] = Field(default=None, gt=0, max_digits=18, decimal_places=2)
+    goal_currency: Optional[Literal["VES", "USD", "EUR"]] = None
+    private_story: Optional[str] = Field(default=None, min_length=2, max_length=10000)
+
+
+class CuentaCasoAyudaResumenResponse(BaseModel):
+    id: int
+    account_key: str
+    version: int
+    tipo_titular: str
+    medio: str
+    moneda: str
+    estado: str
+
+    model_config = {"from_attributes": True}
+
+
+class CasoAyudaV2DetalleResponse(CasoAyudaV2ResumenResponse):
+    readiness_blockers: List[str]
+    accounts: List[CuentaCasoAyudaResumenResponse] = []
+
+
+class BeneficiarioAyudaVerificacionRequest(BaseModel):
+    verification_data: str = Field(min_length=2, max_length=10000)
+    is_minor: bool = False
+    representative_name: Optional[str] = Field(default=None, min_length=2, max_length=500)
+    representative_relationship: Optional[str] = Field(default=None, min_length=2, max_length=100)
+    representative_authority_verified: bool = False
+
+
+class PublicacionCasoAyudaRequest(BaseModel):
+    public_name: str = Field(min_length=1, max_length=200)
+    public_title: str = Field(min_length=3, max_length=250)
+    public_description: str = Field(min_length=10, max_length=10000)
+    general_location: Optional[str] = Field(default=None, max_length=200)
+    social_networks: dict[str, str] = Field(default_factory=dict)
+
+
+class ConsentimientoCasoAyudaCreateRequest(BaseModel):
+    text_version: str = Field(min_length=2, max_length=100)
+    scope: dict[str, bool]
+    signer_name: str = Field(min_length=2, max_length=500)
+    signer_type: Literal["beneficiario", "representante"]
+    evidence_file_name: str = Field(min_length=1, max_length=255)
+    evidence_content_type: Literal["application/pdf", "image/jpeg", "image/png"]
+    evidence_base64: str = Field(min_length=8, max_length=7_100_000)
+
+
+class CuentaCasoAyudaCreateRequest(BaseModel):
+    account_key: str = Field(min_length=2, max_length=100)
+    owner_type: Literal["beneficiario", "organizacion", "tercero", "coordinador"]
+    holder_name: str = Field(min_length=2, max_length=500)
+    beneficiary_relationship: str = Field(min_length=2, max_length=150)
+    medium: Literal["banco_venezolano", "zelle", "banco_internacional"]
+    currency: Literal["VES", "USD", "EUR"]
+    identifier: str = Field(min_length=2, max_length=1000)
+    instructions: Optional[str] = Field(default=None, max_length=5000)
+    justification: Optional[str] = Field(default=None, max_length=5000)
+    responsible_name: str = Field(min_length=2, max_length=500)
+    responsible_email: str = Field(min_length=5, max_length=320)

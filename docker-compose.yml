@@ -9,6 +9,9 @@ services:
     env_file: .env
     environment:
       - TZ=America/Caracas
+      - HELP_DATA_ENCRYPTION_KEY_V1=${HELP_DATA_ENCRYPTION_KEY_V1:-}
+      - HELP_DATA_ACTIVE_KEY_VERSION=${HELP_DATA_ACTIVE_KEY_VERSION:-}
+      - HELP_IDENTITY_HASH_KEY=${HELP_IDENTITY_HASH_KEY:-}
     volumes:
       - ./uploads:/app/uploads
     healthcheck:

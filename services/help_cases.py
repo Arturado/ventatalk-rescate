@@ -810,3 +810,8 @@ def mark_help_case_ready(db: Session, *, case_id: int, actor: ActorOrgContext):
     )
     db.flush()
     return case
+
+
+def get_help_case_detail(db: Session, *, case_id: int, actor: ActorOrgContext):
+    case = _get_managed_case(db, case_id, actor)
+    return case, _readiness_blockers(db, case)

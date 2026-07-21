@@ -1,4 +1,6 @@
 from decimal import Decimal
+import base64
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -9,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from database import Base, get_db
 from dependencies import ActorOrgContext, require_verified_case_organization_actor, verify_api_key
+import models
 from routers.casos_ayuda_v2 import router
 from services.help_cases import create_help_case
 
@@ -53,6 +56,13 @@ def isolated_database():
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture
+def crypto_environment(monkeypatch):
+    monkeypatch.setenv("HELP_DATA_ENCRYPTION_KEY_V1", base64.b64encode(b"e" * 32).decode())
+    monkeypatch.setenv("HELP_DATA_ACTIVE_KEY_VERSION", "v1")
+    monkeypatch.setenv("HELP_IDENTITY_HASH_KEY", base64.b64encode(b"h" * 32).decode())
 
 
 def create_case(*, organization_id, suffix, private_marker):
@@ -117,3 +127,300 @@ def test_list_endpoint_filters_by_closed_status_values():
     assert valid.status_code == 200
     assert len(valid.json()) == 1
     assert invalid.status_code == 422
+
+
+def test_create_endpoint_encrypts_identity_before_persistence(crypto_environment):
+    marker_name = "PLAINTEXT-NAME-MARKER"
+    marker_identity = "V-12.345.678"
+    response = client.post("/api/v2/casos-ayuda", json={
+        "beneficiary_name": marker_name,
+        "beneficiary_identity": marker_identity,
+        "internal_title": "Tratamiento inicial",
+        "category": "medicamentos",
+        "goal_amount": "250.00",
+        "goal_currency": "USD",
+    })
+
+    assert response.status_code == 201
+    assert marker_name not in response.text
+    assert marker_identity not in response.text
+    with TestingSessionLocal() as db:
+        beneficiary = db.query(models.BeneficiarioAyuda).one()
+        assert beneficiary.nombres_apellidos_cifrado.startswith("enc:v1:")
+        assert beneficiary.cedula_cifrada.startswith("enc:v1:")
+        assert marker_name not in beneficiary.nombres_apellidos_cifrado
+        assert marker_identity not in beneficiary.cedula_cifrada
+        assert marker_identity not in beneficiary.cedula_hash
+        audit_payload = " ".join(event.metadata_json for event in db.query(models.AuditoriaCasoAyuda))
+        assert marker_name not in audit_payload
+        assert marker_identity not in audit_payload
+
+
+def test_detail_endpoint_is_safe_and_reports_readiness_blockers(crypto_environment):
+    created = client.post("/api/v2/casos-ayuda", json={
+        "beneficiary_name": "Nombre privado",
+        "beneficiary_identity": "V-12345678",
+        "internal_title": "Tratamiento inicial",
+        "category": "medicamentos",
+        "goal_amount": "250.00",
+        "goal_currency": "USD",
+    }).json()
+
+    response = client.get(f"/api/v2/casos-ayuda/{created['id']}")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == created["id"]
+    assert set(response.json()["readiness_blockers"]) == {
+        "identidad_no_verificada",
+        "publicacion_no_configurada",
+        "consentimiento_vigente_faltante",
+        "cuenta_aprobada_faltante",
+    }
+    assert "Nombre privado" not in response.text
+    assert "cedula" not in response.text.lower()
+
+
+def test_update_endpoint_encrypts_private_story_and_audits_fields(crypto_environment):
+    created = client.post("/api/v2/casos-ayuda", json={
+        "beneficiary_name": "Nombre privado",
+        "beneficiary_identity": "V-87654321",
+        "internal_title": "Tratamiento inicial",
+        "category": "medicamentos",
+        "goal_amount": "250.00",
+        "goal_currency": "USD",
+    }).json()
+    marker = "RELATO-PRIVADO-MARKER"
+
+    response = client.patch(f"/api/v2/casos-ayuda/{created['id']}", json={
+        "internal_title": "Tratamiento actualizado",
+        "private_story": marker,
+    })
+
+    assert response.status_code == 200
+    assert response.json()["titulo_interno"] == "Tratamiento actualizado"
+    assert marker not in response.text
+    with TestingSessionLocal() as db:
+        case = db.get(models.CasoAyudaV2, created["id"])
+        assert case.relato_privado_cifrado.startswith("enc:v1:")
+        assert marker not in case.relato_privado_cifrado
+        audit = db.query(models.AuditoriaCasoAyuda).filter_by(accion="caso_actualizado").one()
+        assert marker not in audit.metadata_json
+
+
+def test_submit_and_ready_endpoints_expose_only_blocker_codes(crypto_environment):
+    created = client.post("/api/v2/casos-ayuda", json={
+        "beneficiary_name": "Nombre privado",
+        "beneficiary_identity": "V-11223344",
+        "internal_title": "Tratamiento inicial",
+        "category": "medicamentos",
+        "goal_amount": "250.00",
+        "goal_currency": "USD",
+    }).json()
+
+    submitted = client.post(f"/api/v2/casos-ayuda/{created['id']}/enviar-validacion")
+    ready = client.post(f"/api/v2/casos-ayuda/{created['id']}/marcar-listo")
+
+    assert submitted.status_code == 200
+    assert submitted.json()["estado"] == "pendiente_validacion"
+    assert ready.status_code == 422
+    assert "blockers" in ready.json()["detail"]
+    assert "Nombre privado" not in ready.text
+
+
+def test_verification_endpoint_encrypts_private_data_and_updates_blockers(crypto_environment):
+    created = client.post("/api/v2/casos-ayuda", json={
+        "beneficiary_name": "Nombre privado",
+        "beneficiary_identity": "V-44556677",
+        "internal_title": "Tratamiento inicial",
+        "category": "medicamentos",
+        "goal_amount": "250.00",
+        "goal_currency": "USD",
+    }).json()
+    verification_marker = "VERIFICACION-PRIVADA-MARKER"
+    representative_marker = "REPRESENTANTE-PRIVADO-MARKER"
+
+    response = client.post(f"/api/v2/casos-ayuda/{created['id']}/verificacion", json={
+        "verification_data": verification_marker,
+        "is_minor": True,
+        "representative_name": representative_marker,
+        "representative_relationship": "madre",
+        "representative_authority_verified": True,
+    })
+
+    assert response.status_code == 200
+    assert "identidad_no_verificada" not in response.json()["readiness_blockers"]
+    assert "autoridad_representante_no_verificada" not in response.json()["readiness_blockers"]
+    assert verification_marker not in response.text
+    assert representative_marker not in response.text
+    with TestingSessionLocal() as db:
+        beneficiary = db.query(models.BeneficiarioAyuda).one()
+        assert beneficiary.datos_verificacion_cifrado.startswith("enc:v1:")
+        assert beneficiary.representante_nombre_cifrado.startswith("enc:v1:")
+        assert verification_marker not in beneficiary.datos_verificacion_cifrado
+        assert representative_marker not in beneficiary.representante_nombre_cifrado
+
+
+def test_publication_endpoint_updates_version_and_readiness(crypto_environment):
+    created = client.post("/api/v2/casos-ayuda", json={
+        "beneficiary_name": "Nombre privado",
+        "beneficiary_identity": "V-55667788",
+        "internal_title": "Tratamiento inicial",
+        "category": "medicamentos",
+        "goal_amount": "250.00",
+        "goal_currency": "USD",
+    }).json()
+    payload = {
+        "public_name": "Ana",
+        "public_title": "Ayuda para tratamiento",
+        "public_description": "Descripción autorizada",
+        "general_location": "Caracas",
+        "social_networks": {"instagram": "@cuenta_autorizada"},
+    }
+
+    first = client.put(f"/api/v2/casos-ayuda/{created['id']}/publicacion", json=payload)
+    second = client.put(f"/api/v2/casos-ayuda/{created['id']}/publicacion", json={
+        **payload,
+        "public_title": "Ayuda para tratamiento actualizado",
+    })
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert "publicacion_no_configurada" not in second.json()["readiness_blockers"]
+    with TestingSessionLocal() as db:
+        publication = db.query(models.PublicacionCasoAyuda).one()
+        assert publication.version == 2
+        assert publication.titulo_publico == "Ayuda para tratamiento actualizado"
+
+
+def test_consent_endpoint_encrypts_private_evidence_and_updates_readiness(crypto_environment, tmp_path, monkeypatch):
+    monkeypatch.setenv("HELP_PRIVATE_UPLOAD_ROOT", str(tmp_path))
+    created = client.post("/api/v2/casos-ayuda", json={
+        "beneficiary_name": "Nombre privado",
+        "beneficiary_identity": "V-66778899",
+        "internal_title": "Tratamiento inicial",
+        "category": "medicamentos",
+        "goal_amount": "250.00",
+        "goal_currency": "USD",
+    }).json()
+    evidence = b"%PDF-1.4 CONSENT-EVIDENCE-PLAINTEXT-MARKER"
+
+    response = client.post(f"/api/v2/casos-ayuda/{created['id']}/consentimiento", json={
+        "text_version": "mvp1-v1",
+        "scope": {"historia": True, "meta": True, "cuentas": True},
+        "signer_name": "Firmante privado",
+        "signer_type": "beneficiario",
+        "evidence_file_name": "consentimiento.pdf",
+        "evidence_content_type": "application/pdf",
+        "evidence_base64": base64.b64encode(evidence).decode(),
+    })
+
+    assert response.status_code == 200
+    assert "consentimiento_vigente_faltante" not in response.json()["readiness_blockers"]
+    assert "evidencia_consentimiento_faltante" not in response.json()["readiness_blockers"]
+    files = list(Path(tmp_path).rglob("*.enc"))
+    assert len(files) == 1
+    assert evidence not in files[0].read_bytes()
+    with TestingSessionLocal() as db:
+        consent = db.query(models.ConsentimientoCasoAyuda).one()
+        document = db.get(models.DocumentoCasoAyuda, consent.evidencia_documento_id)
+        assert document.storage_path.startswith("private/casos-ayuda/")
+        assert document.nombre_original_cifrado.startswith("enc:v1:")
+
+
+def add_current_consent(case_id):
+    with TestingSessionLocal() as db:
+        evidence = models.DocumentoCasoAyuda(
+            caso_id=case_id,
+            document_key=f"consent-{case_id}",
+            version=1,
+            tipo="consentimiento",
+            clasificacion="privado",
+            estado_revision="aprobado",
+            storage_path=f"private/casos-ayuda/{case_id}/consent.enc",
+            content_type="application/pdf",
+            size_bytes=100,
+            checksum_sha256="c" * 64,
+            cargado_por="coordinador@example.com",
+        )
+        db.add(evidence)
+        db.flush()
+        db.add(models.ConsentimientoCasoAyuda(
+            caso_id=case_id,
+            version=1,
+            texto_version="mvp1-v1",
+            alcance_json="{}",
+            firmante_nombre_cifrado="enc:v1:test",
+            evidencia_documento_id=evidence.id,
+            registrado_por="coordinador@example.com",
+        ))
+        db.commit()
+
+
+def test_account_endpoint_encrypts_bank_and_responsible_data(crypto_environment):
+    created = client.post("/api/v2/casos-ayuda", json={
+        "beneficiary_name": "Nombre privado",
+        "beneficiary_identity": "V-77889900",
+        "internal_title": "Tratamiento inicial",
+        "category": "medicamentos",
+        "goal_amount": "250.00",
+        "goal_currency": "USD",
+    }).json()
+    add_current_consent(created["id"])
+    bank_marker = "BANK-ACCOUNT-PLAINTEXT-MARKER"
+    email_marker = "responsable@example.com"
+
+    response = client.post(f"/api/v2/casos-ayuda/{created['id']}/cuentas", json={
+        "account_key": "principal",
+        "owner_type": "beneficiario",
+        "holder_name": "Titular privado",
+        "beneficiary_relationship": "propia",
+        "medium": "banco_venezolano",
+        "currency": "USD",
+        "identifier": bank_marker,
+        "instructions": "Transferencia bancaria",
+        "responsible_name": "Responsable privado",
+        "responsible_email": email_marker,
+    })
+
+    assert response.status_code == 200
+    assert "cuenta_aprobada_faltante" not in response.json()["readiness_blockers"]
+    assert response.json()["accounts"][0]["estado"] == "aprobada"
+    assert bank_marker not in response.text
+    assert email_marker not in response.text
+    with TestingSessionLocal() as db:
+        account = db.query(models.CuentaCasoAyuda).one()
+        assert account.identificador_cifrado.startswith("enc:v1:")
+        assert account.responsable_email_cifrado.startswith("enc:v1:")
+        assert bank_marker not in account.identificador_cifrado
+        assert email_marker not in account.responsable_email_cifrado
+        assert len(account.responsable_email_hash) == 64
+
+
+def test_exceptional_account_is_pending_and_creator_cannot_approve(crypto_environment):
+    created = client.post("/api/v2/casos-ayuda", json={
+        "beneficiary_name": "Nombre privado",
+        "beneficiary_identity": "V-88990011",
+        "internal_title": "Tratamiento inicial",
+        "category": "medicamentos",
+        "goal_amount": "250.00",
+        "goal_currency": "USD",
+    }).json()
+    add_current_consent(created["id"])
+    response = client.post(f"/api/v2/casos-ayuda/{created['id']}/cuentas", json={
+        "account_key": "tercero",
+        "owner_type": "tercero",
+        "holder_name": "Titular privado",
+        "beneficiary_relationship": "familiar",
+        "medium": "zelle",
+        "currency": "USD",
+        "identifier": "private@example.com",
+        "justification": "Cuenta autorizada excepcionalmente",
+        "responsible_name": "Responsable privado",
+        "responsible_email": "responsable@example.com",
+    })
+    account_id = response.json()["accounts"][0]["id"]
+    approval = client.post(f"/api/v2/casos-ayuda/{created['id']}/cuentas/{account_id}/aprobar")
+
+    assert response.status_code == 200
+    assert response.json()["accounts"][0]["estado"] == "pendiente"
+    assert approval.status_code == 400
