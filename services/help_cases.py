@@ -384,7 +384,7 @@ def register_help_case_consent(
     scope_json: str,
     signer_name_encrypted: str,
     signer_type: str,
-    evidence_document_id: int,
+    evidence_document_id: int | None = None,
 ):
     case = _require_editable_case(db, case_id, actor)
     text_version = _require_text(text_version, "text_version")
@@ -401,12 +401,12 @@ def register_help_case_consent(
         and beneficiary.representante_autoridad_verificada_por
     ):
         raise HelpCaseDomainError("El representante no tiene autoridad verificada")
-    evidence = db.get(models.DocumentoCasoAyuda, evidence_document_id)
-    if not evidence or (
+    evidence = db.get(models.DocumentoCasoAyuda, evidence_document_id) if evidence_document_id else None
+    if evidence_document_id and (not evidence or (
         evidence.caso_id != case.id
         or evidence.clasificacion != "privado"
         or evidence.tipo != "consentimiento"
-    ):
+    )):
         raise HelpCaseDomainError("La evidencia debe ser un documento privado del caso")
 
     existing_consents = (
@@ -430,7 +430,7 @@ def register_help_case_consent(
         alcance_json=scope_json,
         firmante_nombre_cifrado=signer_name_encrypted,
         firmante_tipo=signer_type,
-        evidencia_documento_id=evidence.id,
+        evidencia_documento_id=evidence.id if evidence else None,
         registrado_por=actor.email,
     )
     db.add(consent)
@@ -758,9 +758,7 @@ def _readiness_blockers(db, case):
     consent = consents[0] if consents else None
     if consent is None:
         blockers.append("consentimiento_vigente_faltante")
-    elif consent.evidencia_documento_id is None:
-        blockers.append("evidencia_consentimiento_faltante")
-    else:
+    elif consent.evidencia_documento_id is not None:
         evidence = db.get(models.DocumentoCasoAyuda, consent.evidencia_documento_id)
         if evidence is None or evidence.caso_id != case.id or evidence.clasificacion != "privado":
             blockers.append("evidencia_consentimiento_faltante")
@@ -815,3 +813,57 @@ def mark_help_case_ready(db: Session, *, case_id: int, actor: ActorOrgContext):
 def get_help_case_detail(db: Session, *, case_id: int, actor: ActorOrgContext):
     case = _get_managed_case(db, case_id, actor)
     return case, _readiness_blockers(db, case)
+
+
+def publish_help_case(db: Session, *, case_id: int, actor: ActorOrgContext):
+    case = _get_managed_case(db, case_id, actor)
+    if case.estado != "listo_publicar":
+        raise CaseStateError("Solo un caso listo para publicar puede publicarse")
+    blockers = _readiness_blockers(db, case)
+    if blockers:
+        raise CaseReadinessError(blockers)
+    publication = db.query(models.PublicacionCasoAyuda).filter_by(caso_id=case.id).one_or_none()
+    publication.activa = True
+    case.estado = "publicado"
+    case.publicado_at = datetime.now(timezone.utc)
+    _add_audit_event(
+        db,
+        case=case,
+        actor=actor,
+        action="caso_publicado",
+        entity_type="caso",
+        entity_id=case.id,
+        metadata={"version_publica": publication.version},
+    )
+    db.flush()
+    return case
+
+
+def list_public_help_cases(db: Session):
+    return (
+        db.query(models.CasoAyudaV2, models.PublicacionCasoAyuda)
+        .join(models.PublicacionCasoAyuda, models.PublicacionCasoAyuda.caso_id == models.CasoAyudaV2.id)
+        .filter(
+            models.CasoAyudaV2.estado == "publicado",
+            models.PublicacionCasoAyuda.activa.is_(True),
+        )
+        .order_by(
+            models.CasoAyudaV2.prioridad_especial.desc(),
+            models.CasoAyudaV2.ayudas_confirmadas.asc(),
+            models.CasoAyudaV2.created_at.desc(),
+        )
+        .all()
+    )
+
+
+def get_public_help_case(db: Session, *, public_id: str):
+    return (
+        db.query(models.CasoAyudaV2, models.PublicacionCasoAyuda)
+        .join(models.PublicacionCasoAyuda, models.PublicacionCasoAyuda.caso_id == models.CasoAyudaV2.id)
+        .filter(
+            models.CasoAyudaV2.public_id == public_id,
+            models.CasoAyudaV2.estado == "publicado",
+            models.PublicacionCasoAyuda.activa.is_(True),
+        )
+        .one_or_none()
+    )

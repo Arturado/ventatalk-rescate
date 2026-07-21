@@ -20,6 +20,36 @@ Cada ejecucion genera un `run_id`, guarda los identificadores de los registros c
 
 No ejecutes requests sueltos que dependan de variables como `persona_id`, `paciente_id` o `caso_id`; esas variables se capturan durante el flujo.
 
+## Yo te ayudo V2
+
+La colección incluye dos carpetas nuevas:
+
+- `04 - Yo te ayudo V2 publico`: lista y detalle público, sin secretos.
+- `05 - Yo te ayudo V2 protegido`: rechazos sin API key/firma y listado con actor HMAC.
+
+Ejecuta las lecturas públicas:
+
+```bash
+make postman-test-yo-te-ayudo-public
+```
+
+Para el listado protegido, configura temporalmente en tu entorno local:
+
+```bash
+export V2_ORGANIZATION_ID=org-prueba
+export V2_ACTOR_EMAIL=coordinador1@example.test
+```
+
+El target toma `API_KEY` y `ACTOR_SIGNING_SECRET` desde `.env`; no los agregues a la colección ni los compartas. Luego ejecuta:
+
+```bash
+make postman-test-yo-te-ayudo-protegido
+```
+
+La carpeta protegida requiere que el actor HMAC exista en `authorized_users` y que corresponda a `V2_ORGANIZATION_ID`.
+
+La ejecución completa (`make postman-test`) omite automáticamente el request HMAC si `actor_signing_secret` no está disponible; las pruebas públicas y de rechazo sí se ejecutan.
+
 ## Desde terminal
 
 Con el backend levantado en `http://localhost:8010`:

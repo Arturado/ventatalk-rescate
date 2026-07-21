@@ -478,13 +478,55 @@ class CuentaCasoAyudaResumenResponse(BaseModel):
     medio: str
     moneda: str
     estado: str
+    titular_nombre: str
+    relacion_beneficiario: str
+    identificador_enmascarado: str
+    instrucciones: Optional[str] = None
+    justificacion: Optional[str] = None
+    responsable_nombre: str
+    responsable_email_enmascarado: str
 
     model_config = {"from_attributes": True}
+
+
+class PublicacionCasoAyudaResumenResponse(BaseModel):
+    nombre_publico: str
+    titulo_publico: str
+    descripcion_publica: str
+    localidad_general: Optional[str] = None
+    redes_sociales: dict[str, str] = Field(default_factory=dict)
+    version: int
+    activa: bool
+
+
+class VerificacionCasoAyudaResumenResponse(BaseModel):
+    registrada: bool
+    es_menor: bool
+    tiene_representante: bool
+    relacion_representante: Optional[str] = None
+    autoridad_representante_verificada: bool
+
+
+class ConsentimientoCasoAyudaResumenResponse(BaseModel):
+    registrado: bool
+    version: Optional[int] = None
+    tipo_firmante: Optional[str] = None
+    evidencia_adjunta: bool
+    vigente: bool
+
+
+class BeneficiarioCasoAyudaResumenResponse(BaseModel):
+    nombre_legal: str
+    cedula_enmascarada: str
 
 
 class CasoAyudaV2DetalleResponse(CasoAyudaV2ResumenResponse):
     readiness_blockers: List[str]
     accounts: List[CuentaCasoAyudaResumenResponse] = []
+    publicacion: Optional[PublicacionCasoAyudaResumenResponse] = None
+    verificacion: VerificacionCasoAyudaResumenResponse
+    consentimiento: ConsentimientoCasoAyudaResumenResponse
+    beneficiario: BeneficiarioCasoAyudaResumenResponse
 
 
 class BeneficiarioAyudaVerificacionRequest(BaseModel):
@@ -508,9 +550,9 @@ class ConsentimientoCasoAyudaCreateRequest(BaseModel):
     scope: dict[str, bool]
     signer_name: str = Field(min_length=2, max_length=500)
     signer_type: Literal["beneficiario", "representante"]
-    evidence_file_name: str = Field(min_length=1, max_length=255)
-    evidence_content_type: Literal["application/pdf", "image/jpeg", "image/png"]
-    evidence_base64: str = Field(min_length=8, max_length=7_100_000)
+    evidence_file_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    evidence_content_type: Optional[Literal["application/pdf", "image/jpeg", "image/png"]] = None
+    evidence_base64: Optional[str] = Field(default=None, min_length=8, max_length=7_100_000)
 
 
 class CuentaCasoAyudaCreateRequest(BaseModel):
@@ -525,3 +567,21 @@ class CuentaCasoAyudaCreateRequest(BaseModel):
     justification: Optional[str] = Field(default=None, max_length=5000)
     responsible_name: str = Field(min_length=2, max_length=500)
     responsible_email: str = Field(min_length=5, max_length=320)
+
+
+class CasoAyudaPublicoResponse(BaseModel):
+    id: int
+    public_id: str
+    nombre_publico: str
+    titulo_publico: str
+    descripcion_publica: str
+    categoria: str
+    localidad_general: Optional[str] = None
+    meta_monto: Decimal
+    meta_moneda: str
+    monto_confirmado: Decimal
+    ayudas_confirmadas: int
+    estado: str
+    prioridad_especial: bool
+    publicado_at: Optional[datetime] = None
+    documentos: List[dict] = []

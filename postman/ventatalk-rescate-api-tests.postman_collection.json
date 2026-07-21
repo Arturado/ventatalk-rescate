@@ -819,6 +819,161 @@
           ]
         }
       ]
+    },
+    {
+      "name": "04 - Yo te ayudo V2 publico",
+      "item": [
+        {
+          "name": "Listar casos V2 publicados",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v2/public/casos-ayuda"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json();",
+                  "pm.test('devuelve una lista', () => pm.expect(items).to.be.an('array'));",
+                  "items.forEach((item) => {",
+                  "  pm.test('respuesta publica no expone datos sensibles', () => {",
+                  "    pm.expect(item).not.to.have.property('cedula');",
+                  "    pm.expect(item).not.to.have.property('contacto');",
+                  "    pm.expect(item).not.to.have.property('cuentas');",
+                  "    pm.expect(item).not.to.have.property('comprobantes');",
+                  "    pm.expect(JSON.stringify(item)).not.to.include('cifrado');",
+                  "    pm.expect(JSON.stringify(item)).not.to.include('hash');",
+                  "  });",
+                  "});",
+                  "if (items.length > 0) pm.collectionVariables.set('v2_public_id', items[0].public_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar detalle V2 publicado",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v2/public/casos-ayuda/{{v2_public_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const publicId = pm.collectionVariables.get('v2_public_id');",
+                  "if (!publicId) {",
+                  "  pm.test('sin casos publicados: se omite detalle', () => pm.expect(true).to.eql(true));",
+                  "} else {",
+                  "  pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "  const item = pm.response.json();",
+                  "  pm.test('detalle publico seguro', () => {",
+                  "    pm.expect(item.public_id).to.eql(publicId);",
+                  "    pm.expect(item).not.to.have.property('cedula');",
+                  "    pm.expect(item).not.to.have.property('cuentas');",
+                  "    pm.expect(JSON.stringify(item)).not.to.include('enc:v');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 - Yo te ayudo V2 protegido",
+      "item": [
+        {
+          "name": "Rechaza listado V2 sin API key",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v2/casos-ayuda"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rechaza actor V2 sin firma HMAC",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda?organizacion_id={{v2_organization_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 401', () => pm.response.to.have.status(401));",
+                  "pm.test('no permite omitir firma', () => pm.expect(['API Key inválida', 'Falta la firma de organización del actor']).to.include(pm.response.json().detail))"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar V2 con actor HMAC",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" },
+              { "key": "x-actor-org-id", "value": "{{v2_organization_id}}" },
+              { "key": "x-actor-role", "value": "{{v2_actor_role}}" },
+              { "key": "x-actor-email", "value": "{{v2_actor_email}}" },
+              { "key": "x-actor-org-timestamp", "value": "{{v2_actor_timestamp}}" },
+              { "key": "x-actor-org-signature", "value": "{{v2_actor_signature}}" }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda?organizacion_id={{v2_organization_id}}"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const message = `${organization}|${role}|${email}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', CryptoJS.HmacSHA256(message, secret).toString(CryptoJS.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve lista V2', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -829,6 +984,13 @@
     { "key": "persona_id", "value": "" },
     { "key": "hospital_id", "value": "" },
     { "key": "paciente_id", "value": "" },
-    { "key": "caso_id", "value": "" }
+    { "key": "caso_id", "value": "" },
+    { "key": "v2_public_id", "value": "" },
+    { "key": "v2_organization_id", "value": "org-prueba" },
+    { "key": "v2_actor_role", "value": "coordinador" },
+    { "key": "v2_actor_email", "value": "coordinador1@example.test" },
+    { "key": "actor_signing_secret", "value": "" },
+    { "key": "v2_actor_timestamp", "value": "" },
+    { "key": "v2_actor_signature", "value": "" }
   ]
 }

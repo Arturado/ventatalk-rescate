@@ -25,6 +25,7 @@ from services.help_cases import (
     get_help_case_detail,
     list_help_cases,
     mark_help_case_ready,
+    publish_help_case,
     configure_help_case_publication,
     approve_exceptional_account,
     create_account_version,
@@ -53,6 +54,18 @@ CaseState = Literal[
 ]
 
 
+def _mask_restricted_value(value, visible=4):
+    normalized = "".join(character for character in str(value or "") if character.isalnum())
+    return "*" * max(len(normalized) - visible, 3) + normalized[-visible:]
+
+
+def _mask_email(value):
+    local, separator, domain = str(value or "").partition("@")
+    if not separator:
+        return _mask_restricted_value(value)
+    return f"{local[:1]}***@{domain}"
+
+
 def _detail_response(db, case_id, actor):
     case, blockers = get_help_case_detail(db, case_id=case_id, actor=actor)
     accounts = (
@@ -61,10 +74,79 @@ def _detail_response(db, case_id, actor):
         .order_by(models.CuentaCasoAyuda.account_key, models.CuentaCasoAyuda.version.desc())
         .all()
     )
+    publication = db.query(models.PublicacionCasoAyuda).filter_by(caso_id=case.id).one_or_none()
+    publication_data = None
+    if publication:
+        publication_data = {
+            "nombre_publico": publication.nombre_publico,
+            "titulo_publico": publication.titulo_publico,
+            "descripcion_publica": publication.descripcion_publica,
+            "localidad_general": publication.localidad_general,
+            "redes_sociales": json.loads(publication.redes_sociales_json or "{}"),
+            "version": publication.version,
+            "activa": publication.activa,
+        }
+    beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id)
+    cipher = HelpDataCipher.from_environment()
+    beneficiary_name = cipher.decrypt(
+        beneficiary.nombres_apellidos_cifrado,
+        field="beneficiary.name",
+    )
+    beneficiary_identity = cipher.decrypt(
+        beneficiary.cedula_cifrada,
+        field="beneficiary.identity",
+    )
+    identity_digits = "".join(character for character in beneficiary_identity if character.isdigit())
+    masked_identity = "*" * max(len(identity_digits) - 3, 3) + identity_digits[-3:]
+    account_data = []
+    for account in accounts:
+        identifier = cipher.decrypt(account.identificador_cifrado, field="account.identifier")
+        responsible_email = cipher.decrypt(account.responsable_email_cifrado, field="account.responsible_email")
+        account_data.append({
+            "id": account.id,
+            "account_key": account.account_key,
+            "version": account.version,
+            "tipo_titular": account.tipo_titular,
+            "medio": account.medio,
+            "moneda": account.moneda,
+            "estado": account.estado,
+            "titular_nombre": cipher.decrypt(account.titular_nombre_cifrado, field="account.holder_name"),
+            "relacion_beneficiario": account.relacion_beneficiario,
+            "identificador_enmascarado": _mask_email(identifier) if account.medio == "zelle" else _mask_restricted_value(identifier),
+            "instrucciones": cipher.decrypt(account.instrucciones_cifrado, field="account.instructions") if account.instrucciones_cifrado else None,
+            "justificacion": cipher.decrypt(account.justificacion_cifrada, field="account.justification") if account.justificacion_cifrada else None,
+            "responsable_nombre": cipher.decrypt(account.responsable_nombre_cifrado, field="account.responsible_name"),
+            "responsable_email_enmascarado": _mask_email(responsible_email),
+        })
+    consent = (
+        db.query(models.ConsentimientoCasoAyuda)
+        .filter_by(caso_id=case.id)
+        .order_by(models.ConsentimientoCasoAyuda.version.desc())
+        .first()
+    )
     return {
         **schemas.CasoAyudaV2ResumenResponse.model_validate(case).model_dump(),
         "readiness_blockers": blockers,
-        "accounts": accounts,
+        "accounts": account_data,
+        "publicacion": publication_data,
+        "verificacion": {
+            "registrada": bool(beneficiary and beneficiary.datos_verificacion_cifrado),
+            "es_menor": bool(beneficiary and beneficiary.es_menor),
+            "tiene_representante": bool(beneficiary and beneficiary.representante_relacion),
+            "relacion_representante": beneficiary.representante_relacion if beneficiary and beneficiary.representante_relacion else None,
+            "autoridad_representante_verificada": bool(beneficiary and beneficiary.representante_autoridad_verificada_en),
+        },
+        "consentimiento": {
+            "registrado": bool(consent),
+            "version": consent.version if consent else None,
+            "tipo_firmante": consent.firmante_tipo if consent else None,
+            "evidencia_adjunta": bool(consent and consent.evidencia_documento_id),
+            "vigente": bool(consent and consent.vigente),
+        },
+        "beneficiario": {
+            "nombre_legal": beneficiary_name,
+            "cedula_enmascarada": masked_identity,
+        },
     }
 
 
@@ -152,7 +234,7 @@ def get_organization_help_case(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.patch("/{case_id}", response_model=schemas.CasoAyudaV2ResumenResponse)
+@router.patch("/{case_id}", response_model=schemas.CasoAyudaV2DetalleResponse)
 def update_organization_help_case(
     case_id: int,
     payload: schemas.CasoAyudaV2UpdateRequest,
@@ -179,7 +261,7 @@ def update_organization_help_case(
         )
         db.commit()
         db.refresh(case)
-        return case
+        return _detail_response(db, case_id, actor)
     except CaseNotFoundError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -274,22 +356,26 @@ def create_organization_help_case_consent(
     destination = None
     try:
         cipher = HelpDataCipher.from_environment()
-        evidence = decode_private_evidence(payload.evidence_base64, payload.evidence_content_type)
-        encrypted_evidence = cipher.encrypt_bytes(evidence, field="consent.evidence")
-        storage_path, destination = save_encrypted_private_evidence(encrypted_evidence, case_id)
-        document = register_case_document(
-            db,
-            case_id=case_id,
-            actor=actor,
-            document_key=f"consent-evidence-{uuid4().hex}",
-            document_type="consentimiento",
-            classification="privado",
-            storage_path=storage_path,
-            content_type=payload.evidence_content_type,
-            size_bytes=len(evidence),
-            checksum_sha256=hashlib.sha256(evidence).hexdigest(),
-            original_name_encrypted=cipher.encrypt(payload.evidence_file_name, field="document.original_name"),
-        )
+        document = None
+        if payload.evidence_base64:
+            if not payload.evidence_file_name or not payload.evidence_content_type:
+                raise HTTPException(status_code=422, detail="La evidencia requiere nombre y tipo de archivo")
+            evidence = decode_private_evidence(payload.evidence_base64, payload.evidence_content_type)
+            encrypted_evidence = cipher.encrypt_bytes(evidence, field="consent.evidence")
+            storage_path, destination = save_encrypted_private_evidence(encrypted_evidence, case_id)
+            document = register_case_document(
+                db,
+                case_id=case_id,
+                actor=actor,
+                document_key=f"consent-evidence-{uuid4().hex}",
+                document_type="consentimiento",
+                classification="privado",
+                storage_path=storage_path,
+                content_type=payload.evidence_content_type,
+                size_bytes=len(evidence),
+                checksum_sha256=hashlib.sha256(evidence).hexdigest(),
+                original_name_encrypted=cipher.encrypt(payload.evidence_file_name, field="document.original_name"),
+            )
         register_help_case_consent(
             db,
             case_id=case_id,
@@ -298,7 +384,7 @@ def create_organization_help_case_consent(
             scope_json=json.dumps(payload.scope, separators=(",", ":")),
             signer_name_encrypted=cipher.encrypt(payload.signer_name, field="consent.signer_name"),
             signer_type=payload.signer_type,
-            evidence_document_id=document.id,
+            evidence_document_id=document.id if document else None,
         )
         db.commit()
         return _detail_response(db, case_id, actor)
@@ -420,6 +506,29 @@ def ready_organization_help_case(
 ):
     try:
         case = mark_help_case_ready(db, case_id=case_id, actor=actor)
+        db.commit()
+        db.refresh(case)
+        return case
+    except CaseNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CaseReadinessError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail={"message": str(exc), "blockers": exc.blockers}) from exc
+    except CaseStateError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/{case_id}/publicar", response_model=schemas.CasoAyudaV2ResumenResponse)
+def publish_organization_help_case(
+    case_id: int,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        case = publish_help_case(db, case_id=case_id, actor=actor)
         db.commit()
         db.refresh(case)
         return case
