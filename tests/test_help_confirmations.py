@@ -12,9 +12,10 @@ from sqlalchemy.pool import StaticPool
 import models
 from database import Base, get_db
 from dependencies import ActorOrgContext, require_verified_case_organization_actor, verify_api_key
-from routers.casos_ayuda_publicos import router as public_router
-from routers.casos_ayuda_v2 import router
+from routers.casos_ayuda_publicos import get_public_rate_provider, router as public_router
+from routers.casos_ayuda_v2 import get_bcv_rate_provider, router
 from services.help_crypto import HelpDataCipher
+from services.help_exchange import BcvRateUnavailableError, BcvRatesSnapshot
 
 
 engine = create_engine(
@@ -36,6 +37,23 @@ app = FastAPI()
 app.include_router(router)
 app.include_router(public_router)
 actor_override = {"value": None}
+rate_provider_override = {"value": None}
+
+
+class FakeBcvProvider:
+    def __init__(self, rates=None, unavailable=False):
+        self.rates = rates or {"USD": Decimal("36.50"), "EUR": Decimal("40.00")}
+        self.unavailable = unavailable
+        self.current_date = date(2026, 7, 22)
+
+    def fetch_rates(self):
+        if self.unavailable:
+            raise BcvRateUnavailableError("No hay tasa oficial actual")
+        return BcvRatesSnapshot(
+            rate_date=self.current_date,
+            rates=self.rates,
+            evidence={"transport_source": "DolarApi", "upstream_source": "BCV", "requests": {}},
+        )
 
 
 def override_get_db():
@@ -47,9 +65,15 @@ def current_actor():
     return actor_override["value"]
 
 
+def current_rate_provider():
+    return rate_provider_override["value"]
+
+
 app.dependency_overrides[get_db] = override_get_db
 app.dependency_overrides[verify_api_key] = lambda: "coordinador@example.com"
 app.dependency_overrides[require_verified_case_organization_actor] = current_actor
+app.dependency_overrides[get_bcv_rate_provider] = current_rate_provider
+app.dependency_overrides[get_public_rate_provider] = current_rate_provider
 client = TestClient(app)
 
 
@@ -64,6 +88,7 @@ def isolated_database(monkeypatch):
         "responsable@example.com",
         uid="coordinator-uid-1",
     )
+    rate_provider_override["value"] = FakeBcvProvider()
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     yield
@@ -77,6 +102,7 @@ def create_aid(
     goal_amount="100.00",
     reported_amount="25.00",
     reported_currency="USD",
+    goal_currency="USD",
 ):
     cipher = HelpDataCipher.from_environment()
     with TestingSessionLocal() as db:
@@ -96,7 +122,7 @@ def create_aid(
             titulo_interno="Caso interno",
             categoria="medicamentos",
             meta_monto=Decimal(goal_amount),
-            meta_moneda="USD",
+            meta_moneda=goal_currency,
             estado="publicado",
             creado_por="creator@example.com",
         )
@@ -207,6 +233,12 @@ def test_lists_only_safe_organization_scoped_aid_summaries():
         "problem_type": None,
         "problem_detail": None,
         "resolution_reason": None,
+        "received_amount": None,
+        "received_currency": None,
+        "goal_equivalent_amount": None,
+        "applied_rate": None,
+        "rate_source": None,
+        "rate_date": None,
         "created_at": response.json()[0]["created_at"],
     }]
     for private_value in (
@@ -230,6 +262,10 @@ def test_assigned_responsible_confirms_pending_aid_and_progresses_once():
         "received_amount": "25.00",
         "received_currency": "USD",
         "goal_amount_confirmed": "25.00",
+        "goal_equivalent_amount": "25.00",
+        "applied_rate": None,
+        "rate_source": None,
+        "rate_date": None,
         "confirmed_help_count": 1,
         "case_status": "publicado",
         "goal_reached": False,
@@ -420,20 +456,136 @@ def test_reaching_goal_updates_state_and_keeps_case_publicly_visible():
     assert public_detail.json()["estado"] == "meta_alcanzada"
 
 
-def test_cross_currency_confirmation_is_rejected_without_progress():
-    case_id, aid_id, _ = create_aid(reported_currency="EUR")
+def test_missing_cross_currency_rate_moves_aid_to_review_without_progress():
+    rate_provider_override["value"] = FakeBcvProvider(unavailable=True)
+    case_id, aid_id, _ = create_aid(reported_currency="USD", goal_currency="EUR")
 
     response = confirm(
         case_id,
         aid_id,
-        confirmation_payload(received_currency="EUR"),
+        confirmation_payload(received_currency="USD"),
     )
 
-    assert response.status_code == 422
-    assert "moneda" in response.json()["detail"].lower()
+    assert response.status_code == 409
+    assert "tasa" in response.json()["detail"].lower()
     with TestingSessionLocal() as db:
         case = db.get(models.CasoAyudaV2, case_id)
-        assert db.get(models.AyudaMonetaria, aid_id).estado == "pendiente_confirmacion"
+        assert db.get(models.AyudaMonetaria, aid_id).estado == "en_revision"
         assert db.query(models.ConfirmacionAyuda).count() == 0
         assert case.monto_confirmado == Decimal("0.00")
         assert case.ayudas_confirmadas == 0
+
+
+def test_cross_currency_confirmation_uses_bcv_snapshot_and_goal_equivalent():
+    case_id, aid_id, _ = create_aid(reported_currency="USD", goal_currency="EUR")
+
+    response = confirm(case_id, aid_id, confirmation_payload(received_currency="USD"))
+    listed = client.get(f"/api/v2/casos-ayuda/{case_id}/ayudas")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "aid_id": aid_id,
+        "status": "confirmada",
+        "received_amount": "25.00",
+        "received_currency": "USD",
+        "goal_equivalent_amount": "22.81",
+        "goal_amount_confirmed": "22.81",
+        "applied_rate": "0.9125000000",
+        "rate_source": "DOLARAPI-BCV",
+        "rate_date": "2026-07-22",
+        "confirmed_help_count": 1,
+        "case_status": "publicado",
+        "goal_reached": False,
+    }
+    assert listed.status_code == 200
+    assert listed.json()[0]["received_amount"] == "25.00"
+    assert listed.json()[0]["received_currency"] == "USD"
+    assert listed.json()[0]["goal_equivalent_amount"] == "22.81"
+    assert listed.json()[0]["applied_rate"] == "0.9125000000"
+    assert listed.json()[0]["rate_source"] == "DOLARAPI-BCV"
+    assert listed.json()[0]["rate_date"] == "2026-07-22"
+    with TestingSessionLocal() as db:
+        confirmation = db.query(models.ConfirmacionAyuda).one()
+        rate = db.get(models.TasaCambioAyuda, confirmation.tasa_id)
+        case = db.get(models.CasoAyudaV2, case_id)
+        assert confirmation.monto_meta_equivalente == Decimal("22.81")
+        assert rate.moneda_base == "USD"
+        assert rate.moneda_cotizada == "EUR"
+        assert case.monto_confirmado == Decimal("22.81")
+
+
+def test_public_case_exposes_current_referential_equivalents():
+    _case_id, _aid_id, public_id = create_aid(goal_amount="25.00", goal_currency="USD")
+
+    response = client.get(f"/api/v2/public/casos-ayuda/{public_id}/equivalencias")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "case_public_id": public_id,
+        "goal_amount": "25.00",
+        "goal_currency": "USD",
+        "equivalents": {"VES": "912.50", "USD": "25.00", "EUR": "22.81"},
+        "rate_date": "2026-07-22",
+        "transport_source": "DolarApi",
+        "upstream_source": "BCV",
+        "referential": True,
+    }
+
+
+def test_manual_bcv_rate_endpoint_requires_super_admin_and_returns_audited_snapshot():
+    payload = {
+        "rate_date": "2026-07-22",
+        "source_currency": "USD",
+        "target_currency": "EUR",
+        "value": "0.9100000000",
+        "source_reference": "Boletín oficial BCV 2026-07-22",
+        "reason": "Contingencia por indisponibilidad temporal",
+    }
+
+    denied = client.post("/api/v2/casos-ayuda/tasas/manual", json=payload)
+    actor_override["value"] = ActorOrgContext(
+        "", "super_admin", "admin@example.test", uid="super-admin-1"
+    )
+    created = client.post("/api/v2/casos-ayuda/tasas/manual", json=payload)
+
+    assert denied.status_code == 403
+    assert created.status_code == 201
+    assert created.json() == {
+        "id": created.json()["id"],
+        "source": "BCV-MANUAL",
+        "rate_date": "2026-07-22",
+        "source_currency": "USD",
+        "target_currency": "EUR",
+        "value": "0.9100000000",
+        "registered_by": "super-admin-1",
+    }
+
+
+def test_manual_rate_resolves_aid_left_in_review_by_official_source_failure():
+    rate_provider_override["value"] = FakeBcvProvider(unavailable=True)
+    case_id, aid_id, _ = create_aid(reported_currency="USD", goal_currency="EUR")
+    payload = confirmation_payload(received_currency="USD")
+
+    unavailable = confirm(case_id, aid_id, payload)
+    actor_override["value"] = ActorOrgContext(
+        "", "super_admin", "admin@example.test", uid="super-admin-1"
+    )
+    manual_rate = client.post("/api/v2/casos-ayuda/tasas/manual", json={
+        "rate_date": "2026-07-22",
+        "source_currency": "USD",
+        "target_currency": "EUR",
+        "value": "0.9100000000",
+        "source_reference": "Boletín oficial BCV 2026-07-22",
+        "reason": "Contingencia por indisponibilidad temporal",
+    })
+    actor_override["value"] = ActorOrgContext(
+        "org-1", "coordinador", "responsable@example.com", uid="coordinator-uid-1"
+    )
+    confirmed = confirm(case_id, aid_id, payload)
+
+    assert unavailable.status_code == 409
+    assert manual_rate.status_code == 201
+    assert confirmed.status_code == 200
+    assert confirmed.json()["status"] == "confirmada"
+    assert confirmed.json()["goal_equivalent_amount"] == "22.75"
+    assert confirmed.json()["rate_source"] == "BCV-MANUAL"

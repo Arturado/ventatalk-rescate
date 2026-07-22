@@ -9,7 +9,7 @@ PRETTY := python3 -m json.tool
 .DEFAULT_GOAL := help
 
 .PHONY: help up down build restart logs ps health \
-	postman-test postman-test-casos-ayuda postman-test-yo-te-ayudo-public postman-test-yo-te-ayudo-protegido postman-test-yo-te-ayudo-donante test-no-auth test-solicitudes test-aprobar test-rechazar test-nuevo-centro test-admin-dual
+	postman-test postman-test-casos-ayuda postman-test-yo-te-ayudo-public postman-test-yo-te-ayudo-protegido postman-test-yo-te-ayudo-donante postman-test-bcv-manual test-no-auth test-solicitudes test-aprobar test-rechazar test-nuevo-centro test-admin-dual
 
 help: ## Muestra esta ayuda
 	@grep -E '^[a-zA-Z_-]+:.*## ' Makefile | sort | awk 'BEGIN {FS = ":.*## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
@@ -76,3 +76,18 @@ postman-test-yo-te-ayudo-donante: ## Ejecuta reporte y confirmación V2 sobre un
 		--env-var v2_case_id="$(V2_CASE_ID)" \
 		--env-var v2_help_amount="$(V2_HELP_AMOUNT)" \
 		--env-var v2_help_currency="$(V2_HELP_CURRENCY)"
+
+postman-test-bcv-manual: ## Registra una tasa manual de contingencia como super_admin
+	@npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \
+		--folder "07 - Contingencia manual BCV" \
+		--env-var base_url=$(BASE) \
+		--env-var api_key="$(API_KEY)" \
+		--env-var actor_signing_secret="$(ACTOR_SIGNING_SECRET)" \
+		--env-var v2_super_admin_email="$(V2_SUPER_ADMIN_EMAIL)" \
+		--env-var v2_super_admin_uid="$(V2_SUPER_ADMIN_UID)" \
+		--env-var v2_manual_rate_date="$(V2_MANUAL_RATE_DATE)" \
+		--env-var v2_manual_rate_source_currency="$(V2_MANUAL_RATE_SOURCE_CURRENCY)" \
+		--env-var v2_manual_rate_target_currency="$(V2_MANUAL_RATE_TARGET_CURRENCY)" \
+		--env-var v2_manual_rate_value="$(V2_MANUAL_RATE_VALUE)" \
+		--env-var v2_manual_rate_reference="$(V2_MANUAL_RATE_REFERENCE)" \
+		--env-var v2_manual_rate_reason="$(V2_MANUAL_RATE_REASON)"

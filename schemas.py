@@ -588,6 +588,17 @@ class CasoAyudaPublicoResponse(BaseModel):
     documentos: List[dict] = []
 
 
+class EquivalenciasCasoPublicoResponse(BaseModel):
+    case_public_id: str
+    goal_amount: Decimal
+    goal_currency: Literal["VES", "USD", "EUR"]
+    equivalents: dict[Literal["VES", "USD", "EUR"], Decimal]
+    rate_date: date
+    transport_source: str
+    upstream_source: str
+    referential: bool = True
+
+
 class AceptacionTerminosDonanteRequest(BaseModel):
     terms_version: Literal["donor-v1"]
 
@@ -666,6 +677,12 @@ class AyudaMonetariaOrganizacionResumenResponse(BaseModel):
     problem_type: Optional[str] = None
     problem_detail: Optional[str] = None
     resolution_reason: Optional[str] = None
+    received_amount: Optional[Decimal] = None
+    received_currency: Optional[Literal["VES", "USD", "EUR"]] = None
+    goal_equivalent_amount: Optional[Decimal] = None
+    applied_rate: Optional[Decimal] = None
+    rate_source: Optional[str] = None
+    rate_date: Optional[date] = None
     created_at: datetime
 
 
@@ -686,6 +703,25 @@ class RechazoAyudaRequest(BaseModel):
     reason: str = Field(min_length=3, max_length=5000)
 
 
+class TasaBcvManualRequest(BaseModel):
+    rate_date: date
+    source_currency: Literal["VES", "USD", "EUR"]
+    target_currency: Literal["VES", "USD", "EUR"]
+    value: Decimal = Field(gt=0, max_digits=24, decimal_places=10)
+    source_reference: str = Field(min_length=3, max_length=500)
+    reason: str = Field(min_length=3, max_length=5000)
+
+
+class TasaBcvResponse(BaseModel):
+    id: int
+    source: str
+    rate_date: date
+    source_currency: Literal["VES", "USD", "EUR"]
+    target_currency: Literal["VES", "USD", "EUR"]
+    value: Decimal
+    registered_by: str
+
+
 class ConfirmacionAyudaRequest(BaseModel):
     received_amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
     received_currency: Literal["VES", "USD", "EUR"]
@@ -698,7 +734,11 @@ class ConfirmacionAyudaResponse(BaseModel):
     status: str
     received_amount: Decimal
     received_currency: Literal["VES", "USD", "EUR"]
+    goal_equivalent_amount: Decimal
     goal_amount_confirmed: Decimal
+    applied_rate: Optional[Decimal] = None
+    rate_source: Optional[str] = None
+    rate_date: Optional[date] = None
     confirmed_help_count: int
     case_status: str
     goal_reached: bool

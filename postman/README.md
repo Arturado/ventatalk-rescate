@@ -22,11 +22,12 @@ No ejecutes requests sueltos que dependan de variables como `persona_id`, `pacie
 
 ## Yo te ayudo V2
 
-La colección incluye dos carpetas nuevas:
+La colección incluye cuatro carpetas V2:
 
 - `04 - Yo te ayudo V2 publico`: lista y detalle público, sin secretos.
 - `05 - Yo te ayudo V2 protegido`: rechazos sin API key/firma y listado con actor HMAC.
 - `06 - Yo te ayudo V2 donante y confirmacion`: términos, cuentas, reporte idempotente, Mis ayudas, revisión y confirmación.
+- `07 - Contingencia manual BCV`: registro excepcional de una tasa inmutable por `super_admin`.
 
 Ejecuta las lecturas públicas:
 
@@ -62,6 +63,20 @@ V2_CASE_ID=1 \
 V2_HELP_AMOUNT=10.00 \
 V2_HELP_CURRENCY=USD \
 make postman-test-yo-te-ayudo-donante
+```
+
+La contingencia BCV solo debe usarse cuando la fuente oficial no está disponible y se cuenta con evidencia oficial verificable. La tasa afecta globalmente el par y fecha indicados, queda inmutable y no tiene limpieza automática:
+
+```bash
+V2_SUPER_ADMIN_EMAIL=admin.demo@example.test \
+V2_SUPER_ADMIN_UID=admin-demo-uid \
+V2_MANUAL_RATE_DATE=2026-07-20 \
+V2_MANUAL_RATE_SOURCE_CURRENCY=USD \
+V2_MANUAL_RATE_TARGET_CURRENCY=EUR \
+V2_MANUAL_RATE_VALUE=0.9100000000 \
+V2_MANUAL_RATE_REFERENCE="Boletín oficial BCV 2026-07-20" \
+V2_MANUAL_RATE_REASON="Fuente oficial temporalmente inaccesible" \
+make postman-test-bcv-manual
 ```
 
 La colección `ventatalk-rescate-albergues.postman_collection.json` continúa siendo necesaria: sus 33 requests de sesión web, CSRF, centros, responsables, reportes y órdenes aún no están en la colección consolidada. No debe eliminarse hasta automatizar esa cobertura en carpetas independientes y conservar una colección manual reducida para sesión/CSRF.

@@ -7,9 +7,18 @@ import models
 import schemas
 from database import get_db
 from services.help_cases import get_public_help_case, list_public_help_cases, CaseNotFoundError
+from services.help_exchange import (
+    BcvRateUnavailableError,
+    DolarApiBcvRateProvider,
+    get_current_currency_equivalents,
+)
 
 
 router = APIRouter(prefix="/api/v2/public/casos-ayuda", tags=["casos-ayuda-publicos-v2"])
+
+
+def get_public_rate_provider():
+    return DolarApiBcvRateProvider()
 
 
 def _public_response(case, publication, db):
@@ -53,3 +62,33 @@ def get_public_help_case_endpoint(public_id: str, db: Session = Depends(get_db))
         raise HTTPException(status_code=404, detail="Caso no encontrado")
     case, publication = result
     return _public_response(case, publication, db)
+
+
+@router.get("/{public_id}/equivalencias", response_model=schemas.EquivalenciasCasoPublicoResponse)
+def get_public_help_case_equivalents_endpoint(
+    public_id: str,
+    db: Session = Depends(get_db),
+    rate_provider=Depends(get_public_rate_provider),
+):
+    result = get_public_help_case(db, public_id=public_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+    case, _publication = result
+    try:
+        equivalents = get_current_currency_equivalents(
+            amount=case.meta_monto,
+            source_currency=case.meta_moneda,
+            provider=rate_provider,
+        )
+    except BcvRateUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {
+        "case_public_id": case.public_id,
+        "goal_amount": case.meta_monto,
+        "goal_currency": case.meta_moneda,
+        "equivalents": equivalents.amounts,
+        "rate_date": equivalents.rate_date,
+        "transport_source": equivalents.transport_source,
+        "upstream_source": equivalents.upstream_source,
+        "referential": True,
+    }

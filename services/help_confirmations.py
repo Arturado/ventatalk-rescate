@@ -13,10 +13,11 @@ from services.help_cases import (
     _require_organization_access,
 )
 from services.help_crypto import HelpDataCipher
+from services.help_exchange import BcvRateUnavailableError, get_or_create_bcv_conversion
 from services.help_idempotency import hash_idempotency_payload
 
 
-class HelpConfirmationCurrencyError(ValueError):
+class HelpRateUnavailableError(ValueError):
     pass
 
 
@@ -62,7 +63,7 @@ def _problem_record(aid):
     return json.loads(decrypted)
 
 
-def _aid_summary(aid):
+def _aid_summary(aid, confirmation=None, rate_record=None):
     problem = _problem_record(aid)
     return {
         "aid_id": aid.id,
@@ -75,6 +76,12 @@ def _aid_summary(aid):
         "problem_type": aid.problema_tipo,
         "problem_detail": problem.get("detail"),
         "resolution_reason": problem.get("resolution_reason"),
+        "received_amount": confirmation.monto_recibido if confirmation else None,
+        "received_currency": confirmation.moneda_recibida if confirmation else None,
+        "goal_equivalent_amount": confirmation.monto_meta_equivalente if confirmation else None,
+        "applied_rate": rate_record.valor if rate_record else None,
+        "rate_source": rate_record.fuente if rate_record else None,
+        "rate_date": rate_record.fecha_tasa if rate_record else None,
         "created_at": aid.created_at,
     }
 
@@ -85,7 +92,30 @@ def list_help_aids(db: Session, *, case_id: int, actor: ActorOrgContext):
         models.AyudaMonetaria.created_at.desc(),
         models.AyudaMonetaria.id.desc(),
     ).all()
-    return [_aid_summary(aid) for aid in aids]
+    aid_ids = [aid.id for aid in aids]
+    confirmations = (
+        db.query(models.ConfirmacionAyuda)
+        .filter(models.ConfirmacionAyuda.ayuda_id.in_(aid_ids))
+        .all()
+        if aid_ids
+        else []
+    )
+    confirmations_by_aid = {confirmation.ayuda_id: confirmation for confirmation in confirmations}
+    rate_ids = {confirmation.tasa_id for confirmation in confirmations if confirmation.tasa_id}
+    rates_by_id = {
+        rate.id: rate
+        for rate in db.query(models.TasaCambioAyuda).filter(models.TasaCambioAyuda.id.in_(rate_ids)).all()
+    } if rate_ids else {}
+    return [
+        _aid_summary(
+            aid,
+            confirmation=confirmations_by_aid.get(aid.id),
+            rate_record=rates_by_id.get(confirmations_by_aid[aid.id].tasa_id)
+            if aid.id in confirmations_by_aid
+            else None,
+        )
+        for aid in aids
+    ]
 
 
 def mark_help_aid_in_review(db: Session, *, case_id: int, aid_id: int, actor: ActorOrgContext):
@@ -174,14 +204,18 @@ def reject_help_aid(
     return _aid_summary(aid)
 
 
-def _confirmation_response(*, aid, confirmation, case):
+def _confirmation_response(*, aid, confirmation, case, rate_record=None):
     goal_reached = Decimal(case.monto_confirmado) >= Decimal(case.meta_monto)
     return {
         "aid_id": aid.id,
         "status": aid.estado,
         "received_amount": f"{Decimal(confirmation.monto_recibido):.2f}",
         "received_currency": confirmation.moneda_recibida,
+        "goal_equivalent_amount": f"{Decimal(confirmation.monto_meta_equivalente):.2f}",
         "goal_amount_confirmed": f"{Decimal(case.monto_confirmado):.2f}",
+        "applied_rate": f"{Decimal(rate_record.valor):.10f}" if rate_record else None,
+        "rate_source": rate_record.fuente if rate_record else None,
+        "rate_date": rate_record.fecha_tasa.isoformat() if rate_record else None,
         "confirmed_help_count": case.ayudas_confirmadas,
         "case_status": case.estado,
         "goal_reached": goal_reached,
@@ -198,6 +232,7 @@ def confirm_help_aid(
     received_amount,
     received_currency: str,
     effective_date,
+    rate_provider,
     comment=None,
 ):
     amount = Decimal(received_amount)
@@ -230,10 +265,31 @@ def confirm_help_aid(
     if aid.estado not in {"pendiente_confirmacion", "en_revision"}:
         raise CaseStateError("La ayuda no esta pendiente ni en revision")
 
-    if aid.moneda_reportada != case.meta_moneda or currency != case.meta_moneda:
-        raise HelpConfirmationCurrencyError(
-            "La moneda reportada y recibida debe coincidir con la moneda de la meta"
+    try:
+        conversion = get_or_create_bcv_conversion(
+            db,
+            amount=amount,
+            source_currency=currency,
+            target_currency=case.meta_moneda,
+            provider=rate_provider,
+            current_date=getattr(rate_provider, "current_date", None),
         )
+    except BcvRateUnavailableError as exc:
+        if aid.estado != "en_revision":
+            previous_status = aid.estado
+            aid.estado = "en_revision"
+            _add_audit_event(
+                db,
+                case=case,
+                actor=actor,
+                action="ayuda_en_revision",
+                entity_type="ayuda",
+                entity_id=aid.id,
+                reason_code="tasa_bcv_no_disponible",
+                metadata={"estado_anterior": previous_status, "estado_nuevo": "en_revision"},
+            )
+            db.flush()
+        raise HelpRateUnavailableError(str(exc)) from exc
 
     operation = models.OperacionIdempotenteAyuda(
         actor_id=actor_id,
@@ -250,7 +306,8 @@ def confirm_help_aid(
         idempotency_id=operation.id,
         monto_recibido=amount,
         moneda_recibida=currency,
-        monto_meta_equivalente=amount,
+        monto_meta_equivalente=conversion.equivalent_amount,
+        tasa_id=conversion.rate_record.id if conversion.rate_record else None,
         confirmado_por=actor_id,
         fecha_transferencia_confirmada=effective_date,
         comentario_cifrado=(
@@ -261,14 +318,19 @@ def confirm_help_aid(
     )
     db.add(confirmation)
     aid.estado = "confirmada"
-    case.monto_confirmado = Decimal(case.monto_confirmado) + amount
+    case.monto_confirmado = Decimal(case.monto_confirmado) + conversion.equivalent_amount
     case.ayudas_confirmadas = int(case.ayudas_confirmadas) + 1
     goal_reached = Decimal(case.monto_confirmado) >= Decimal(case.meta_monto)
     if goal_reached:
         case.estado = "meta_alcanzada"
     db.flush()
 
-    response = _confirmation_response(aid=aid, confirmation=confirmation, case=case)
+    response = _confirmation_response(
+        aid=aid,
+        confirmation=confirmation,
+        case=case,
+        rate_record=conversion.rate_record,
+    )
     operation.estado = "completed"
     operation.response_status = 200
     operation.response_body = json.dumps(response, ensure_ascii=False, separators=(",", ":"))

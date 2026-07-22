@@ -38,18 +38,64 @@ from services.help_cases import (
 from services.help_crypto import HelpDataCipher, HelpDataCryptoError
 from services.help_files import decode_private_evidence, save_encrypted_private_evidence
 from services.help_confirmations import (
-    HelpConfirmationCurrencyError,
     HelpConfirmationIdempotencyError,
+    HelpRateUnavailableError,
     confirm_help_aid,
     list_help_aids,
     mark_help_aid_in_review,
     reject_help_aid,
     report_help_aid_problem,
 )
+from services.help_exchange import (
+    ManualBcvRateAccessError,
+    ManualBcvRateConflictError,
+    DolarApiBcvRateProvider,
+    register_manual_bcv_rate,
+)
 from services.help_idempotency import normalize_idempotency_key
 
 
 router = APIRouter(prefix="/api/v2/casos-ayuda", tags=["casos-ayuda-v2"])
+
+
+def get_bcv_rate_provider():
+    return DolarApiBcvRateProvider()
+
+
+@router.post("/tasas/manual", response_model=schemas.TasaBcvResponse, status_code=201)
+def create_manual_bcv_rate(
+    payload: schemas.TasaBcvManualRequest,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        rate = register_manual_bcv_rate(
+            db,
+            actor=actor,
+            rate_date=payload.rate_date,
+            source_currency=payload.source_currency,
+            target_currency=payload.target_currency,
+            value=payload.value,
+            source_reference=payload.source_reference,
+            reason=payload.reason,
+        )
+        db.commit()
+        return {
+            "id": rate.id,
+            "source": rate.fuente,
+            "rate_date": rate.fecha_tasa,
+            "source_currency": rate.moneda_base,
+            "target_currency": rate.moneda_cotizada,
+            "value": rate.valor,
+            "registered_by": rate.registrado_manualmente_por,
+        }
+    except ManualBcvRateAccessError as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ManualBcvRateConflictError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 CaseState = Literal[
     "borrador",
     "pendiente_validacion",
@@ -176,6 +222,7 @@ def confirm_organization_help_aid(
     aid_id: int,
     payload: schemas.ConfirmacionAyudaRequest,
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    rate_provider=Depends(get_bcv_rate_provider),
     db: Session = Depends(get_db),
     _api_actor: str = Depends(verify_api_key),
     actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
@@ -191,6 +238,7 @@ def confirm_organization_help_aid(
             received_amount=payload.received_amount,
             received_currency=payload.received_currency,
             effective_date=payload.effective_date,
+            rate_provider=rate_provider,
             comment=payload.comment,
         )
         if not replayed:
@@ -199,9 +247,9 @@ def confirm_organization_help_aid(
     except CaseNotFoundError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except HelpConfirmationCurrencyError as exc:
-        db.rollback()
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except HelpRateUnavailableError as exc:
+        db.commit()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (CaseStateError, HelpConfirmationIdempotencyError) as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc

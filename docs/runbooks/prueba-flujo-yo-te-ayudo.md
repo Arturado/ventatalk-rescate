@@ -79,6 +79,7 @@ Resultado esperado:
 - Estado `pendiente_confirmacion`.
 - `/mis-ayudas` muestra solo la ayuda del donante autenticado.
 - El progreso público continúa en `0.00 USD` hasta confirmar.
+- El detalle público muestra la meta equivalente en `VES`, `USD` y `EUR` como referencia actual, con fecha y atribución BCV mediante DolarApi.
 - Reintentar el mismo envío no crea otra ayuda.
 
 ## Confirmar como coordinador
@@ -101,7 +102,9 @@ Resultado esperado:
 
 Para probar revisión, crear otra ayuda y pulsar `Pasar a revisión` antes de confirmar. Para probar meta alcanzada, reportar y confirmar una segunda ayuda por `15.00 USD`. El caso debe pasar a `meta_alcanzada` y continuar visible públicamente con `25.00 USD` confirmados.
 
-Una confirmación en EUR o VES debe rechazarse sin modificar el progreso, porque la conversión BCV todavía no está implementada.
+Una confirmación en una moneda distinta a la meta consulta las cotizaciones actuales de `https://ve.dolarapi.com/v1/dolares/oficial` y `https://ve.dolarapi.com/v1/euros/oficial`. Solo acepta respuestas con `fuente=oficial`, atribuye la tasa al BCV y fija un snapshot inmutable con URL y hash de evidencia. La fecha efectiva de transferencia se conserva como dato operativo, pero no selecciona una tasa histórica. Si DolarApi no responde o devuelve datos inválidos, la ayuda queda `en_revision` y el progreso no cambia. Una confirmación exitosa muestra monto recibido, equivalente aplicado, tasa, fuente y fecha de cotización.
+
+La contingencia manual solo está disponible para `super_admin`. Requiere la fecha actual de cotización, par de monedas, valor, referencia oficial y motivo. La tasa queda marcada `BCV-MANUAL`, es global e inmutable y registra actor y auditoría; después puede reintentarse la confirmación de la ayuda en revisión.
 
 ## Probar problema y rechazo
 
