@@ -13,15 +13,34 @@ from dependencies import (
 SECRET = "test-signing-secret"
 
 
-def signed_context(monkeypatch, *, organization_id="", role="donor", email="actor@example.com", timestamp=None):
+def signed_context(
+    monkeypatch,
+    *,
+    organization_id="",
+    role="donor",
+    email="actor@example.com",
+    uid="firebase-uid-123",
+    ip_hash="a" * 64,
+    timestamp=None,
+):
     monkeypatch.setenv("ACTOR_SIGNING_SECRET", SECRET)
     signed_at = str(timestamp or int(time.time()))
     normalized_email = email.strip().lower()
-    signature = _actor_org_signature(organization_id, role, normalized_email, signed_at, SECRET)
+    signature = _actor_org_signature(
+        organization_id,
+        role,
+        normalized_email,
+        uid,
+        ip_hash,
+        signed_at,
+        SECRET,
+    )
     return require_verified_actor_org(
         x_actor_org_id=organization_id,
         x_actor_role=role,
         x_actor_email=email,
+        x_actor_uid=uid,
+        x_actor_ip_hash=ip_hash,
         x_actor_org_signature=signature,
         x_actor_org_timestamp=signed_at,
     )
@@ -33,6 +52,8 @@ def test_accepts_donor_without_organization_for_public_case_operations(monkeypat
     assert actor.email == "donante@example.com"
     assert actor.role == "donor"
     assert actor.organizacion_id == ""
+    assert actor.uid == "firebase-uid-123"
+    assert actor.ip_hash == "a" * 64
     assert actor.can_access_public_cases is True
     assert actor.can_manage_organization_cases is False
 
@@ -86,6 +107,8 @@ def test_rejects_invalid_signature(monkeypatch):
             x_actor_org_id="",
             x_actor_role="donor",
             x_actor_email="actor@example.com",
+            x_actor_uid="firebase-uid-123",
+            x_actor_ip_hash="a" * 64,
             x_actor_org_signature="invalid",
             x_actor_org_timestamp=str(int(time.time())),
         )

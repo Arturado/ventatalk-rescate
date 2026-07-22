@@ -745,6 +745,44 @@ class AlcanceCuentaAccesoTemporal(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class AceptacionTerminosDonante(Base):
+    __tablename__ = "casos_ayuda_terminos_donantes"
+    __table_args__ = (
+        UniqueConstraint("actor_uid", "terms_version", name="uq_casos_ayuda_terminos_actor_version"),
+        CheckConstraint("actor_uid <> ''", name="ck_casos_ayuda_terminos_actor_uid"),
+        CheckConstraint("length(ip_hash) = 64", name="ck_casos_ayuda_terminos_ip_hash"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    actor_uid = Column(String(128), nullable=False, index=True)
+    terms_version = Column(String(100), nullable=False)
+    ip_hash = Column(String(64), nullable=False, index=True)
+    accepted_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AccesoCuentaDonante(Base):
+    __tablename__ = "casos_ayuda_accesos_cuentas_donantes"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["cuenta_id", "caso_id", "cuenta_version"],
+            ["casos_ayuda_cuentas.id", "casos_ayuda_cuentas.caso_id", "casos_ayuda_cuentas.version"],
+            name="fk_casos_ayuda_acceso_donante_cuenta_version",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("actor_uid <> ''", name="ck_casos_ayuda_acceso_donante_actor_uid"),
+        CheckConstraint("length(ip_hash) = 64", name="ck_casos_ayuda_acceso_donante_ip_hash"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    actor_uid = Column(String(128), nullable=False, index=True)
+    ip_hash = Column(String(64), nullable=False, index=True)
+    caso_id = Column(Integer, ForeignKey("casos_ayuda_v2.id", ondelete="RESTRICT"), nullable=False, index=True)
+    cuenta_id = Column(Integer, nullable=False, index=True)
+    cuenta_version = Column(Integer, nullable=False)
+    terms_version = Column(String(100), nullable=False)
+    accessed_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
 class AuditoriaCasoAyuda(Base):
     __tablename__ = "casos_ayuda_auditoria"
     __table_args__ = (

@@ -938,6 +938,8 @@
               { "key": "x-actor-org-id", "value": "{{v2_organization_id}}" },
               { "key": "x-actor-role", "value": "{{v2_actor_role}}" },
               { "key": "x-actor-email", "value": "{{v2_actor_email}}" },
+              { "key": "x-actor-uid", "value": "" },
+              { "key": "x-actor-ip-hash", "value": "" },
               { "key": "x-actor-org-timestamp", "value": "{{v2_actor_timestamp}}" },
               { "key": "x-actor-org-signature", "value": "{{v2_actor_signature}}" }
             ],
@@ -955,7 +957,7 @@
                   "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
                   "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
                   "if (!secret) { pm.execution.skipRequest(); return; }",
-                  "const message = `${organization}|${role}|${email}|${timestamp}`;",
+                  "const message = `${organization}|${role}|${email}|||${timestamp}`;",
                   "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
                   "pm.collectionVariables.set('v2_actor_signature', CryptoJS.HmacSHA256(message, secret).toString(CryptoJS.enc.Hex));"
                 ]

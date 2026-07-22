@@ -44,10 +44,12 @@ class ActorOrgContext:
     que el llamador podría manipular libremente.
     """
 
-    def __init__(self, organizacion_id: str, role: str, email: str):
+    def __init__(self, organizacion_id: str, role: str, email: str, uid: str = "", ip_hash: str = ""):
         self.organizacion_id = organizacion_id
         self.role = role
         self.email = email
+        self.uid = uid
+        self.ip_hash = ip_hash
 
     @property
     def is_org_scoped(self) -> bool:
@@ -62,8 +64,16 @@ class ActorOrgContext:
         return self.role in CASE_ORGANIZATION_ROLES
 
 
-def _actor_org_signature(organizacion_id: str, role: str, email: str, timestamp: str, secret: str) -> str:
-    message = f"{organizacion_id}|{role}|{email}|{timestamp}".encode()
+def _actor_org_signature(
+    organizacion_id: str,
+    role: str,
+    email: str,
+    uid: str,
+    ip_hash: str,
+    timestamp: str,
+    secret: str,
+) -> str:
+    message = f"{organizacion_id}|{role}|{email}|{uid}|{ip_hash}|{timestamp}".encode()
     return hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
 
 
@@ -71,6 +81,8 @@ def require_verified_actor_org(
     x_actor_org_id: Optional[str] = Header(None),
     x_actor_role: Optional[str] = Header(None),
     x_actor_email: Optional[str] = Header(None),
+    x_actor_uid: Optional[str] = Header(None),
+    x_actor_ip_hash: Optional[str] = Header(None),
     x_actor_org_signature: Optional[str] = Header(None),
     x_actor_org_timestamp: Optional[str] = Header(None),
 ) -> ActorOrgContext:
@@ -92,7 +104,17 @@ def require_verified_actor_org(
     organizacion_id = (x_actor_org_id or "").strip()
     role = (x_actor_role or "").strip()
     email = (x_actor_email or "").strip().lower()
-    expected = _actor_org_signature(organizacion_id, role, email, x_actor_org_timestamp, secret)
+    uid = (x_actor_uid or "").strip()
+    ip_hash = (x_actor_ip_hash or "").strip().lower()
+    expected = _actor_org_signature(
+        organizacion_id,
+        role,
+        email,
+        uid,
+        ip_hash,
+        x_actor_org_timestamp,
+        secret,
+    )
 
     if not hmac.compare_digest(expected, x_actor_org_signature):
         raise HTTPException(status_code=401, detail="Firma de organización inválida")
@@ -105,8 +127,18 @@ def require_verified_actor_org(
         raise HTTPException(status_code=401, detail="Un donante no puede declarar una organización administrativa")
     if role == "coordinador" and not organizacion_id:
         raise HTTPException(status_code=401, detail="Un coordinador requiere una organización")
+    if len(uid) > 128:
+        raise HTTPException(status_code=401, detail="UID de actor firmado inválido")
+    if ip_hash and (len(ip_hash) != 64 or any(character not in "0123456789abcdef" for character in ip_hash)):
+        raise HTTPException(status_code=401, detail="Huella IP de actor firmado inválida")
 
-    return ActorOrgContext(organizacion_id=organizacion_id, role=role, email=email)
+    return ActorOrgContext(
+        organizacion_id=organizacion_id,
+        role=role,
+        email=email,
+        uid=uid,
+        ip_hash=ip_hash,
+    )
 
 
 def require_verified_case_organization_actor(
@@ -122,6 +154,8 @@ def get_actor_org_scope(
     x_actor_org_id: Optional[str] = Header(None),
     x_actor_role: Optional[str] = Header(None),
     x_actor_email: Optional[str] = Header(None),
+    x_actor_uid: Optional[str] = Header(None),
+    x_actor_ip_hash: Optional[str] = Header(None),
     x_actor_org_signature: Optional[str] = Header(None),
     x_actor_org_timestamp: Optional[str] = Header(None),
 ) -> Optional[ActorOrgContext]:
@@ -139,6 +173,8 @@ def get_actor_org_scope(
         x_actor_org_id=x_actor_org_id,
         x_actor_role=x_actor_role,
         x_actor_email=x_actor_email,
+        x_actor_uid=x_actor_uid,
+        x_actor_ip_hash=x_actor_ip_hash,
         x_actor_org_signature=x_actor_org_signature,
         x_actor_org_timestamp=x_actor_org_timestamp,
     )

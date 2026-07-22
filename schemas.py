@@ -585,3 +585,29 @@ class CasoAyudaPublicoResponse(BaseModel):
     prioridad_especial: bool
     publicado_at: Optional[datetime] = None
     documentos: List[dict] = []
+
+
+class AceptacionTerminosDonanteRequest(BaseModel):
+    terms_version: Literal["donor-v1"]
+
+
+class EstadoTerminosDonanteResponse(BaseModel):
+    required_version: str
+    accepted: bool
+    accepted_at: Optional[datetime] = None
+
+
+class CuentaDonanteResponse(BaseModel):
+    id: int
+    version: int
+    holder_name: str
+    beneficiary_relationship: str
+    medium: str
+    currency: str
+    identifier: str
+    instructions: Optional[str] = None
+
+
+class CuentasCasoDonanteResponse(BaseModel):
+    case_public_id: str
+    accounts: List[CuentaDonanteResponse]
