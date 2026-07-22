@@ -26,6 +26,7 @@ La colección incluye dos carpetas nuevas:
 
 - `04 - Yo te ayudo V2 publico`: lista y detalle público, sin secretos.
 - `05 - Yo te ayudo V2 protegido`: rechazos sin API key/firma y listado con actor HMAC.
+- `06 - Yo te ayudo V2 donante y confirmacion`: términos, cuentas, reporte idempotente, Mis ayudas, revisión y confirmación.
 
 Ejecuta las lecturas públicas:
 
@@ -47,6 +48,23 @@ make postman-test-yo-te-ayudo-protegido
 ```
 
 La carpeta protegida requiere que el actor HMAC exista en `authorized_users` y que corresponda a `V2_ORGANIZATION_ID`.
+
+El flujo donante requiere un caso V2 ya publicado con una cuenta aprobada. Se ejecuta con variables explícitas para evitar crear o confirmar datos por accidente:
+
+```bash
+V2_ORGANIZATION_ID=org-demo \
+V2_ACTOR_EMAIL=coordinador.demo@example.test \
+V2_ACTOR_UID=coordinador-demo-uid \
+V2_DONOR_EMAIL=donante.demo@example.test \
+V2_DONOR_UID=donante-demo-uid \
+V2_PUBLIC_ID=ayuda-... \
+V2_CASE_ID=1 \
+V2_HELP_AMOUNT=10.00 \
+V2_HELP_CURRENCY=USD \
+make postman-test-yo-te-ayudo-donante
+```
+
+La colección `ventatalk-rescate-albergues.postman_collection.json` continúa siendo necesaria: sus 33 requests de sesión web, CSRF, centros, responsables, reportes y órdenes aún no están en la colección consolidada. No debe eliminarse hasta automatizar esa cobertura en carpetas independientes y conservar una colección manual reducida para sesión/CSRF.
 
 La ejecución completa (`make postman-test`) omite automáticamente el request HMAC si `actor_signing_secret` no está disponible; las pruebas públicas y de rechazo sí se ejecutan.
 

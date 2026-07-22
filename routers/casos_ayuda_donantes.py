@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -9,12 +11,17 @@ from services.help_crypto import HelpDataCipher, HelpDataCryptoError
 from services.help_donors import (
     DONOR_TERMS_VERSION,
     DonorAccessError,
+    DonorIdempotencyConflictError,
+    DonorPayloadError,
     DonorRateLimitError,
     DonorTermsRequiredError,
     accept_terms,
     disclose_donor_accounts,
     get_terms_acceptance,
+    list_donor_monetary_aids,
+    report_monetary_aid,
 )
+from services.help_idempotency import normalize_idempotency_key
 
 
 router = APIRouter(prefix="/api/v2/donante", tags=["casos-ayuda-donante-v2"])
@@ -103,3 +110,81 @@ def get_donor_case_accounts(
     except HelpDataCryptoError as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail="No fue posible consultar las cuentas") from exc
+
+
+@router.post(
+    "/casos-ayuda/{public_id}/ayudas",
+    response_model=schemas.AyudaMonetariaDonanteResponse,
+    status_code=201,
+)
+def create_donor_monetary_aid(
+    public_id: str,
+    payload: schemas.AyudaMonetariaDonanteRequest,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_actor_org),
+):
+    key = normalize_idempotency_key(idempotency_key)
+    saved_path = None
+    try:
+        response, saved_path = report_monetary_aid(
+            db,
+            actor=actor,
+            public_id=public_id,
+            idempotency_key=key,
+            **payload.model_dump(),
+        )
+        db.commit()
+        return response
+    except IntegrityError:
+        db.rollback()
+        if saved_path is not None:
+            Path(saved_path).unlink(missing_ok=True)
+        try:
+            response, _ = report_monetary_aid(
+                db,
+                actor=actor,
+                public_id=public_id,
+                idempotency_key=key,
+                **payload.model_dump(),
+            )
+            db.commit()
+            return response
+        except DonorIdempotencyConflictError as exc:
+            db.rollback()
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except DonorIdempotencyConflictError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except DonorTermsRequiredError as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except DonorPayloadError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except DonorRateLimitError as exc:
+        db.rollback()
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except DonorAccessError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        if saved_path is not None:
+            Path(saved_path).unlink(missing_ok=True)
+        raise
+
+
+@router.get("/ayudas", response_model=list[schemas.AyudaMonetariaDonanteResumenResponse])
+def get_donor_monetary_aids(
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_actor_org),
+):
+    try:
+        return list_donor_monetary_aids(db, actor=actor)
+    except DonorTermsRequiredError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except DonorAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc

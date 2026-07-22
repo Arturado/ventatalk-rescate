@@ -24,6 +24,93 @@
   ],
   "item": [
     {
+      "name": "06 - Yo te ayudo V2 donante y confirmacion",
+      "event": [{
+        "listen": "prerequest",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+            "const publicId = pm.variables.replaceIn('{{v2_public_id}}');",
+            "if (!secret || !publicId) { pm.execution.skipRequest(); return; }",
+            "const timestamp = Math.floor(Date.now() / 1000).toString();",
+            "const hmac = (message) => CryptoJS.HmacSHA256(message, secret).toString(CryptoJS.enc.Hex);",
+            "const donorEmail = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+            "const donorUid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+            "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+            "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+            "pm.collectionVariables.set('v2_donor_signature', hmac(`|donor|${donorEmail}|${donorUid}|${ipHash}|${timestamp}`));",
+            "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+            "const actorEmail = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+            "const actorUid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+            "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+            "pm.collectionVariables.set('v2_actor_signature', hmac(`${organization}|coordinador|${actorEmail}|${actorUid}|${ipHash}|${timestamp}`));",
+            "if (!pm.collectionVariables.get('v2_report_key')) pm.collectionVariables.set('v2_report_key', `help:${pm.variables.replaceIn('{{$guid}}')}`);",
+            "if (!pm.collectionVariables.get('v2_problem_report_key')) pm.collectionVariables.set('v2_problem_report_key', `help:${pm.variables.replaceIn('{{$guid}}')}`);",
+            "if (!pm.collectionVariables.get('v2_confirm_key')) pm.collectionVariables.set('v2_confirm_key', `confirm:${pm.variables.replaceIn('{{$guid}}')}`);",
+            "pm.collectionVariables.set('v2_transfer_date', new Date().toISOString().slice(0, 10));"
+          ]
+        }
+      }],
+      "item": [
+        {
+          "name": "Consultar terminos del donante",
+          "request": {"method":"GET","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"url":"{{base_url}}/api/v2/donante/terminos"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('terminos responde 200', () => pm.response.to.have.status(200));","pm.test('informa version requerida', () => pm.expect(pm.response.json().required_version).to.eql('donor-v1'));"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Aceptar terminos del donante",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"body":{"mode":"raw","raw":"{\"terms_version\":\"donor-v1\"}"},"url":"{{base_url}}/api/v2/donante/terminos/aceptar"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('acepta terminos', () => pm.response.to.have.status(200));","pm.test('queda aceptado', () => pm.expect(pm.response.json().accepted).to.eql(true));"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Consultar cuentas aprobadas",
+          "request": {"method":"GET","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"url":"{{base_url}}/api/v2/donante/casos-ayuda/{{v2_public_id}}/cuentas"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('cuentas responde 200', () => pm.response.to.have.status(200));","pm.test('devuelve cuentas', () => pm.expect(pm.response.json().accounts).to.be.an('array').that.is.not.empty);","if (pm.response.code === 200 && pm.response.json().accounts.length) pm.collectionVariables.set('v2_donor_account_id', pm.response.json().accounts[0].id);"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Reportar ayuda monetaria",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"Idempotency-Key","value":"{{v2_report_key}}"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"body":{"mode":"raw","raw":"{\"account_id\":{{v2_donor_account_id}},\"amount\":\"{{v2_help_amount}}\",\"currency\":\"{{v2_help_currency}}\",\"transfer_date\":\"{{v2_transfer_date}}\",\"reference\":\"REF-DEMO-001\",\"comment\":\"Prueba local Postman\"}"},"url":"{{base_url}}/api/v2/donante/casos-ayuda/{{v2_public_id}}/ayudas"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('reporta ayuda', () => pm.response.to.have.status(201));","pm.test('queda pendiente', () => pm.expect(pm.response.json().status).to.eql('pendiente_confirmacion'));","if (pm.response.code === 201) pm.collectionVariables.set('v2_aid_id', pm.response.json().id);"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Listar mis ayudas",
+          "request": {"method":"GET","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"url":"{{base_url}}/api/v2/donante/ayudas"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('mis ayudas responde 200', () => pm.response.to.have.status(200));","pm.test('incluye ayuda creada', () => pm.expect(pm.response.json().some(item => String(item.id) === String(pm.collectionVariables.get('v2_aid_id')))).to.eql(true));"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Pasar ayuda a revision",
+          "request": {"method":"POST","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/en-revision"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('pasa a revision', () => pm.response.to.have.status(200));","pm.test('estado en revision', () => pm.expect(pm.response.json().status).to.eql('en_revision'));"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Confirmar recepcion",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"Idempotency-Key","value":"{{v2_confirm_key}}"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"received_amount\":\"{{v2_help_amount}}\",\"received_currency\":\"{{v2_help_currency}}\",\"effective_date\":\"{{v2_transfer_date}}\",\"comment\":\"Confirmación local Postman\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/confirmar"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('confirma recepcion', () => pm.response.to.have.status(200));","pm.test('ayuda confirmada', () => pm.expect(pm.response.json().status).to.eql('confirmada'));","pm.test('incrementa contador', () => pm.expect(pm.response.json().confirmed_help_count).to.be.above(0));"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Reportar segunda ayuda para incidencia",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"Idempotency-Key","value":"{{v2_problem_report_key}}"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"body":{"mode":"raw","raw":"{\"account_id\":{{v2_donor_account_id}},\"amount\":\"{{v2_help_amount}}\",\"currency\":\"{{v2_help_currency}}\",\"transfer_date\":\"{{v2_transfer_date}}\",\"reference\":\"REF-DEMO-002\",\"comment\":\"Prueba local de incidencia\"}"},"url":"{{base_url}}/api/v2/donante/casos-ayuda/{{v2_public_id}}/ayudas"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('reporta segunda ayuda', () => pm.response.to.have.status(201));","if (pm.response.code === 201) pm.collectionVariables.set('v2_problem_aid_id', pm.response.json().id);"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Reportar problema de ayuda",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"problem_type\":\"transferencia_no_recibida\",\"detail\":\"Incidencia ficticia creada por Postman\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_problem_aid_id}}/problema"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('reporta problema', () => pm.response.to.have.status(200));","pm.test('estado problema reportado', () => pm.expect(pm.response.json().status).to.eql('problema_reportado'));"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Pasar incidencia a revision",
+          "request": {"method":"POST","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_problem_aid_id}}/en-revision"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('incidencia pasa a revision', () => pm.response.to.have.status(200));","pm.test('incidencia en revision', () => pm.expect(pm.response.json().status).to.eql('en_revision'));"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Rechazar incidencia",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"reason\":\"No fue posible verificar la transferencia ficticia\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_problem_aid_id}}/rechazar"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('rechaza incidencia', () => pm.response.to.have.status(200));","pm.test('incidencia rechazada', () => pm.expect(pm.response.json().status).to.eql('rechazada'));"],"type":"text/javascript"}}]
+        }
+      ]
+    },
+    {
       "name": "00 - Salud y autenticacion",
       "item": [
         {
@@ -994,5 +1081,19 @@
     { "key": "actor_signing_secret", "value": "" },
     { "key": "v2_actor_timestamp", "value": "" },
     { "key": "v2_actor_signature", "value": "" }
+    ,{ "key": "v2_case_id", "value": "" }
+    ,{ "key": "v2_actor_uid", "value": "postman-coordinator-uid" }
+    ,{ "key": "v2_donor_email", "value": "donante.demo@example.test" }
+    ,{ "key": "v2_donor_uid", "value": "postman-donor-uid" }
+    ,{ "key": "v2_actor_ip_hash", "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+    ,{ "key": "v2_donor_timestamp", "value": "" }
+    ,{ "key": "v2_donor_signature", "value": "" }
+    ,{ "key": "v2_donor_account_id", "value": "" }
+    ,{ "key": "v2_aid_id", "value": "" }
+    ,{ "key": "v2_report_key", "value": "" }
+    ,{ "key": "v2_confirm_key", "value": "" }
+    ,{ "key": "v2_transfer_date", "value": "" }
+    ,{ "key": "v2_help_amount", "value": "10.00" }
+    ,{ "key": "v2_help_currency", "value": "USD" }
   ]
 }

@@ -426,9 +426,9 @@ def test_account_endpoint_encrypts_bank_and_responsible_data(crypto_environment)
     assert account_summary["instrucciones"] == "Transferencia bancaria"
     assert account_summary["responsable_nombre"] == "Responsable privado"
     assert account_summary["identificador_enmascarado"].endswith("RKER")
+    assert account_summary["responsable_email"] == email_marker
     assert account_summary["responsable_email_enmascarado"] == "r***@example.com"
     assert bank_marker not in response.text
-    assert email_marker not in response.text
     with TestingSessionLocal() as db:
         account = db.query(models.CuentaCasoAyuda).one()
         assert account.identificador_cifrado.startswith("enc:v1:")

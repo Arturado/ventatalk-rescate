@@ -309,7 +309,9 @@ app.add_middleware(
 
 app.mount("/uploads/capturas", StaticFiles(directory="uploads/capturas"), name="capturas")
 app.mount("/uploads/adjuntos", StaticFiles(directory="uploads/adjuntos"), name="adjuntos")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/uploads/fotos", StaticFiles(directory="uploads/fotos"), name="fotos")
+app.mount("/uploads/notificaciones", StaticFiles(directory="uploads/notificaciones"), name="notificaciones")
+app.mount("/uploads/albergue_entregas", StaticFiles(directory="uploads/albergue_entregas", check_dir=False), name="albergue-entregas")
 app.mount("/widget", StaticFiles(directory="static"), name="widget")
 app.mount("/static", StaticFiles(directory="static"), name="static-files")
 

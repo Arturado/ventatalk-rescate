@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field, field_serializer
-from datetime import datetime, timezone, timedelta
+from pydantic import BaseModel, Field, field_serializer, model_validator
+from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from typing import List, Literal, Optional
 
@@ -484,6 +484,7 @@ class CuentaCasoAyudaResumenResponse(BaseModel):
     instrucciones: Optional[str] = None
     justificacion: Optional[str] = None
     responsable_nombre: str
+    responsable_email: str
     responsable_email_enmascarado: str
 
     model_config = {"from_attributes": True}
@@ -611,3 +612,93 @@ class CuentaDonanteResponse(BaseModel):
 class CuentasCasoDonanteResponse(BaseModel):
     case_public_id: str
     accounts: List[CuentaDonanteResponse]
+
+
+class AyudaMonetariaDonanteRequest(BaseModel):
+    account_id: int = Field(gt=0)
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    currency: Literal["VES", "USD", "EUR"]
+    transfer_date: date
+    reference: Optional[str] = Field(default=None, max_length=500)
+    comment: Optional[str] = Field(default=None, max_length=5000)
+    receipt_file_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    receipt_content_type: Optional[Literal["application/pdf", "image/jpeg", "image/png"]] = None
+    receipt_base64: Optional[str] = Field(default=None, min_length=8, max_length=7_100_000)
+
+    @model_validator(mode="after")
+    def validate_receipt_fields(self):
+        receipt_fields = (
+            self.receipt_file_name,
+            self.receipt_content_type,
+            self.receipt_base64,
+        )
+        if any(value is not None for value in receipt_fields) and not all(
+            value is not None for value in receipt_fields
+        ):
+            raise ValueError("Los datos del comprobante deben enviarse completos")
+        return self
+
+
+class AyudaMonetariaDonanteResponse(BaseModel):
+    id: int
+    case_public_id: str
+    account_version: int
+    amount: Decimal
+    currency: Literal["VES", "USD", "EUR"]
+    transfer_date: date
+    status: str
+    receipt_attached: bool
+    created_at: datetime
+
+
+class AyudaMonetariaDonanteResumenResponse(AyudaMonetariaDonanteResponse):
+    public_title: str
+
+
+class AyudaMonetariaOrganizacionResumenResponse(BaseModel):
+    aid_id: int
+    reported_amount: Decimal
+    reported_currency: Literal["VES", "USD", "EUR"]
+    transfer_date: date
+    status: str
+    account_id: int
+    account_version: int
+    problem_type: Optional[str] = None
+    problem_detail: Optional[str] = None
+    resolution_reason: Optional[str] = None
+    created_at: datetime
+
+
+class ProblemaAyudaRequest(BaseModel):
+    problem_type: Literal[
+        "transferencia_no_recibida",
+        "monto_diferente",
+        "moneda_diferente",
+        "cuenta_incorrecta",
+        "comprobante_ilegible",
+        "duplicado",
+        "otro",
+    ]
+    detail: str = Field(min_length=3, max_length=5000)
+
+
+class RechazoAyudaRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=5000)
+
+
+class ConfirmacionAyudaRequest(BaseModel):
+    received_amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    received_currency: Literal["VES", "USD", "EUR"]
+    effective_date: date
+    comment: Optional[str] = Field(default=None, max_length=5000)
+
+
+class ConfirmacionAyudaResponse(BaseModel):
+    aid_id: int
+    status: str
+    received_amount: Decimal
+    received_currency: Literal["VES", "USD", "EUR"]
+    goal_amount_confirmed: Decimal
+    confirmed_help_count: int
+    case_status: str
+    goal_reached: bool

@@ -1,5 +1,7 @@
 from decimal import Decimal
 import base64
+import hashlib
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -135,6 +137,39 @@ def create_published_case():
         return case.public_id
 
 
+def accept_current_terms():
+    response = client.post("/api/v2/donante/terminos/aceptar", json={"terms_version": "donor-v1"})
+    assert response.status_code == 200
+
+
+def account_id_for(public_id):
+    with TestingSessionLocal() as db:
+        case = db.query(models.CasoAyudaV2).filter_by(public_id=public_id).one()
+        return db.query(models.CuentaCasoAyuda).filter_by(caso_id=case.id).one().id
+
+
+def monetary_aid_payload(public_id, **overrides):
+    selected_account_id = overrides.pop("account_id", None)
+    payload = {
+        "account_id": selected_account_id if selected_account_id is not None else account_id_for(public_id),
+        "amount": "25.50",
+        "currency": "USD",
+        "transfer_date": "2026-07-20",
+        "reference": "REF-PRIVATE-123",
+        "comment": "Comentario privado",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def report_aid(public_id, payload=None, key="report-help-123456789"):
+    return client.post(
+        f"/api/v2/donante/casos-ayuda/{public_id}/ayudas",
+        headers={"Idempotency-Key": key},
+        json=payload or monetary_aid_payload(public_id),
+    )
+
+
 def test_requires_current_terms_before_disclosing_accounts():
     public_id = create_published_case()
 
@@ -175,3 +210,153 @@ def test_accepts_terms_and_returns_only_approved_account_with_audit():
         assert access.ip_hash == "a" * 64
         assert audit.actor_id == "firebase-donor-1"
         assert "0102" not in audit.metadata_json
+
+
+def test_reports_monetary_aid_without_increasing_public_progress():
+    public_id = create_published_case()
+    accept_current_terms()
+
+    response = report_aid(public_id)
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body == {
+        "id": body["id"],
+        "case_public_id": public_id,
+        "account_version": 1,
+        "amount": "25.50",
+        "currency": "USD",
+        "transfer_date": "2026-07-20",
+        "status": "pendiente_confirmacion",
+        "receipt_attached": False,
+        "created_at": body["created_at"],
+    }
+    with TestingSessionLocal() as db:
+        aid = db.query(models.AyudaMonetaria).one()
+        case = db.query(models.CasoAyudaV2).filter_by(public_id=public_id).one()
+        operation = db.query(models.OperacionIdempotenteAyuda).one()
+        audit = db.query(models.AuditoriaCasoAyuda).filter_by(accion="ayuda_reportada_donante").one()
+        assert aid.donante_id == "firebase-donor-1"
+        assert aid.estado == "pendiente_confirmacion"
+        assert aid.referencia_cifrada.startswith("enc:v1:")
+        assert aid.comentario_cifrado.startswith("enc:v1:")
+        assert "REF-PRIVATE-123" not in aid.referencia_cifrada
+        assert case.monto_confirmado == Decimal("0.00")
+        assert case.ayudas_confirmadas == 0
+        assert operation.estado == "completed"
+        assert operation.response_status == 201
+        assert "REF-PRIVATE-123" not in operation.response_body
+        assert "Comentario privado" not in audit.metadata_json
+        assert "REF-PRIVATE-123" not in audit.metadata_json
+
+
+def test_replays_same_aid_and_rejects_changed_payload_for_same_key():
+    public_id = create_published_case()
+    accept_current_terms()
+    payload = monetary_aid_payload(public_id)
+
+    first = report_aid(public_id, payload)
+    replay = report_aid(public_id, payload)
+    conflict = report_aid(public_id, {**payload, "amount": "26.00"})
+
+    assert first.status_code == 201
+    assert replay.status_code == 201
+    assert replay.json() == first.json()
+    assert conflict.status_code == 409
+    with TestingSessionLocal() as db:
+        assert db.query(models.AyudaMonetaria).count() == 1
+        assert db.query(models.OperacionIdempotenteAyuda).count() == 1
+
+
+def test_rejects_wrong_or_stale_account_version():
+    public_id = create_published_case()
+    accept_current_terms()
+    stale_id = account_id_for(public_id)
+    cipher = HelpDataCipher.from_environment()
+    with TestingSessionLocal() as db:
+        stale = db.get(models.CuentaCasoAyuda, stale_id)
+        latest = models.CuentaCasoAyuda(
+            caso_id=stale.caso_id,
+            account_key=stale.account_key,
+            version=2,
+            tipo_titular=stale.tipo_titular,
+            titular_nombre_cifrado=cipher.encrypt("Persona beneficiaria", field="account.holder_name"),
+            relacion_beneficiario=stale.relacion_beneficiario,
+            medio=stale.medio,
+            moneda=stale.moneda,
+            identificador_cifrado=cipher.encrypt("0102-9999", field="account.identifier"),
+            responsable_nombre_cifrado=cipher.encrypt("Responsable", field="account.responsible_name"),
+            responsable_email_hash="c" * 64,
+            responsable_email_cifrado=cipher.encrypt("responsable@example.com", field="account.responsible_email"),
+            consentimiento_version=stale.consentimiento_version,
+            estado="aprobada",
+            creado_por="coordinador@example.com",
+        )
+        db.add(latest)
+        db.commit()
+
+    stale_response = report_aid(public_id, monetary_aid_payload(public_id, account_id=stale_id))
+    wrong_response = report_aid(
+        public_id,
+        monetary_aid_payload(public_id, account_id=999999),
+        key="report-help-wrong-12345",
+    )
+
+    assert stale_response.status_code == 404
+    assert wrong_response.status_code == 404
+    assert "cuenta" in stale_response.json()["detail"].lower()
+    assert "cuenta" in wrong_response.json()["detail"].lower()
+    with TestingSessionLocal() as db:
+        assert db.query(models.AyudaMonetaria).count() == 0
+
+
+def test_lists_only_signed_actor_aids_with_public_title():
+    public_id = create_published_case()
+    accept_current_terms()
+    created = report_aid(public_id).json()
+
+    other_actor = ActorOrgContext(
+        "", "donor", "other@example.com", uid="firebase-donor-2", ip_hash="b" * 64
+    )
+    app.dependency_overrides[require_verified_actor_org] = lambda: other_actor
+    try:
+        accept_current_terms()
+        other_response = client.get("/api/v2/donante/ayudas")
+    finally:
+        app.dependency_overrides[require_verified_actor_org] = donor
+    owner_response = client.get("/api/v2/donante/ayudas")
+
+    assert other_response.status_code == 200
+    assert other_response.json() == []
+    assert owner_response.status_code == 200
+    assert owner_response.json() == [{"public_title": "Ayuda publicada", **created}]
+
+
+def test_saves_optional_receipt_encrypted_and_private(tmp_path, monkeypatch):
+    monkeypatch.setenv("HELP_PRIVATE_UPLOAD_ROOT", str(tmp_path))
+    public_id = create_published_case()
+    accept_current_terms()
+    receipt = b"%PDF-1.4 PRIVATE-DONOR-RECEIPT"
+    payload = monetary_aid_payload(
+        public_id,
+        receipt_file_name="comprobante-privado.pdf",
+        receipt_content_type="application/pdf",
+        receipt_base64=base64.b64encode(receipt).decode(),
+    )
+
+    response = report_aid(public_id, payload)
+
+    assert response.status_code == 201
+    assert response.json()["receipt_attached"] is True
+    assert "storage_path" not in response.text
+    files = list(Path(tmp_path).rglob("*.enc"))
+    assert len(files) == 1
+    assert receipt not in files[0].read_bytes()
+    with TestingSessionLocal() as db:
+        stored = db.query(models.ComprobanteAyuda).one()
+        operation = db.query(models.OperacionIdempotenteAyuda).one()
+        assert stored.version == 1
+        assert stored.storage_path.startswith("private/casos-ayuda/")
+        assert stored.checksum_sha256 == hashlib.sha256(receipt).hexdigest()
+        assert stored.nombre_original_cifrado.startswith("enc:v1:")
+        assert payload["receipt_base64"] not in operation.response_body

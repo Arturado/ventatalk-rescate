@@ -72,7 +72,7 @@ def _get_managed_case(db, case_id, actor):
     return case
 
 
-def _add_audit_event(db, *, case, actor, action, entity_type, entity_id, metadata=None):
+def _add_audit_event(db, *, case, actor, action, entity_type, entity_id, metadata=None, reason_code=None):
     db.add(models.AuditoriaCasoAyuda(
         event_id=str(uuid4()),
         organizacion_id=case.organizacion_id,
@@ -82,6 +82,7 @@ def _add_audit_event(db, *, case, actor, action, entity_type, entity_id, metadat
         actor_tipo=actor.role,
         entidad_tipo=entity_type,
         entidad_id=str(entity_id),
+        motivo_codigo=reason_code,
         metadata_json=json.dumps(metadata or {}, sort_keys=True, separators=(",", ":")),
     ))
 
@@ -844,7 +845,7 @@ def list_public_help_cases(db: Session):
         db.query(models.CasoAyudaV2, models.PublicacionCasoAyuda)
         .join(models.PublicacionCasoAyuda, models.PublicacionCasoAyuda.caso_id == models.CasoAyudaV2.id)
         .filter(
-            models.CasoAyudaV2.estado == "publicado",
+            models.CasoAyudaV2.estado.in_({"publicado", "meta_alcanzada"}),
             models.PublicacionCasoAyuda.activa.is_(True),
         )
         .order_by(
@@ -862,7 +863,7 @@ def get_public_help_case(db: Session, *, public_id: str):
         .join(models.PublicacionCasoAyuda, models.PublicacionCasoAyuda.caso_id == models.CasoAyudaV2.id)
         .filter(
             models.CasoAyudaV2.public_id == public_id,
-            models.CasoAyudaV2.estado == "publicado",
+            models.CasoAyudaV2.estado.in_({"publicado", "meta_alcanzada"}),
             models.PublicacionCasoAyuda.activa.is_(True),
         )
         .one_or_none()

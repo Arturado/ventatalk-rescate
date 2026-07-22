@@ -3,7 +3,7 @@ from uuid import uuid4
 import json
 import hashlib
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -37,6 +37,16 @@ from services.help_cases import (
 )
 from services.help_crypto import HelpDataCipher, HelpDataCryptoError
 from services.help_files import decode_private_evidence, save_encrypted_private_evidence
+from services.help_confirmations import (
+    HelpConfirmationCurrencyError,
+    HelpConfirmationIdempotencyError,
+    confirm_help_aid,
+    list_help_aids,
+    mark_help_aid_in_review,
+    reject_help_aid,
+    report_help_aid_problem,
+)
+from services.help_idempotency import normalize_idempotency_key
 
 
 router = APIRouter(prefix="/api/v2/casos-ayuda", tags=["casos-ayuda-v2"])
@@ -52,6 +62,152 @@ CaseState = Literal[
     "suspendido",
     "archivado",
 ]
+
+
+@router.get("/{case_id}/ayudas", response_model=List[schemas.AyudaMonetariaOrganizacionResumenResponse])
+def list_organization_help_aids(
+    case_id: int,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        return list_help_aids(db, case_id=case_id, actor=actor)
+    except CaseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{case_id}/ayudas/{aid_id}/en-revision",
+    response_model=schemas.AyudaMonetariaOrganizacionResumenResponse,
+)
+def review_organization_help_aid(
+    case_id: int,
+    aid_id: int,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        aid = mark_help_aid_in_review(db, case_id=case_id, aid_id=aid_id, actor=actor)
+        db.commit()
+        return aid
+    except CaseNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CaseStateError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{case_id}/ayudas/{aid_id}/problema",
+    response_model=schemas.AyudaMonetariaOrganizacionResumenResponse,
+)
+def report_organization_help_aid_problem(
+    case_id: int,
+    aid_id: int,
+    payload: schemas.ProblemaAyudaRequest,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        aid = report_help_aid_problem(
+            db,
+            case_id=case_id,
+            aid_id=aid_id,
+            actor=actor,
+            problem_type=payload.problem_type,
+            detail=payload.detail,
+        )
+        db.commit()
+        return aid
+    except CaseNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CaseStateError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except HelpDataCryptoError as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="El cifrado de datos no esta configurado") from exc
+
+
+@router.post(
+    "/{case_id}/ayudas/{aid_id}/rechazar",
+    response_model=schemas.AyudaMonetariaOrganizacionResumenResponse,
+)
+def reject_organization_help_aid(
+    case_id: int,
+    aid_id: int,
+    payload: schemas.RechazoAyudaRequest,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        aid = reject_help_aid(
+            db,
+            case_id=case_id,
+            aid_id=aid_id,
+            actor=actor,
+            reason=payload.reason,
+        )
+        db.commit()
+        return aid
+    except CaseNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CaseStateError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except HelpDataCryptoError as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="El cifrado de datos no esta configurado") from exc
+
+
+@router.post(
+    "/{case_id}/ayudas/{aid_id}/confirmar",
+    response_model=schemas.ConfirmacionAyudaResponse,
+)
+def confirm_organization_help_aid(
+    case_id: int,
+    aid_id: int,
+    payload: schemas.ConfirmacionAyudaRequest,
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    key = normalize_idempotency_key(idempotency_key)
+    try:
+        response, replayed = confirm_help_aid(
+            db,
+            case_id=case_id,
+            aid_id=aid_id,
+            actor=actor,
+            idempotency_key=key,
+            received_amount=payload.received_amount,
+            received_currency=payload.received_currency,
+            effective_date=payload.effective_date,
+            comment=payload.comment,
+        )
+        if not replayed:
+            db.commit()
+        return response
+    except CaseNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HelpConfirmationCurrencyError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (CaseStateError, HelpConfirmationIdempotencyError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except HelpDataCryptoError as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="El cifrado de datos no esta configurado") from exc
 
 
 def _mask_restricted_value(value, visible=4):
@@ -116,6 +272,7 @@ def _detail_response(db, case_id, actor):
             "instrucciones": cipher.decrypt(account.instrucciones_cifrado, field="account.instructions") if account.instrucciones_cifrado else None,
             "justificacion": cipher.decrypt(account.justificacion_cifrada, field="account.justification") if account.justificacion_cifrada else None,
             "responsable_nombre": cipher.decrypt(account.responsable_nombre_cifrado, field="account.responsible_name"),
+            "responsable_email": responsible_email,
             "responsable_email_enmascarado": _mask_email(responsible_email),
         })
     consent = (

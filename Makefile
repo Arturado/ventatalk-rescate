@@ -9,7 +9,7 @@ PRETTY := python3 -m json.tool
 .DEFAULT_GOAL := help
 
 .PHONY: help up down build restart logs ps health \
-	postman-test postman-test-casos-ayuda postman-test-yo-te-ayudo-public postman-test-yo-te-ayudo-protegido test-no-auth test-solicitudes test-aprobar test-rechazar test-nuevo-centro test-admin-dual
+	postman-test postman-test-casos-ayuda postman-test-yo-te-ayudo-public postman-test-yo-te-ayudo-protegido postman-test-yo-te-ayudo-donante test-no-auth test-solicitudes test-aprobar test-rechazar test-nuevo-centro test-admin-dual
 
 help: ## Muestra esta ayuda
 	@grep -E '^[a-zA-Z_-]+:.*## ' Makefile | sort | awk 'BEGIN {FS = ":.*## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
@@ -60,3 +60,19 @@ postman-test-yo-te-ayudo-protegido: ## Ejecuta protección y listado HMAC V2
 		--env-var actor_signing_secret="$(ACTOR_SIGNING_SECRET)" \
 		--env-var v2_organization_id="$(V2_ORGANIZATION_ID)" \
 		--env-var v2_actor_email="$(V2_ACTOR_EMAIL)"
+
+postman-test-yo-te-ayudo-donante: ## Ejecuta reporte y confirmación V2 sobre un caso publicado existente
+	@npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \
+		--folder "06 - Yo te ayudo V2 donante y confirmacion" \
+		--env-var base_url=$(BASE) \
+		--env-var api_key="$(API_KEY)" \
+		--env-var actor_signing_secret="$(ACTOR_SIGNING_SECRET)" \
+		--env-var v2_organization_id="$(V2_ORGANIZATION_ID)" \
+		--env-var v2_actor_email="$(V2_ACTOR_EMAIL)" \
+		--env-var v2_actor_uid="$(V2_ACTOR_UID)" \
+		--env-var v2_donor_email="$(V2_DONOR_EMAIL)" \
+		--env-var v2_donor_uid="$(V2_DONOR_UID)" \
+		--env-var v2_public_id="$(V2_PUBLIC_ID)" \
+		--env-var v2_case_id="$(V2_CASE_ID)" \
+		--env-var v2_help_amount="$(V2_HELP_AMOUNT)" \
+		--env-var v2_help_currency="$(V2_HELP_CURRENCY)"
