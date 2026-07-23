@@ -33,8 +33,9 @@
             "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
             "const publicId = pm.variables.replaceIn('{{v2_public_id}}');",
             "if (!secret || !publicId) { pm.execution.skipRequest(); return; }",
+            "const cryptoJs = require('crypto-js');",
             "const timestamp = Math.floor(Date.now() / 1000).toString();",
-            "const hmac = (message) => CryptoJS.HmacSHA256(message, secret).toString(CryptoJS.enc.Hex);",
+            "const hmac = (message) => cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex);",
             "const donorEmail = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
             "const donorUid = pm.variables.replaceIn('{{v2_donor_uid}}');",
             "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
@@ -90,8 +91,13 @@
         },
         {
           "name": "Confirmar recepcion",
-          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"Idempotency-Key","value":"{{v2_confirm_key}}"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"received_amount\":\"{{v2_help_amount}}\",\"received_currency\":\"{{v2_help_currency}}\",\"effective_date\":\"{{v2_transfer_date}}\",\"comment\":\"Confirmación local Postman\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/confirmar"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('confirma recepcion', () => pm.response.to.have.status(200));","pm.test('ayuda confirmada', () => pm.expect(pm.response.json().status).to.eql('confirmada'));","pm.test('incrementa contador', () => pm.expect(pm.response.json().confirmed_help_count).to.be.above(0));","pm.test('conserva equivalente en moneda meta', () => pm.expect(pm.response.json().goal_equivalent_amount).to.eql(pm.variables.replaceIn('{{v2_help_amount}}')));","pm.test('no inventa tasa para la misma moneda', () => pm.expect(pm.response.json().applied_rate).to.eql(null));"],"type":"text/javascript"}}]
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"Idempotency-Key","value":"{{v2_confirm_key}}"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"received_amount\":\"{{v2_received_amount}}\",\"received_currency\":\"{{v2_received_currency}}\",\"effective_date\":\"{{v2_transfer_date}}\",\"comment\":\"Confirmación local Postman\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/confirmar"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('confirma recepcion', () => pm.response.to.have.status(200));","const body = pm.response.json();","pm.test('ayuda confirmada', () => pm.expect(body.status).to.eql('confirmada'));","pm.test('incrementa contador', () => pm.expect(body.confirmed_help_count).to.be.above(0));","pm.test('conserva equivalente positivo en moneda meta', () => pm.expect(Number(body.goal_equivalent_amount)).to.be.above(0));","const sameCurrency = pm.variables.replaceIn('{{v2_received_currency}}') === pm.variables.replaceIn('{{v2_help_currency}}');","pm.test('aplica tasa solo al convertir moneda', () => { if (sameCurrency) pm.expect(body.applied_rate).to.eql(null); else { pm.expect(Number(body.applied_rate)).to.be.above(0); pm.expect(body.rate_source).to.eql(pm.variables.replaceIn('{{v2_expected_rate_source}}')); } });","pm.collectionVariables.set('v2_confirmed_help_count', body.confirmed_help_count);","pm.collectionVariables.set('v2_goal_equivalent_amount', body.goal_equivalent_amount);"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Reintentar confirmacion idempotente",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"Idempotency-Key","value":"{{v2_confirm_key}}"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"received_amount\":\"{{v2_received_amount}}\",\"received_currency\":\"{{v2_received_currency}}\",\"effective_date\":\"{{v2_transfer_date}}\",\"comment\":\"Confirmación local Postman\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/confirmar"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('reintento responde 200', () => pm.response.to.have.status(200));","const body = pm.response.json();","pm.test('reintento no incrementa progreso', () => { pm.expect(body.confirmed_help_count).to.eql(Number(pm.collectionVariables.get('v2_confirmed_help_count'))); pm.expect(body.goal_equivalent_amount).to.eql(pm.collectionVariables.get('v2_goal_equivalent_amount')); });"],"type":"text/javascript"}}]
         },
         {
           "name": "Reportar segunda ayuda para incidencia",
@@ -125,17 +131,28 @@
             "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
             "const value = pm.variables.replaceIn('{{v2_manual_rate_value}}');",
             "if (!secret || !value) { pm.execution.skipRequest(); return; }",
+            "const cryptoJs = require('crypto-js');",
             "const timestamp = Math.floor(Date.now() / 1000).toString();",
             "const email = pm.variables.replaceIn('{{v2_super_admin_email}}').toLowerCase();",
             "const uid = pm.variables.replaceIn('{{v2_super_admin_uid}}');",
             "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
-            "const signature = CryptoJS.HmacSHA256(`|super_admin|${email}|${uid}|${ipHash}|${timestamp}`, secret).toString(CryptoJS.enc.Hex);",
+            "const signature = cryptoJs.HmacSHA256(`|super_admin|${email}|${uid}|${ipHash}|${timestamp}`, secret).toString(cryptoJs.enc.Hex);",
             "pm.collectionVariables.set('v2_super_admin_timestamp', timestamp);",
-            "pm.collectionVariables.set('v2_super_admin_signature', signature);"
+            "pm.collectionVariables.set('v2_super_admin_signature', signature);",
+            "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+            "const actorEmail = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+            "const actorUid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+            "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+            "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(`${organization}|coordinador|${actorEmail}|${actorUid}|${ipHash}|${timestamp}`, secret).toString(cryptoJs.enc.Hex));"
           ]
         }
       }],
       "item": [
+        {
+          "name": "Rechazar tasa manual de coordinador",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"rate_date\":\"{{v2_manual_rate_date}}\",\"source_currency\":\"{{v2_manual_rate_source_currency}}\",\"target_currency\":\"{{v2_manual_rate_target_currency}}\",\"value\":\"{{v2_manual_rate_value}}\",\"source_reference\":\"{{v2_manual_rate_reference}}\",\"reason\":\"{{v2_manual_rate_reason}}\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/tasas/manual"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('coordinador recibe 403', () => pm.response.to.have.status(403));"],"type":"text/javascript"}}]
+        },
         {
           "name": "Registrar tasa manual BCV",
           "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"super_admin"},{"key":"x-actor-email","value":"{{v2_super_admin_email}}"},{"key":"x-actor-uid","value":"{{v2_super_admin_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_super_admin_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_super_admin_signature}}"}],"body":{"mode":"raw","raw":"{\"rate_date\":\"{{v2_manual_rate_date}}\",\"source_currency\":\"{{v2_manual_rate_source_currency}}\",\"target_currency\":\"{{v2_manual_rate_target_currency}}\",\"value\":\"{{v2_manual_rate_value}}\",\"source_reference\":\"{{v2_manual_rate_reference}}\",\"reason\":\"{{v2_manual_rate_reason}}\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/tasas/manual"},
@@ -1077,9 +1094,10 @@
                   "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
                   "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
                   "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
                   "const message = `${organization}|${role}|${email}|||${timestamp}`;",
                   "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
-                  "pm.collectionVariables.set('v2_actor_signature', CryptoJS.HmacSHA256(message, secret).toString(CryptoJS.enc.Hex));"
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
                 ]
               }
             },

@@ -139,10 +139,13 @@ V2_PUBLIC_ID=ayuda-reemplazar \
 V2_CASE_ID=1 \
 V2_HELP_AMOUNT=10.00 \
 V2_HELP_CURRENCY=USD \
+V2_RECEIVED_AMOUNT=1000.00 \
+V2_RECEIVED_CURRENCY=VES \
+V2_EXPECTED_RATE_SOURCE=DOLARAPI-BCV \
 make postman-test-yo-te-ayudo-donante
 ```
 
-Reemplazar `V2_PUBLIC_ID` y `V2_CASE_ID`. Usar un `V2_DONOR_UID` nuevo para una corrida independiente. La carpeta acepta términos, consulta cuentas, reporta, lista, pasa a revisión y confirma.
+Reemplazar `V2_PUBLIC_ID` y `V2_CASE_ID`. Usar un `V2_DONOR_UID` nuevo para una corrida independiente. La carpeta consulta equivalencias, acepta términos, consulta cuentas, reporta, lista, pasa a revisión, confirma y reintenta la confirmación para comprobar idempotencia. Ejecutar pruebas multimoneda y contingencias sobre una copia descartable de la base local porque estos registros V2 no tienen limpieza automática.
 
 ## Albergues
 

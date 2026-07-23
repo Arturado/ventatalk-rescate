@@ -13,6 +13,7 @@ import models
 from services.help_exchange import (
     BcvRateUnavailableError,
     BcvRatesSnapshot,
+    CachedBcvRateProvider,
     DolarApiBcvRateProvider,
     ManualBcvRateAccessError,
     get_current_currency_equivalents,
@@ -115,6 +116,22 @@ def test_current_goal_equivalents_include_all_supported_currencies():
     }
     assert result.transport_source == "DolarApi"
     assert result.upstream_source == "BCV"
+
+
+def test_cached_provider_reuses_snapshot_until_ttl_expires():
+    now = {"value": 100.0}
+    provider = FakeBcvProvider({"USD": "36.50", "EUR": "40.00"})
+    cached = CachedBcvRateProvider(provider, ttl_seconds=600, clock=lambda: now["value"])
+
+    first = cached.fetch_rates()
+    now["value"] = 699.0
+    second = cached.fetch_rates()
+    now["value"] = 700.0
+    third = cached.fetch_rates()
+
+    assert first is second
+    assert third is not second
+    assert provider.calls == 2
 
 
 def test_converts_cross_currency_through_ves_and_persists_evidence():

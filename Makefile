@@ -5,6 +5,9 @@ HOST ?= localhost
 PORT ?= 8010
 BASE := http://$(HOST):$(PORT)
 PRETTY := python3 -m json.tool
+V2_RECEIVED_AMOUNT ?= $(V2_HELP_AMOUNT)
+V2_RECEIVED_CURRENCY ?= $(V2_HELP_CURRENCY)
+V2_EXPECTED_RATE_SOURCE ?= DOLARAPI-BCV
 
 .DEFAULT_GOAL := help
 
@@ -75,7 +78,10 @@ postman-test-yo-te-ayudo-donante: ## Ejecuta reporte y confirmación V2 sobre un
 		--env-var v2_public_id="$(V2_PUBLIC_ID)" \
 		--env-var v2_case_id="$(V2_CASE_ID)" \
 		--env-var v2_help_amount="$(V2_HELP_AMOUNT)" \
-		--env-var v2_help_currency="$(V2_HELP_CURRENCY)"
+		--env-var v2_help_currency="$(V2_HELP_CURRENCY)" \
+		--env-var v2_received_amount="$(V2_RECEIVED_AMOUNT)" \
+		--env-var v2_received_currency="$(V2_RECEIVED_CURRENCY)" \
+		--env-var v2_expected_rate_source="$(V2_EXPECTED_RATE_SOURCE)"
 
 postman-test-bcv-manual: ## Registra una tasa manual de contingencia como super_admin
 	@npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \
@@ -83,6 +89,9 @@ postman-test-bcv-manual: ## Registra una tasa manual de contingencia como super_
 		--env-var base_url=$(BASE) \
 		--env-var api_key="$(API_KEY)" \
 		--env-var actor_signing_secret="$(ACTOR_SIGNING_SECRET)" \
+		--env-var v2_organization_id="$(V2_ORGANIZATION_ID)" \
+		--env-var v2_actor_email="$(V2_ACTOR_EMAIL)" \
+		--env-var v2_actor_uid="$(V2_ACTOR_UID)" \
 		--env-var v2_super_admin_email="$(V2_SUPER_ADMIN_EMAIL)" \
 		--env-var v2_super_admin_uid="$(V2_SUPER_ADMIN_UID)" \
 		--env-var v2_manual_rate_date="$(V2_MANUAL_RATE_DATE)" \

@@ -1,3 +1,4 @@
+import os
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,16 +10,21 @@ from database import get_db
 from services.help_cases import get_public_help_case, list_public_help_cases, CaseNotFoundError
 from services.help_exchange import (
     BcvRateUnavailableError,
+    CachedBcvRateProvider,
     DolarApiBcvRateProvider,
     get_current_currency_equivalents,
 )
 
 
 router = APIRouter(prefix="/api/v2/public/casos-ayuda", tags=["casos-ayuda-publicos-v2"])
+public_rate_provider = CachedBcvRateProvider(
+    DolarApiBcvRateProvider(),
+    ttl_seconds=float(os.getenv("DOLARAPI_PUBLIC_CACHE_TTL_SECONDS", "600")),
+)
 
 
 def get_public_rate_provider():
-    return DolarApiBcvRateProvider()
+    return public_rate_provider
 
 
 def _public_response(case, publication, db):

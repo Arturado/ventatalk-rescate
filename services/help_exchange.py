@@ -1,6 +1,8 @@
 import hashlib
 import json
 import os
+import threading
+import time
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
@@ -151,6 +153,29 @@ class DolarApiBcvRateProvider:
                 "requests": {currency: quote.evidence for currency, quote in quotes.items()},
             },
         )
+
+
+class CachedBcvRateProvider:
+    def __init__(self, provider, *, ttl_seconds: float, clock=time.monotonic):
+        self._provider = provider
+        self._ttl_seconds = ttl_seconds
+        self._clock = clock
+        self._snapshot = None
+        self._expires_at = 0.0
+        self._lock = threading.Lock()
+
+    def fetch_rates(self):
+        now = self._clock()
+        if self._snapshot is not None and now < self._expires_at:
+            return self._snapshot
+        with self._lock:
+            now = self._clock()
+            if self._snapshot is not None and now < self._expires_at:
+                return self._snapshot
+            snapshot = self._provider.fetch_rates()
+            self._snapshot = snapshot
+            self._expires_at = self._clock() + self._ttl_seconds
+            return snapshot
 
 
 def _normalize_currency(value):

@@ -26,8 +26,8 @@ La colección incluye cuatro carpetas V2:
 
 - `04 - Yo te ayudo V2 publico`: lista y detalle público, sin secretos.
 - `05 - Yo te ayudo V2 protegido`: rechazos sin API key/firma y listado con actor HMAC.
-- `06 - Yo te ayudo V2 donante y confirmacion`: términos, cuentas, reporte idempotente, Mis ayudas, revisión y confirmación.
-- `07 - Contingencia manual BCV`: registro excepcional de una tasa inmutable por `super_admin`.
+- `06 - Yo te ayudo V2 donante y confirmacion`: equivalencias actuales, términos, cuentas, reporte, Mis ayudas, revisión, confirmación multimoneda e idempotencia.
+- `07 - Contingencia manual BCV`: rechazo de coordinador y registro excepcional de una tasa inmutable por `super_admin`.
 
 Ejecuta las lecturas públicas:
 
@@ -62,14 +62,22 @@ V2_PUBLIC_ID=ayuda-... \
 V2_CASE_ID=1 \
 V2_HELP_AMOUNT=10.00 \
 V2_HELP_CURRENCY=USD \
+V2_RECEIVED_AMOUNT=1000.00 \
+V2_RECEIVED_CURRENCY=VES \
+V2_EXPECTED_RATE_SOURCE=DOLARAPI-BCV \
 make postman-test-yo-te-ayudo-donante
 ```
+
+Si `V2_RECEIVED_AMOUNT` y `V2_RECEIVED_CURRENCY` no se indican, toman los valores reportados. Para una contingencia ya registrada usa `V2_EXPECTED_RATE_SOURCE=BCV-MANUAL`. El flujo reintenta la confirmación con la misma clave y comprueba que monto y contador no aumenten dos veces.
 
 La contingencia BCV solo debe usarse cuando la fuente oficial no está disponible y se cuenta con evidencia oficial verificable. La tasa afecta globalmente el par y fecha indicados, queda inmutable y no tiene limpieza automática:
 
 ```bash
 V2_SUPER_ADMIN_EMAIL=admin.demo@example.test \
 V2_SUPER_ADMIN_UID=admin-demo-uid \
+V2_ORGANIZATION_ID=org-demo \
+V2_ACTOR_EMAIL=coordinador.demo@example.test \
+V2_ACTOR_UID=coordinador-demo-uid \
 V2_MANUAL_RATE_DATE=2026-07-20 \
 V2_MANUAL_RATE_SOURCE_CURRENCY=USD \
 V2_MANUAL_RATE_TARGET_CURRENCY=EUR \
@@ -78,6 +86,8 @@ V2_MANUAL_RATE_REFERENCE="Boletín oficial BCV 2026-07-20" \
 V2_MANUAL_RATE_REASON="Fuente oficial temporalmente inaccesible" \
 make postman-test-bcv-manual
 ```
+
+Las carpetas `06` y `07` no eliminan sus registros V2. Para pruebas multimoneda o de tasa manual, clona la base local, apunta una segunda API a esa copia y descártala al terminar; nunca las ejecutes contra producción.
 
 La colección `ventatalk-rescate-albergues.postman_collection.json` continúa siendo necesaria: sus 33 requests de sesión web, CSRF, centros, responsables, reportes y órdenes aún no están en la colección consolidada. No debe eliminarse hasta automatizar esa cobertura en carpetas independientes y conservar una colección manual reducida para sesión/CSRF.
 
