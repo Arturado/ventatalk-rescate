@@ -46,6 +46,10 @@ class FakeBcvProvider:
         self.rate_date = rate_date
         self.calls = 0
 
+    @property
+    def current_date(self):
+        return self.rate_date
+
     def fetch_rates(self):
         self.calls += 1
         if self.unavailable:

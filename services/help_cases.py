@@ -7,6 +7,12 @@ from sqlalchemy.orm import Session
 
 import models
 from dependencies import ActorOrgContext
+from services.help_feature_flags import (
+    HelpV2FeatureDisabledError,
+    enabled_help_v2_organization_ids,
+    is_help_v2_enabled_for_organization,
+    require_help_v2_organization,
+)
 
 
 class HelpCaseDomainError(ValueError):
@@ -22,6 +28,10 @@ class CaseNotFoundError(HelpCaseDomainError):
 
 
 class CaseStateError(HelpCaseDomainError):
+    pass
+
+
+class CaseLifecycleAccessError(HelpCaseDomainError):
     pass
 
 
@@ -43,6 +53,21 @@ CASE_STATES = {
     "suspendido",
     "archivado",
 }
+CASE_LIFECYCLE_TRANSITIONS = {
+    "pausar": ({"publicado"}, "pausado", "caso_pausado"),
+    "reanudar": ({"pausado"}, "publicado", "caso_reanudado"),
+    "cerrar": ({"meta_alcanzada"}, "cerrado", "caso_cerrado"),
+    "rechazar": ({"borrador", "pendiente_validacion", "listo_publicar"}, "rechazado", "caso_rechazado"),
+    "suspender": ({"publicado", "pausado", "meta_alcanzada"}, "suspendido", "caso_suspendido"),
+    "archivar": ({"rechazado", "cerrado"}, "archivado", "caso_archivado"),
+}
+CASE_LIFECYCLE_REASON_CODES = {
+    "rechazar": {"criterios_no_cumplidos", "documentacion_invalida", "duplicado"},
+    "suspender": {"riesgo_operativo", "revision_administrativa", "solicitud_organizacion"},
+}
+ACCOUNT_MANAGEMENT_STATES = {
+    "borrador", "pendiente_validacion", "listo_publicar", "publicado", "pausado",
+}
 
 
 def _require_text(value, field_name):
@@ -58,17 +83,76 @@ def _require_organization_access(actor, organization_id):
         raise OrganizationAccessError("El actor no puede administrar casos")
     if actor.is_org_scoped and actor.organizacion_id != organization_id:
         raise OrganizationAccessError("El actor no pertenece a la organizacion del caso")
+    try:
+        require_help_v2_organization(organization_id)
+    except HelpV2FeatureDisabledError as exc:
+        raise OrganizationAccessError(str(exc)) from exc
     return organization_id
 
 
-def _get_managed_case(db, case_id, actor):
+def _get_managed_case(db, case_id, actor, *, lock=False):
     query = db.query(models.CasoAyudaV2).filter(models.CasoAyudaV2.id == case_id)
     if actor.is_org_scoped:
         query = query.filter(models.CasoAyudaV2.organizacion_id == actor.organizacion_id)
+    if lock:
+        query = query.with_for_update()
     case = query.one_or_none()
     if case is None:
         raise CaseNotFoundError("Caso no encontrado")
+    if not is_help_v2_enabled_for_organization(case.organizacion_id):
+        raise CaseNotFoundError("Caso no encontrado")
     _require_organization_access(actor, case.organizacion_id)
+    return case
+
+
+def transition_help_case(db: Session, *, case_id: int, actor: ActorOrgContext, action: str, reason_code=None):
+    normalized_action = str(action or "").strip().lower()
+    case = _get_managed_case(db, case_id, actor, lock=True)
+    if normalized_action in {"suspender", "reactivar"} and actor.role not in {"admin", "super_admin"}:
+        raise CaseLifecycleAccessError("Solo admin o super_admin puede suspender o reactivar casos")
+
+    if normalized_action == "reactivar":
+        if case.estado != "suspendido" or case.estado_anterior_suspension not in {
+            "publicado", "pausado", "meta_alcanzada",
+        }:
+            raise CaseStateError("El caso suspendido no tiene un estado anterior valido")
+        previous_status = case.estado
+        next_status = case.estado_anterior_suspension
+        audit_action = "caso_reactivado"
+        case.estado_anterior_suspension = None
+    else:
+        transition = CASE_LIFECYCLE_TRANSITIONS.get(normalized_action)
+        if transition is None:
+            raise HelpCaseDomainError("Accion de ciclo de vida no soportada")
+        allowed_statuses, next_status, audit_action = transition
+        if case.estado not in allowed_statuses:
+            raise CaseStateError("La transicion no esta permitida para el estado actual")
+        allowed_reasons = CASE_LIFECYCLE_REASON_CODES.get(normalized_action)
+        normalized_reason = str(reason_code or "").strip().lower()
+        if allowed_reasons is not None and normalized_reason not in allowed_reasons:
+            raise HelpCaseDomainError("La transicion requiere un motivo permitido")
+        previous_status = case.estado
+        if normalized_action == "suspender":
+            case.estado_anterior_suspension = previous_status
+        reason_code = normalized_reason or None
+
+    case.estado = next_status
+    publication = db.query(models.PublicacionCasoAyuda).filter_by(caso_id=case.id).one_or_none()
+    if publication is not None:
+        publication.activa = next_status in {"publicado", "pausado", "meta_alcanzada"}
+    if next_status == "cerrado":
+        case.cerrado_at = datetime.now(timezone.utc)
+    _add_audit_event(
+        db,
+        case=case,
+        actor=actor,
+        action=audit_action,
+        entity_type="caso",
+        entity_id=case.id,
+        reason_code=reason_code,
+        metadata={"estado_anterior": previous_status, "estado_nuevo": next_status},
+    )
+    db.flush()
     return case
 
 
@@ -97,20 +181,27 @@ def list_help_cases(
     limit=50,
 ):
     requested_organization = str(organization_id or "").strip()
+    enabled_organizations = enabled_help_v2_organization_ids()
     if actor.is_org_scoped:
         if requested_organization and requested_organization != actor.organizacion_id:
             raise OrganizationAccessError("El actor no pertenece a la organizacion solicitada")
         target_organization = actor.organizacion_id
+        organization_filter = models.CasoAyudaV2.organizacion_id == target_organization
     else:
-        target_organization = _require_text(requested_organization, "organization_id")
-    _require_organization_access(actor, target_organization)
+        if requested_organization:
+            target_organization = _require_organization_access(actor, requested_organization)
+            organization_filter = models.CasoAyudaV2.organizacion_id == target_organization
+        else:
+            if not actor.can_manage_organization_cases:
+                raise OrganizationAccessError("El actor no puede administrar casos")
+            organization_filter = models.CasoAyudaV2.organizacion_id.in_(enabled_organizations)
+    if actor.is_org_scoped:
+        _require_organization_access(actor, target_organization)
 
     normalized_status = str(status or "").strip()
     if normalized_status and normalized_status not in CASE_STATES:
         raise HelpCaseDomainError("status no soportado")
-    query = db.query(models.CasoAyudaV2).filter(
-        models.CasoAyudaV2.organizacion_id == target_organization,
-    )
+    query = db.query(models.CasoAyudaV2).filter(organization_filter)
     if normalized_status:
         query = query.filter(models.CasoAyudaV2.estado == normalized_status)
     return (
@@ -345,12 +436,34 @@ def configure_help_case_publication(
     general_location=None,
     social_networks_json=None,
 ):
-    case = _require_editable_case(db, case_id, actor)
+    case = _get_managed_case(db, case_id, actor, lock=True)
+    if case.estado not in {"borrador", "pendiente_validacion"}:
+        if case.estado not in {"publicado", "pausado", "meta_alcanzada"}:
+            raise CaseStateError("El caso no admite cambios de informacion publica durante este estado")
+        if actor.role not in {"admin", "super_admin"}:
+            raise CaseLifecycleAccessError(
+                "Solo admin o super_admin puede editar informacion publica despues de publicar"
+            )
     publication = db.query(models.PublicacionCasoAyuda).filter_by(caso_id=case.id).one_or_none()
     if publication is None:
         publication = models.PublicacionCasoAyuda(caso_id=case.id, version=1)
         db.add(publication)
     else:
+        existing_snapshot = db.query(models.PublicacionCasoAyudaVersion).filter_by(
+            caso_id=case.id,
+            version=publication.version,
+        ).one_or_none()
+        if existing_snapshot is None:
+            db.add(models.PublicacionCasoAyudaVersion(
+                caso_id=case.id,
+                version=publication.version,
+                nombre_publico=publication.nombre_publico,
+                titulo_publico=publication.titulo_publico,
+                descripcion_publica=publication.descripcion_publica,
+                localidad_general=publication.localidad_general,
+                redes_sociales_json=publication.redes_sociales_json,
+                configurado_por=publication.configurado_por or actor.email,
+            ))
         publication.version += 1
     publication.nombre_publico = _require_text(public_name, "public_name")
     publication.titulo_publico = _require_text(public_title, "public_title")
@@ -362,6 +475,17 @@ def configure_help_case_publication(
         else None
     )
     publication.configurado_por = actor.email
+    db.flush()
+    db.add(models.PublicacionCasoAyudaVersion(
+        caso_id=case.id,
+        version=publication.version,
+        nombre_publico=publication.nombre_publico,
+        titulo_publico=publication.titulo_publico,
+        descripcion_publica=publication.descripcion_publica,
+        localidad_general=publication.localidad_general,
+        redes_sociales_json=publication.redes_sociales_json,
+        configurado_por=actor.email,
+    ))
     db.flush()
     _add_audit_event(
         db,
@@ -616,7 +740,9 @@ def create_account_version(
     instructions_encrypted=None,
     justification_encrypted=None,
 ):
-    case = _require_editable_case(db, case_id, actor)
+    case = _get_managed_case(db, case_id, actor, lock=True)
+    if case.estado not in ACCOUNT_MANAGEMENT_STATES:
+        raise CaseStateError("El caso no admite cambios de cuentas durante este estado")
     consent = _current_consent(db, case.id)
     account_key = _require_text(account_key, "account_key")
     owner_type = _require_text(owner_type, "owner_type")
@@ -700,7 +826,9 @@ def approve_exceptional_account(
     account = db.get(models.CuentaCasoAyuda, account_id)
     if account is None:
         raise CaseNotFoundError("Cuenta no encontrada")
-    case = _require_editable_case(db, account.caso_id, actor)
+    case = _get_managed_case(db, account.caso_id, actor, lock=True)
+    if case.estado not in ACCOUNT_MANAGEMENT_STATES:
+        raise CaseStateError("El caso no admite cambios de cuentas durante este estado")
     if account.tipo_titular not in {"tercero", "coordinador"}:
         raise HelpCaseDomainError("La cuenta no requiere aprobacion excepcional")
     if account.estado != "pendiente":
@@ -841,11 +969,13 @@ def publish_help_case(db: Session, *, case_id: int, actor: ActorOrgContext):
 
 
 def list_public_help_cases(db: Session):
+    enabled_organizations = enabled_help_v2_organization_ids()
     return (
         db.query(models.CasoAyudaV2, models.PublicacionCasoAyuda)
         .join(models.PublicacionCasoAyuda, models.PublicacionCasoAyuda.caso_id == models.CasoAyudaV2.id)
         .filter(
-            models.CasoAyudaV2.estado.in_({"publicado", "meta_alcanzada"}),
+            models.CasoAyudaV2.organizacion_id.in_(enabled_organizations),
+            models.CasoAyudaV2.estado.in_({"publicado", "pausado", "meta_alcanzada"}),
             models.PublicacionCasoAyuda.activa.is_(True),
         )
         .order_by(
@@ -858,12 +988,14 @@ def list_public_help_cases(db: Session):
 
 
 def get_public_help_case(db: Session, *, public_id: str):
+    enabled_organizations = enabled_help_v2_organization_ids()
     return (
         db.query(models.CasoAyudaV2, models.PublicacionCasoAyuda)
         .join(models.PublicacionCasoAyuda, models.PublicacionCasoAyuda.caso_id == models.CasoAyudaV2.id)
         .filter(
             models.CasoAyudaV2.public_id == public_id,
-            models.CasoAyudaV2.estado.in_({"publicado", "meta_alcanzada"}),
+            models.CasoAyudaV2.organizacion_id.in_(enabled_organizations),
+            models.CasoAyudaV2.estado.in_({"publicado", "pausado", "meta_alcanzada"}),
             models.PublicacionCasoAyuda.activa.is_(True),
         )
         .one_or_none()

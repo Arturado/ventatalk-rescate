@@ -440,6 +440,33 @@ def test_confirmation_replays_same_response_and_conflicts_on_changed_payload():
         assert case.ayudas_confirmadas == 1
 
 
+@pytest.mark.parametrize("case_status", ["suspendido", "cerrado", "rechazado", "archivado"])
+def test_terminal_or_suspended_case_blocks_pending_confirmation(case_status):
+    case_id, aid_id, _ = create_aid()
+    with TestingSessionLocal() as db:
+        db.get(models.CasoAyudaV2, case_id).estado = case_status
+        db.commit()
+
+    response = confirm(case_id, aid_id)
+
+    assert response.status_code == 409
+    with TestingSessionLocal() as db:
+        case = db.get(models.CasoAyudaV2, case_id)
+        assert db.get(models.AyudaMonetaria, aid_id).estado == "pendiente_confirmacion"
+        assert db.query(models.ConfirmacionAyuda).count() == 0
+        assert case.monto_confirmado == Decimal("0.00")
+        assert case.ayudas_confirmadas == 0
+
+
+def test_pilot_shutdown_hides_case_from_confirmation(monkeypatch):
+    case_id, aid_id, _ = create_aid()
+    monkeypatch.setenv("HELP_CASES_V2_PILOT_ORGANIZATION_IDS", "org-2")
+
+    response = confirm(case_id, aid_id)
+
+    assert response.status_code == 404
+
+
 def test_reaching_goal_updates_state_and_keeps_case_publicly_visible():
     case_id, aid_id, public_id = create_aid(goal_amount="25.00")
 

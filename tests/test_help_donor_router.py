@@ -179,6 +179,23 @@ def test_requires_current_terms_before_disclosing_accounts():
     assert "condiciones" in response.json()["detail"].lower()
 
 
+def test_pilot_shutdown_blocks_new_help_but_preserves_donor_history(monkeypatch):
+    public_id = create_published_case()
+    accept_current_terms()
+    created = report_aid(public_id)
+    assert created.status_code == 201
+    monkeypatch.setenv("HELP_CASES_V2_PILOT_ORGANIZATION_IDS", "org-2")
+
+    accounts = client.get(f"/api/v2/donante/casos-ayuda/{public_id}/cuentas")
+    blocked_report = report_aid(public_id, key="report-help-blocked-12345")
+    history = client.get("/api/v2/donante/ayudas")
+
+    assert accounts.status_code == 404
+    assert blocked_report.status_code == 404
+    assert history.status_code == 200
+    assert [item["id"] for item in history.json()] == [created.json()["id"]]
+
+
 def test_accepts_terms_and_returns_only_approved_account_with_audit():
     public_id = create_published_case()
 

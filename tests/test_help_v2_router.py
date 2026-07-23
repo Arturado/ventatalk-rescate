@@ -121,6 +121,49 @@ def test_list_endpoint_rejects_cross_organization_target():
     assert response.status_code == 403
 
 
+def test_lifecycle_endpoints_apply_role_policy_and_return_updated_state():
+    case_id = create_case(organization_id="org-1", suffix="l", private_marker="encrypted")
+    with TestingSessionLocal() as db:
+        db.get(models.CasoAyudaV2, case_id).estado = "publicado"
+        db.commit()
+
+    paused = client.post(f"/api/v2/casos-ayuda/{case_id}/pausar", json={})
+    denied = client.post(
+        f"/api/v2/casos-ayuda/{case_id}/suspender",
+        json={"reason_code": "revision_administrativa"},
+    )
+    app.dependency_overrides[require_verified_case_organization_actor] = lambda: ActorOrgContext(
+        "org-1", "admin", "admin@example.com",
+    )
+    try:
+        suspended = client.post(
+            f"/api/v2/casos-ayuda/{case_id}/suspender",
+            json={"reason_code": "revision_administrativa"},
+        )
+        reactivated = client.post(f"/api/v2/casos-ayuda/{case_id}/reactivar", json={})
+    finally:
+        app.dependency_overrides[require_verified_case_organization_actor] = coordinator
+
+    assert paused.status_code == 200
+    assert paused.json()["estado"] == "pausado"
+    assert denied.status_code == 403
+    assert suspended.status_code == 200
+    assert suspended.json()["estado"] == "suspendido"
+    assert reactivated.status_code == 200
+    assert reactivated.json()["estado"] == "pausado"
+
+
+def test_pilot_gate_denies_list_and_hides_direct_case(monkeypatch, crypto_environment):
+    case_id = create_case(organization_id="org-1", suffix="p", private_marker="encrypted")
+    monkeypatch.setenv("HELP_CASES_V2_PILOT_ORGANIZATION_IDS", "org-2")
+
+    listed = client.get("/api/v2/casos-ayuda")
+    detail = client.get(f"/api/v2/casos-ayuda/{case_id}")
+
+    assert listed.status_code == 403
+    assert detail.status_code == 404
+
+
 def test_list_endpoint_filters_by_closed_status_values():
     create_case(organization_id="org-1", suffix="1", private_marker="encrypted")
 

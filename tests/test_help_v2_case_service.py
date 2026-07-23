@@ -10,17 +10,21 @@ from dependencies import ActorOrgContext
 import models
 from services.help_cases import (
     CaseNotFoundError,
+    CaseLifecycleAccessError,
     CaseReadinessError,
     CaseStateError,
     HelpCaseDomainError,
     configure_help_case_publication,
     OrganizationAccessError,
     create_help_case,
+    get_public_help_case,
     list_help_cases,
+    list_public_help_cases,
     mark_help_case_ready,
     register_beneficiary_verification,
     register_help_case_consent,
     submit_help_case_for_validation,
+    transition_help_case,
     update_help_case,
 )
 
@@ -280,7 +284,7 @@ def test_complete_case_becomes_ready_and_records_audit_event():
         assert db.query(models.AuditoriaCasoAyuda).filter_by(accion="caso_listo_publicar").count() == 1
 
 
-def test_list_cases_is_always_scoped_to_one_explicit_organization():
+def test_global_case_actors_can_list_all_enabled_organizations():
     with TestingSessionLocal() as db:
         first = create_draft(db, suffix="1", organization_id="org-1")
         second = create_draft(db, suffix="2", organization_id="org-2")
@@ -291,13 +295,16 @@ def test_list_cases_is_always_scoped_to_one_explicit_organization():
             actor=actor(organization_id="", role="super_admin"),
             organization_id="org-2",
         )
+        global_all = list_help_cases(
+            db,
+            actor=actor(organization_id="", role="super_admin"),
+        )
 
         assert [case.id for case in scoped] == [first.id]
         assert [case.id for case in global_for_org] == [second.id]
+        assert {case.id for case in global_all} == {first.id, second.id}
         with pytest.raises(OrganizationAccessError):
             list_help_cases(db, actor=actor(organization_id="org-1"), organization_id="org-2")
-        with pytest.raises(HelpCaseDomainError):
-            list_help_cases(db, actor=actor(organization_id="", role="super_admin"))
 
 
 def test_list_cases_filters_status_and_applies_bounded_pagination():
@@ -316,6 +323,135 @@ def test_list_cases_filters_status_and_applies_bounded_pagination():
 
         assert draft.id != submitted.id
         assert [case.id for case in results] == [submitted.id]
+
+
+def test_case_lifecycle_transitions_are_closed_and_audited():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        case.estado = "publicado"
+
+        paused = transition_help_case(db, case_id=case.id, actor=actor(), action="pausar")
+        resumed = transition_help_case(db, case_id=case.id, actor=actor(), action="reanudar")
+        assert paused.id == resumed.id
+        assert resumed.estado == "publicado"
+
+        with pytest.raises(CaseStateError):
+            transition_help_case(db, case_id=case.id, actor=actor(), action="cerrar")
+
+        case.estado = "meta_alcanzada"
+        closed = transition_help_case(db, case_id=case.id, actor=actor(), action="cerrar")
+        archived = transition_help_case(db, case_id=case.id, actor=actor(), action="archivar")
+
+        assert archived.estado == "archivado"
+        assert closed.cerrado_at is not None
+        assert [event.accion for event in db.query(models.AuditoriaCasoAyuda).filter(
+            models.AuditoriaCasoAyuda.accion.in_({
+                "caso_pausado", "caso_reanudado", "caso_cerrado", "caso_archivado",
+            })
+        ).order_by(models.AuditoriaCasoAyuda.id)] == [
+            "caso_pausado", "caso_reanudado", "caso_cerrado", "caso_archivado",
+        ]
+
+
+def test_reject_only_accepts_prepublication_case_and_bounded_reason():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+
+        with pytest.raises(HelpCaseDomainError):
+            transition_help_case(db, case_id=case.id, actor=actor(), action="rechazar")
+        with pytest.raises(HelpCaseDomainError):
+            transition_help_case(
+                db,
+                case_id=case.id,
+                actor=actor(),
+                action="rechazar",
+                reason_code="texto libre no permitido",
+            )
+
+        rejected = transition_help_case(
+            db,
+            case_id=case.id,
+            actor=actor(),
+            action="rechazar",
+            reason_code="criterios_no_cumplidos",
+        )
+
+        assert rejected.estado == "rechazado"
+        assert db.query(models.AuditoriaCasoAyuda).filter_by(
+            accion="caso_rechazado",
+            motivo_codigo="criterios_no_cumplidos",
+        ).count() == 1
+
+
+def test_only_admin_can_suspend_and_reactivation_restores_previous_state():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        case.estado = "pausado"
+
+        with pytest.raises(CaseLifecycleAccessError):
+            transition_help_case(
+                db,
+                case_id=case.id,
+                actor=actor(),
+                action="suspender",
+                reason_code="revision_administrativa",
+            )
+
+        admin = actor(role="admin")
+        suspended = transition_help_case(
+            db,
+            case_id=case.id,
+            actor=admin,
+            action="suspender",
+            reason_code="revision_administrativa",
+        )
+        assert suspended.estado == "suspendido"
+        assert suspended.estado_anterior_suspension == "pausado"
+
+        reactivated = transition_help_case(db, case_id=case.id, actor=admin, action="reactivar")
+        assert reactivated.estado == "pausado"
+        assert reactivated.estado_anterior_suspension is None
+
+
+def test_lifecycle_transition_hides_cases_from_another_organization():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        case.estado = "publicado"
+
+        with pytest.raises(CaseNotFoundError):
+            transition_help_case(
+                db,
+                case_id=case.id,
+                actor=actor(organization_id="org-2"),
+                action="pausar",
+            )
+
+
+def test_public_queries_include_paused_cases_only_for_pilot_organizations(monkeypatch):
+    with TestingSessionLocal() as db:
+        allowed = create_draft(db, suffix="1", organization_id="org-1")
+        blocked = create_draft(db, suffix="2", organization_id="org-2")
+        add_complete_publication_requirements(db, allowed)
+        add_complete_publication_requirements(db, blocked)
+        allowed.estado = "pausado"
+        blocked.estado = "publicado"
+        for publication in db.query(models.PublicacionCasoAyuda).all():
+            publication.activa = True
+        db.flush()
+        monkeypatch.setenv("HELP_CASES_V2_PILOT_ORGANIZATION_IDS", "org-1")
+
+        listed = list_public_help_cases(db)
+
+        assert [case.id for case, _publication in listed] == [allowed.id]
+        assert get_public_help_case(db, public_id=allowed.public_id)[0].id == allowed.id
+        assert get_public_help_case(db, public_id=blocked.public_id) is None
+
+
+def test_management_rejects_organization_outside_pilot(monkeypatch):
+    monkeypatch.setenv("HELP_CASES_V2_PILOT_ORGANIZATION_IDS", "org-2")
+    with TestingSessionLocal() as db:
+        with pytest.raises(OrganizationAccessError):
+            create_draft(db, organization_id="org-1")
 
 
 def test_update_case_changes_only_editable_fields_and_audits():
@@ -408,6 +544,62 @@ def test_publication_configuration_is_upserted_with_increasing_version():
         assert second.version == 2
         assert db.query(models.PublicacionCasoAyuda).count() == 1
         assert db.query(models.AuditoriaCasoAyuda).filter_by(accion="publicacion_configurada").count() == 2
+
+
+@pytest.mark.parametrize("role", ["admin", "super_admin"])
+def test_admin_can_update_published_public_information_with_history(role):
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        publication = configure_help_case_publication(
+            db,
+            case_id=case.id,
+            actor=actor(),
+            public_name="Ana",
+            public_title="Titulo inicial",
+            public_description="Descripcion inicial",
+        )
+        publication.activa = True
+        case.estado = "publicado"
+
+        updated = configure_help_case_publication(
+            db,
+            case_id=case.id,
+            actor=actor(organization_id="" if role == "super_admin" else "org-1", role=role),
+            public_name="Ana actualizada",
+            public_title="Titulo actualizado",
+            public_description="Descripcion actualizada",
+        )
+
+        assert updated.version == 2
+        assert updated.activa is True
+        versions = db.query(models.PublicacionCasoAyudaVersion).order_by(
+            models.PublicacionCasoAyudaVersion.version
+        ).all()
+        assert [version.titulo_publico for version in versions] == ["Titulo inicial", "Titulo actualizado"]
+
+
+def test_coordinator_cannot_update_public_information_after_publication():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        configure_help_case_publication(
+            db,
+            case_id=case.id,
+            actor=actor(),
+            public_name="Ana",
+            public_title="Titulo inicial",
+            public_description="Descripcion inicial",
+        )
+        case.estado = "publicado"
+
+        with pytest.raises(CaseLifecycleAccessError):
+            configure_help_case_publication(
+                db,
+                case_id=case.id,
+                actor=actor(),
+                public_name="Cambio no autorizado",
+                public_title="Cambio no autorizado",
+                public_description="Cambio no autorizado",
+            )
 
 
 def test_consent_evidence_must_be_private_and_belong_to_case():

@@ -8,6 +8,36 @@ Esta guía usa datos completamente ficticios. No ingresar cédulas, cuentas, cor
 - Firestore `authorized_users/coordinador.demo@example.test`: `role=coordinador`, `organizacion_id=org-demo`.
 - Donante Auth Emulator: `donante.demo@example.test`, correo verificado y sin documento en `authorized_users`.
 
+## Habilitar el piloto local
+
+El backend falla de forma cerrada. Para habilitar únicamente organizaciones locales autorizadas, configurar variables no secretas y reconstruir la imagen:
+
+```text
+HELP_CASES_V2_ENABLED=true
+HELP_CASES_V2_PILOT_ORGANIZATION_IDS=org-prueba,org-demo
+```
+
+Con la flag apagada o una allowlist vacía, el listado público queda vacío, los detalles no habilitados responden `404` y las operaciones organizacionales responden `403`. El historial existente del donante permanece disponible. No usar una allowlist de producción sin aprobación explícita.
+
+## Probar estados administrativos
+
+- `publicado → pausado → publicado`: coordinación; el caso pausado sigue visible y permite administrar cuentas, pero los donantes no pueden consultar cuentas ni registrar ayudas nuevas hasta reanudarlo.
+- `meta_alcanzada → cerrado → archivado`: coordinación.
+- `borrador|pendiente_validacion|listo_publicar → rechazado → archivado`: coordinación con motivo cerrado.
+- `publicado|pausado|meta_alcanzada → suspendido → estado anterior`: solo `admin` o `super_admin` y con motivo cerrado.
+
+Verificar un coordinador permitido, un coordinador de otra organización, una organización fuera del piloto y un coordinador intentando suspender. Cada transición debe dejar auditoría con estado anterior/nuevo sin texto libre ni datos sensibles.
+
+## Probar administración posterior a la publicación
+
+- Como `admin` o `super_admin`, modificar nombre, título, descripción o localidad de un caso `publicado`, `pausado` o `meta_alcanzada`; el cambio debe verse inmediatamente en el detalle público y crear una versión inmutable con auditoría.
+- Como coordinador, comprobar que la información pública queda en modo de solo lectura después de publicar.
+- Como coordinador, `admin` o `super_admin`, pulsar `Agregar otra cuenta` en un caso `listo_publicar`, `publicado` o `pausado`; debe crearse una clave lógica nueva sin desactivar la cuenta `principal`.
+- `Crear nueva versión` debe conservar la clave lógica, inactivar solo la versión previa de esa cuenta y no afectar las demás cuentas.
+- Los estados `meta_alcanzada`, `cerrado`, `rechazado`, `suspendido` y `archivado` no admiten altas ni versiones de cuentas.
+- Como `super_admin` o `admin` sin organización, dejar vacío `Filtrar por organización` en `/admin/casos-ayuda`; deben aparecer juntos los casos de todas las organizaciones habilitadas, identificados con su `organizacion_id`.
+- Elegir una organización concreta debe filtrar el listado y habilitar `Nuevo caso`; crear sin una organización concreta debe permanecer bloqueado.
+
 ## Crear el caso como coordinador
 
 Abrir `/admin/casos-ayuda` e ingresar:
@@ -146,6 +176,17 @@ make postman-test-yo-te-ayudo-donante
 ```
 
 Reemplazar `V2_PUBLIC_ID` y `V2_CASE_ID`. Usar un `V2_DONOR_UID` nuevo para una corrida independiente. La carpeta consulta equivalencias, acepta términos, consulta cuentas, reporta, lista, pasa a revisión, confirma y reintenta la confirmación para comprobar idempotencia. Ejecutar pruebas multimoneda y contingencias sobre una copia descartable de la base local porque estos registros V2 no tienen limpieza automática.
+
+## Probar concurrencia PostgreSQL
+
+Las pruebas de concurrencia requieren una base PostgreSQL vacía y descartable cuyo nombre termine en `_test`. Nunca apuntar esta variable a la base local habitual ni a producción:
+
+```bash
+HELP_CONCURRENCY_TEST_DATABASE_URL=postgresql://usuario:clave@postgres/rescate_concurrency_test \
+pytest -q tests/test_help_exchange_postgres.py
+```
+
+Las pruebas eliminan y recrean las tablas dentro de esa base. Verifican que conversiones simultáneas reutilicen un único snapshot y que dos confirmaciones concurrentes sobre una ayuda incrementen el progreso una sola vez.
 
 ## Albergues
 

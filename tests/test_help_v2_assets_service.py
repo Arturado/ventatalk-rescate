@@ -11,6 +11,7 @@ from dependencies import ActorOrgContext
 import models
 from services.help_cases import (
     CaseNotFoundError,
+    CaseStateError,
     HelpCaseDomainError,
     approve_exceptional_account,
     create_account_version,
@@ -46,8 +47,8 @@ def isolated_database():
     Base.metadata.drop_all(bind=engine)
 
 
-def actor(*, organization_id="org-1", email="coordinador@example.com"):
-    return ActorOrgContext(organization_id, "coordinador", email)
+def actor(*, organization_id="org-1", email="coordinador@example.com", role="coordinador"):
+    return ActorOrgContext(organization_id, role, email)
 
 
 def create_draft(db, *, suffix="1"):
@@ -320,3 +321,50 @@ def test_account_version_uses_new_consent_after_reconsent():
 
         assert first.consentimiento_version == 1
         assert second.consentimiento_version == second_consent.version == 2
+
+
+@pytest.mark.parametrize("state", ["listo_publicar", "publicado", "pausado"])
+@pytest.mark.parametrize("role", ["coordinador", "admin", "super_admin"])
+def test_case_roles_can_add_distinct_account_in_active_management_states(state, role):
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        add_consent(db, case)
+        principal = create_account_version(
+            db,
+            case_id=case.id,
+            actor=actor(),
+            **account_kwargs(account_key="principal"),
+        )
+        case.estado = state
+
+        secondary = create_account_version(
+            db,
+            case_id=case.id,
+            actor=actor(
+                organization_id="" if role == "super_admin" else "org-1",
+                role=role,
+                email=f"{role}@example.com",
+            ),
+            **account_kwargs(account_key="secondary"),
+        )
+
+        assert secondary.version == 1
+        assert secondary.estado == "aprobada"
+        assert principal.estado == "aprobada"
+        assert db.query(models.CuentaCasoAyuda).filter_by(caso_id=case.id).count() == 2
+
+
+@pytest.mark.parametrize("state", ["meta_alcanzada", "cerrado", "rechazado", "suspendido", "archivado"])
+def test_accounts_cannot_be_added_in_blocked_case_states(state):
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        add_consent(db, case)
+        case.estado = state
+
+        with pytest.raises(CaseStateError):
+            create_account_version(
+                db,
+                case_id=case.id,
+                actor=actor(),
+                **account_kwargs(account_key="secondary"),
+            )

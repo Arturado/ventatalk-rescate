@@ -470,6 +470,17 @@ class CasoAyudaV2UpdateRequest(BaseModel):
     private_story: Optional[str] = Field(default=None, min_length=2, max_length=10000)
 
 
+class TransicionCasoAyudaRequest(BaseModel):
+    reason_code: Optional[Literal[
+        "criterios_no_cumplidos",
+        "documentacion_invalida",
+        "duplicado",
+        "riesgo_operativo",
+        "revision_administrativa",
+        "solicitud_organizacion",
+    ]] = None
+
+
 class CuentaCasoAyudaResumenResponse(BaseModel):
     id: int
     account_key: str

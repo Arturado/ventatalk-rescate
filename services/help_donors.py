@@ -10,6 +10,7 @@ import models
 from dependencies import ActorOrgContext
 from services.help_crypto import HelpDataCipher, HelpDataCryptoError
 from services.help_files import decode_private_evidence, save_encrypted_private_evidence
+from services.help_feature_flags import enabled_help_v2_organization_ids
 from services.help_idempotency import hash_idempotency_payload
 
 
@@ -84,7 +85,11 @@ def disclose_donor_accounts(db: Session, *, actor: ActorOrgContext, public_id: s
     if acceptance is None:
         raise DonorTermsRequiredError("Debes aceptar las condiciones vigentes antes de consultar cuentas")
 
-    case = db.query(models.CasoAyudaV2).filter_by(public_id=public_id, estado="publicado").one_or_none()
+    case = db.query(models.CasoAyudaV2).filter(
+        models.CasoAyudaV2.public_id == public_id,
+        models.CasoAyudaV2.estado == "publicado",
+        models.CasoAyudaV2.organizacion_id.in_(enabled_help_v2_organization_ids()),
+    ).one_or_none()
     if case is None:
         raise DonorAccessError("Caso publicado no encontrado")
     publication = db.query(models.PublicacionCasoAyuda).filter_by(caso_id=case.id, activa=True).one_or_none()
@@ -205,7 +210,11 @@ def report_monetary_aid(
             raise DonorIdempotencyConflictError("La operación idempotente todavía está en proceso")
         return json.loads(existing.response_body), None
 
-    case = db.query(models.CasoAyudaV2).filter_by(public_id=public_id, estado="publicado").with_for_update().one_or_none()
+    case = db.query(models.CasoAyudaV2).filter(
+        models.CasoAyudaV2.public_id == public_id,
+        models.CasoAyudaV2.estado == "publicado",
+        models.CasoAyudaV2.organizacion_id.in_(enabled_help_v2_organization_ids()),
+    ).with_for_update().one_or_none()
     if case is None:
         raise DonorAccessError("Caso publicado no encontrado")
     publication = db.query(models.PublicacionCasoAyuda).filter_by(caso_id=case.id, activa=True).one_or_none()

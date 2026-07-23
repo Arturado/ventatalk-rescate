@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import models
@@ -14,6 +15,7 @@ from services.help_cases import (
 )
 from services.help_crypto import HelpDataCipher
 from services.help_exchange import BcvRateUnavailableError, get_or_create_bcv_conversion
+from services.help_feature_flags import is_help_v2_enabled_for_organization
 from services.help_idempotency import hash_idempotency_payload
 
 
@@ -31,6 +33,8 @@ def _locked_case(db, *, case_id, actor):
         query = query.filter(models.CasoAyudaV2.organizacion_id == actor.organizacion_id)
     case = query.with_for_update().one_or_none()
     if case is None:
+        raise CaseNotFoundError("Caso no encontrado")
+    if not is_help_v2_enabled_for_organization(case.organizacion_id):
         raise CaseNotFoundError("Caso no encontrado")
     _require_organization_access(actor, case.organizacion_id)
     return case
@@ -249,6 +253,8 @@ def confirm_help_aid(
     actor_id = actor.uid or f"{actor.email}|{actor.role}"
 
     case = _locked_case(db, case_id=case_id, actor=actor)
+    if case.estado not in {"publicado", "pausado", "meta_alcanzada"}:
+        raise CaseStateError("El estado del caso no permite confirmar ayudas")
     existing = db.query(models.OperacionIdempotenteAyuda).filter_by(
         actor_id=actor_id,
         operacion="confirm_help",
@@ -298,8 +304,29 @@ def confirm_help_aid(
         idempotency_key=idempotency_key,
         request_hash=request_hash,
     )
-    db.add(operation)
-    db.flush()
+    try:
+        with db.begin_nested():
+            db.add(operation)
+            db.flush()
+    except IntegrityError:
+        # Otra transacción concurrente reservó primero esta misma clave para el
+        # mismo actor, probablemente contra un caso/ayuda distinto por error del
+        # cliente. Se responde como conflicto idempotente en lugar de propagar
+        # un IntegrityError sin manejar.
+        conflicting = db.query(models.OperacionIdempotenteAyuda).filter_by(
+            actor_id=actor_id,
+            operacion="confirm_help",
+            idempotency_key=idempotency_key,
+        ).one()
+        if conflicting.request_hash != request_hash:
+            raise HelpConfirmationIdempotencyError(
+                "La clave idempotente ya fue usada con otros datos"
+            ) from None
+        if conflicting.estado != "completed" or not conflicting.response_body:
+            raise HelpConfirmationIdempotencyError(
+                "La operacion idempotente todavia esta en proceso"
+            ) from None
+        return json.loads(conflicting.response_body), True
 
     confirmation = models.ConfirmacionAyuda(
         ayuda_id=aid.id,

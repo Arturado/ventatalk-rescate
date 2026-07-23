@@ -390,6 +390,31 @@ class PublicacionCasoAyuda(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class PublicacionCasoAyudaVersion(Base):
+    __tablename__ = "casos_ayuda_publicaciones_versiones"
+    __table_args__ = (
+        UniqueConstraint("caso_id", "version", name="uq_casos_ayuda_publicacion_version"),
+        CheckConstraint("version > 0", name="ck_casos_ayuda_publicaciones_versiones_version"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    caso_id = Column(Integer, ForeignKey("casos_ayuda_v2.id", ondelete="RESTRICT"), nullable=False, index=True)
+    version = Column(Integer, nullable=False)
+    nombre_publico = Column(String(200), nullable=False)
+    titulo_publico = Column(String(250), nullable=False)
+    descripcion_publica = Column(Text, nullable=False)
+    localidad_general = Column(String(200), nullable=True)
+    redes_sociales_json = Column(Text, nullable=True)
+    configurado_por = Column(String(200), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+@event.listens_for(PublicacionCasoAyudaVersion, "before_update")
+@event.listens_for(PublicacionCasoAyudaVersion, "before_delete")
+def _prevent_publication_version_mutation(*_):
+    raise ValueError("Las versiones de publicacion son inmutables")
+
+
 class ConsentimientoCasoAyuda(Base):
     __tablename__ = "casos_ayuda_consentimientos"
     __table_args__ = (

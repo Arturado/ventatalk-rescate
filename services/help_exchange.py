@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import models
@@ -290,8 +291,18 @@ def get_or_create_bcv_conversion(
         valor=applied_rate,
         evidencia_json=json.dumps(evidence, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
     )
-    db.add(rate_record)
-    db.flush()
+    try:
+        with db.begin_nested():
+            db.add(rate_record)
+            db.flush()
+    except IntegrityError:
+        rate_record = db.query(models.TasaCambioAyuda).filter_by(
+            fuente=DOLARAPI_BCV_SOURCE,
+            fecha_tasa=snapshot.rate_date,
+            moneda_base=source,
+            moneda_cotizada=target,
+        ).one()
+        applied_rate = Decimal(rate_record.valor).quantize(RATE_QUANTUM, rounding=ROUND_HALF_UP)
     return ConversionResult(
         equivalent_amount=(decimal_amount * applied_rate).quantize(AMOUNT_QUANTUM, rounding=ROUND_HALF_UP),
         applied_rate=applied_rate,

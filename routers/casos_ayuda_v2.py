@@ -17,6 +17,7 @@ from dependencies import (
 )
 from services.help_cases import (
     CaseNotFoundError,
+    CaseLifecycleAccessError,
     CaseReadinessError,
     CaseStateError,
     HelpCaseDomainError,
@@ -33,6 +34,7 @@ from services.help_cases import (
     register_case_document,
     register_help_case_consent,
     submit_help_case_for_validation,
+    transition_help_case,
     update_help_case,
 )
 from services.help_crypto import HelpDataCipher, HelpDataCryptoError
@@ -138,7 +140,7 @@ def review_organization_help_aid(
         aid = mark_help_aid_in_review(db, case_id=case_id, aid_id=aid_id, actor=actor)
         db.commit()
         return aid
-    except CaseNotFoundError as exc:
+    except (CaseNotFoundError, OrganizationAccessError) as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except CaseStateError as exc:
@@ -244,7 +246,7 @@ def confirm_organization_help_aid(
         if not replayed:
             db.commit()
         return response
-    except CaseNotFoundError as exc:
+    except (CaseNotFoundError, OrganizationAccessError) as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except HelpRateUnavailableError as exc:
@@ -542,6 +544,9 @@ def configure_organization_help_case_publication(
     except CaseNotFoundError as exc:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CaseLifecycleAccessError as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except CaseStateError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -746,3 +751,40 @@ def publish_organization_help_case(
     except CaseStateError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{case_id}/{action}",
+    response_model=schemas.CasoAyudaV2ResumenResponse,
+)
+def transition_organization_help_case(
+    case_id: int,
+    action: Literal["pausar", "reanudar", "cerrar", "rechazar", "suspender", "reactivar", "archivar"],
+    payload: schemas.TransicionCasoAyudaRequest,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        case = transition_help_case(
+            db,
+            case_id=case_id,
+            actor=actor,
+            action=action,
+            reason_code=payload.reason_code,
+        )
+        db.commit()
+        db.refresh(case)
+        return case
+    except (CaseNotFoundError, OrganizationAccessError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CaseLifecycleAccessError as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except CaseStateError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except HelpCaseDomainError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
