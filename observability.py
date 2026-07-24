@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 import models
 from database import get_db
 from services.help_crypto import HelpDataCipher
+from services.help_feature_flags import is_help_v2_globally_enabled
 from services.help_notifications import ResendProvider
 
 
@@ -204,10 +205,11 @@ def ready(db: Session = Depends(get_db)):
             raise RuntimeError("upload_root")
         with tempfile.NamedTemporaryFile(dir=upload_root):
             pass
-        provider = ResendProvider()
-        if not provider.configured:
-            raise RuntimeError("notification_provider")
-        provider._configuration()
+        if is_help_v2_globally_enabled():
+            provider = ResendProvider()
+            if not provider.configured:
+                raise RuntimeError("notification_provider")
+            provider._configuration()
         db.query(models.NotificacionCasoAyuda.id).limit(1).all()
     except Exception:
         safe_log(logger, logging.ERROR, "readiness_failed", reason="dependency")

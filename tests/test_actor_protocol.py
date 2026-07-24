@@ -1,4 +1,6 @@
 import time
+import hashlib
+import hmac
 
 import pytest
 from fastapi import HTTPException
@@ -41,7 +43,7 @@ def signed_context(
         x_actor_email=email,
         x_actor_uid=uid,
         x_actor_ip_hash=ip_hash,
-        x_actor_org_signature=signature,
+        x_actor_org_signature_v2=signature,
         x_actor_org_timestamp=signed_at,
     )
 
@@ -110,7 +112,56 @@ def test_rejects_invalid_signature(monkeypatch):
             x_actor_uid="firebase-uid-123",
             x_actor_ip_hash="a" * 64,
             x_actor_org_signature="invalid",
+            x_actor_org_signature_v2=None,
             x_actor_org_timestamp=str(int(time.time())),
+        )
+
+    assert error.value.status_code == 401
+
+
+def test_accepts_legacy_signature_during_protocol_transition(monkeypatch):
+    monkeypatch.setenv("ACTOR_SIGNING_SECRET", SECRET)
+    signed_at = str(int(time.time()))
+    signature = hmac.new(
+        SECRET.encode(),
+        f"org-1|admin|admin@example.com|{signed_at}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+    actor = require_verified_actor_org(
+        x_actor_org_id="org-1",
+        x_actor_role="admin",
+        x_actor_email="admin@example.com",
+        x_actor_uid=None,
+        x_actor_ip_hash=None,
+        x_actor_org_signature=signature,
+        x_actor_org_signature_v2=None,
+        x_actor_org_timestamp=signed_at,
+    )
+
+    assert actor.uid == ""
+    assert actor.ip_hash == ""
+
+
+def test_rejects_invalid_v2_signature_instead_of_falling_back_to_legacy(monkeypatch):
+    monkeypatch.setenv("ACTOR_SIGNING_SECRET", SECRET)
+    signed_at = str(int(time.time()))
+    legacy_signature = hmac.new(
+        SECRET.encode(),
+        f"org-1|admin|admin@example.com|{signed_at}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+    with pytest.raises(HTTPException) as error:
+        require_verified_actor_org(
+            x_actor_org_id="org-1",
+            x_actor_role="admin",
+            x_actor_email="admin@example.com",
+            x_actor_uid="admin-uid",
+            x_actor_ip_hash="a" * 64,
+            x_actor_org_signature=legacy_signature,
+            x_actor_org_signature_v2="invalid",
+            x_actor_org_timestamp=signed_at,
         )
 
     assert error.value.status_code == 401

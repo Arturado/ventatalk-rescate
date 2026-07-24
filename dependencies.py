@@ -77,6 +77,17 @@ def _actor_org_signature(
     return hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
 
 
+def _legacy_actor_org_signature(
+    organizacion_id: str,
+    role: str,
+    email: str,
+    timestamp: str,
+    secret: str,
+) -> str:
+    message = f"{organizacion_id}|{role}|{email}|{timestamp}".encode()
+    return hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
+
+
 def require_verified_actor_org(
     x_actor_org_id: Optional[str] = Header(None),
     x_actor_role: Optional[str] = Header(None),
@@ -84,13 +95,14 @@ def require_verified_actor_org(
     x_actor_uid: Optional[str] = Header(None),
     x_actor_ip_hash: Optional[str] = Header(None),
     x_actor_org_signature: Optional[str] = Header(None),
+    x_actor_org_signature_v2: Optional[str] = Header(None),
     x_actor_org_timestamp: Optional[str] = Header(None),
 ) -> ActorOrgContext:
     secret = os.getenv("ACTOR_SIGNING_SECRET")
     if not secret:
         raise HTTPException(status_code=500, detail="ACTOR_SIGNING_SECRET no configurado")
 
-    if not x_actor_org_signature or not x_actor_org_timestamp:
+    if not (x_actor_org_signature or x_actor_org_signature_v2) or not x_actor_org_timestamp:
         raise HTTPException(status_code=401, detail="Falta la firma de organización del actor")
 
     try:
@@ -106,17 +118,28 @@ def require_verified_actor_org(
     email = (x_actor_email or "").strip().lower()
     uid = (x_actor_uid or "").strip()
     ip_hash = (x_actor_ip_hash or "").strip().lower()
-    expected = _actor_org_signature(
-        organizacion_id,
-        role,
-        email,
-        uid,
-        ip_hash,
-        x_actor_org_timestamp,
-        secret,
-    )
+    if x_actor_org_signature_v2:
+        expected = _actor_org_signature(
+            organizacion_id,
+            role,
+            email,
+            uid,
+            ip_hash,
+            x_actor_org_timestamp,
+            secret,
+        )
+        provided_signature = x_actor_org_signature_v2
+    else:
+        expected = _legacy_actor_org_signature(
+            organizacion_id,
+            role,
+            email,
+            x_actor_org_timestamp,
+            secret,
+        )
+        provided_signature = x_actor_org_signature
 
-    if not hmac.compare_digest(expected, x_actor_org_signature):
+    if not hmac.compare_digest(expected, provided_signature or ""):
         raise HTTPException(status_code=401, detail="Firma de organización inválida")
 
     if not email or "@" not in email:
@@ -157,6 +180,7 @@ def get_actor_org_scope(
     x_actor_uid: Optional[str] = Header(None),
     x_actor_ip_hash: Optional[str] = Header(None),
     x_actor_org_signature: Optional[str] = Header(None),
+    x_actor_org_signature_v2: Optional[str] = Header(None),
     x_actor_org_timestamp: Optional[str] = Header(None),
 ) -> Optional[ActorOrgContext]:
     """Devuelve el contexto de organización SOLO si la autenticación fue por x-api-key.
@@ -176,5 +200,6 @@ def get_actor_org_scope(
         x_actor_uid=x_actor_uid,
         x_actor_ip_hash=x_actor_ip_hash,
         x_actor_org_signature=x_actor_org_signature,
+        x_actor_org_signature_v2=x_actor_org_signature_v2,
         x_actor_org_timestamp=x_actor_org_timestamp,
     )

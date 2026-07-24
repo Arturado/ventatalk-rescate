@@ -143,6 +143,17 @@ def test_readiness_rejects_invalid_resend_sender(monkeypatch):
     assert response.json() == {"status": "not_ready"}
 
 
+def test_readiness_does_not_require_resend_while_help_v2_is_disabled(monkeypatch):
+    monkeypatch.setenv("HELP_CASES_V2_ENABLED", "false")
+    monkeypatch.delenv("RESEND_API_KEY")
+    monkeypatch.delenv("RESEND_FROM_EMAIL")
+
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+
+
 def test_metrics_are_openmetrics_and_have_no_sensitive_or_id_labels():
     metrics.increment("access_denials_total", reason="rate_limit")
     response = client.get("/metrics")
