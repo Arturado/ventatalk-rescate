@@ -7,6 +7,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     Numeric,
     String,
@@ -369,6 +370,7 @@ class CasoAyudaV2(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     publicado_at = Column(DateTime(timezone=True), nullable=True)
     cerrado_at = Column(DateTime(timezone=True), nullable=True)
+    retencion_aplicada_at = Column(DateTime(timezone=True), nullable=True, index=True)
 
 
 class PublicacionCasoAyuda(Base):
@@ -475,6 +477,8 @@ class DocumentoCasoAyuda(Base):
     revisado_por = Column(String(200), nullable=True)
     revisado_at = Column(DateTime(timezone=True), nullable=True)
     motivo_revision = Column(Text, nullable=True)
+    retencion_estado = Column(String(40), nullable=True, index=True)
+    retencion_aplicada_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -562,6 +566,11 @@ class AyudaMonetaria(Base):
             "'en_revision', 'rechazada', 'cancelada')",
             name="ck_casos_ayuda_ayuda_estado",
         ),
+        CheckConstraint(
+            "(donante_email_hash IS NULL AND donante_email_cifrado IS NULL) OR "
+            "(length(donante_email_hash) = 64 AND donante_email_cifrado IS NOT NULL)",
+            name="ck_casos_ayuda_ayuda_donante_email",
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -569,6 +578,8 @@ class AyudaMonetaria(Base):
     cuenta_id = Column(Integer, nullable=False, index=True)
     cuenta_version = Column(Integer, nullable=False)
     donante_id = Column(String(200), nullable=False, index=True)
+    donante_email_hash = Column(String(64), nullable=True, index=True)
+    donante_email_cifrado = Column(Text, nullable=True)
     monto_reportado = Column(Numeric(18, 2), nullable=False)
     moneda_reportada = Column(String(3), nullable=False)
     fecha_transferencia = Column(Date, nullable=False)
@@ -617,6 +628,8 @@ class ComprobanteAyuda(Base):
     checksum_sha256 = Column(String(64), nullable=False)
     estado = Column(String(20), nullable=False, default="vigente", server_default="vigente")
     cargado_por = Column(String(200), nullable=False)
+    retencion_estado = Column(String(40), nullable=True, index=True)
+    retencion_aplicada_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -685,6 +698,31 @@ class ConfirmacionAyuda(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class IntentoSolicitudAccesoTemporal(Base):
+    __tablename__ = "casos_ayuda_intentos_acceso_temporal"
+    __table_args__ = (
+        CheckConstraint(
+            "length(email_hash) = 64 AND length(ip_hash) = 64",
+            name="ck_casos_ayuda_intento_acceso_hashes",
+        ),
+        Index(
+            "ix_casos_ayuda_intento_acceso_email_fecha",
+            "email_hash",
+            "created_at",
+        ),
+        Index(
+            "ix_casos_ayuda_intento_acceso_ip_fecha",
+            "ip_hash",
+            "created_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    email_hash = Column(String(64), nullable=False)
+    ip_hash = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class AccesoTemporalAyuda(Base):
     __tablename__ = "casos_ayuda_accesos"
     __table_args__ = (
@@ -693,7 +731,7 @@ class AccesoTemporalAyuda(Base):
             name="ck_casos_ayuda_acceso_challenge_ttl",
         ),
         CheckConstraint(
-            "session_ttl_seconds > 0 AND session_ttl_seconds <= 86400",
+            "session_ttl_seconds > 0 AND session_ttl_seconds <= 28800",
             name="ck_casos_ayuda_acceso_session_ttl",
         ),
         CheckConstraint(
@@ -726,10 +764,11 @@ class AccesoTemporalAyuda(Base):
     challenge_hash = Column(String(64), nullable=False, unique=True)
     challenge_expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     challenge_ttl_seconds = Column(Integer, nullable=False, default=900, server_default="900")
+    request_ip_hash = Column(String(64), nullable=True, index=True)
     challenge_consumed_at = Column(DateTime(timezone=True), nullable=True)
     session_hash = Column(String(64), nullable=True, unique=True)
     session_expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
-    session_ttl_seconds = Column(Integer, nullable=False, default=86400, server_default="86400")
+    session_ttl_seconds = Column(Integer, nullable=False, default=28800, server_default="28800")
     estado = Column(String(20), nullable=False, default="pendiente", server_default="pendiente", index=True)
     solicitado_por = Column(String(200), nullable=False)
     intentos_fallidos = Column(Integer, nullable=False, default=0, server_default="0")
@@ -842,7 +881,7 @@ class NotificacionCasoAyuda(Base):
     __table_args__ = (
         CheckConstraint(
             "evento_tipo IN ('ayuda_reportada', 'ayuda_confirmada', 'problema_reportado', "
-            "'revision_resuelta', 'meta_alcanzada', 'acceso_temporal')",
+            "'revision_resuelta', 'meta_alcanzada', 'acceso_temporal', 'account_changed')",
             name="ck_casos_ayuda_notificacion_evento",
         ),
         CheckConstraint(
@@ -878,12 +917,37 @@ class NotificacionCasoAyuda(Base):
     estado = Column(String(20), nullable=False, default="pendiente", server_default="pendiente", index=True)
     intentos = Column(Integer, nullable=False, default=0, server_default="0")
     proximo_intento_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    procesando_desde = Column(DateTime(timezone=True), nullable=True, index=True)
     proveedor = Column(String(100), nullable=True)
     proveedor_referencia = Column(String(200), nullable=True)
     ultimo_error_codigo = Column(String(100), nullable=True)
     enviada_at = Column(DateTime(timezone=True), nullable=True)
+    retencion_redactada_at = Column(DateTime(timezone=True), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class RetencionLegalAyuda(Base):
+    __tablename__ = "casos_ayuda_retencion_legal"
+    __table_args__ = (
+        UniqueConstraint("entidad_tipo", "entidad_id", name="uq_casos_ayuda_retencion_entidad"),
+        CheckConstraint(
+            "entidad_tipo IN ('caso', 'sesion_temporal', 'notificacion')",
+            name="ck_casos_ayuda_retencion_entidad_tipo",
+        ),
+        CheckConstraint("motivo_codigo <> ''", name="ck_casos_ayuda_retencion_motivo"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    entidad_tipo = Column(String(30), nullable=False, index=True)
+    entidad_id = Column(String(100), nullable=False, index=True)
+    caso_id = Column(Integer, ForeignKey("casos_ayuda_v2.id", ondelete="RESTRICT"), nullable=True, index=True)
+    motivo_codigo = Column(String(100), nullable=False)
+    autorizado_por = Column(String(200), nullable=False)
+    activo = Column(Boolean, nullable=False, default=True, server_default="true", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    liberado_at = Column(DateTime(timezone=True), nullable=True)
+    liberado_por = Column(String(200), nullable=True)
 
 
 class OperacionIdempotenteAyuda(Base):

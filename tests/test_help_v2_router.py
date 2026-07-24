@@ -1,6 +1,7 @@
 from decimal import Decimal
 import base64
 from pathlib import Path
+import json
 
 import pytest
 from fastapi import FastAPI
@@ -341,6 +342,107 @@ def test_publication_endpoint_updates_version_and_readiness(crypto_environment):
         assert publication.titulo_publico == "Ayuda para tratamiento actualizado"
 
 
+def test_published_publication_update_requires_bounded_current_consent_assertion(crypto_environment):
+    created = client.post("/api/v2/casos-ayuda", json={
+        "beneficiary_name": "Nombre privado",
+        "beneficiary_identity": "V-55667789",
+        "internal_title": "Tratamiento inicial",
+        "category": "medicamentos",
+        "goal_amount": "250.00",
+        "goal_currency": "USD",
+    }).json()
+    with TestingSessionLocal() as db:
+        make_publishable_case(db, created["id"])
+        db.query(models.CuentaCasoAyuda).filter_by(caso_id=created["id"]).delete()
+        publication = db.query(models.PublicacionCasoAyuda).filter_by(caso_id=created["id"]).one()
+        publication.activa = True
+        db.get(models.CasoAyudaV2, created["id"]).estado = "publicado"
+        db.commit()
+    app.dependency_overrides[require_verified_case_organization_actor] = lambda: ActorOrgContext(
+        "org-1", "admin", "admin@example.com",
+    )
+    payload = {
+        "public_name": "Ana",
+        "public_title": "Ayuda para tratamiento actualizado",
+        "public_description": "Descripcion autorizada actualizada",
+        "general_location": "Caracas",
+        "social_networks": {},
+    }
+    try:
+        absent = client.put(f"/api/v2/casos-ayuda/{created['id']}/publicacion", json=payload)
+        denied = client.put(
+            f"/api/v2/casos-ayuda/{created['id']}/publicacion",
+            json={**payload, "within_current_consent_scope": False},
+        )
+        accepted = client.put(
+            f"/api/v2/casos-ayuda/{created['id']}/publicacion",
+            json={**payload, "within_current_consent_scope": True},
+        )
+    finally:
+        app.dependency_overrides[require_verified_case_organization_actor] = coordinator
+
+    assert absent.status_code == 400
+    assert denied.status_code == 400
+    assert accepted.status_code == 200
+    with TestingSessionLocal() as db:
+        audit = db.query(models.AuditoriaCasoAyuda).filter_by(
+            accion="publicacion_configurada",
+            actor_id="admin@example.com",
+        ).one()
+        assert json.loads(audit.metadata_json) == {
+            "dentro_alcance_consentimiento_vigente": True,
+            "version_publicacion_anterior": 1,
+            "version_publicacion_nueva": 2,
+        }
+
+
+def test_expanded_consent_action_withdraws_consent_and_hides_publication(crypto_environment):
+    created = client.post("/api/v2/casos-ayuda", json={
+        "beneficiary_name": "Nombre privado",
+        "beneficiary_identity": "V-55667790",
+        "internal_title": "Tratamiento inicial",
+        "category": "medicamentos",
+        "goal_amount": "250.00",
+        "goal_currency": "USD",
+    }).json()
+    with TestingSessionLocal() as db:
+        make_publishable_case(db, created["id"])
+        db.query(models.CuentaCasoAyuda).filter_by(caso_id=created["id"]).delete()
+        case = db.get(models.CasoAyudaV2, created["id"])
+        case.estado = "publicado"
+        db.query(models.PublicacionCasoAyuda).filter_by(caso_id=case.id).one().activa = True
+        db.commit()
+    app.dependency_overrides[require_verified_case_organization_actor] = lambda: ActorOrgContext(
+        "", "super_admin", "superadmin@example.com",
+    )
+    try:
+        response = client.post(
+            f"/api/v2/casos-ayuda/{created['id']}/publicacion/requerir-consentimiento-ampliado"
+        )
+    finally:
+        app.dependency_overrides[require_verified_case_organization_actor] = coordinator
+
+    assert response.status_code == 200
+    assert response.json()["estado"] == "pendiente_validacion"
+    assert response.json()["publicacion"]["activa"] is False
+    assert response.json()["consentimiento"]["vigente"] is False
+    assert "consentimiento_vigente_faltante" in response.json()["readiness_blockers"]
+    assert client.get(f"/api/v2/public/casos-ayuda/{created['public_id']}").status_code == 404
+    with TestingSessionLocal() as db:
+        consent = db.query(models.ConsentimientoCasoAyuda).filter_by(caso_id=created["id"]).one()
+        audit = db.query(models.AuditoriaCasoAyuda).filter_by(
+            accion="consentimiento_ampliado_requerido"
+        ).one()
+        assert consent.vigente is False
+        assert consent.motivo_retiro == "ampliacion_alcance_publicacion"
+        assert json.loads(audit.metadata_json) == {
+            "estado_anterior": "publicado",
+            "estado_nuevo": "pendiente_validacion",
+            "consentimiento_version": 1,
+            "publicacion_version": 1,
+        }
+
+
 def test_consent_endpoint_encrypts_private_evidence_and_updates_readiness(crypto_environment, tmp_path, monkeypatch):
     monkeypatch.setenv("HELP_PRIVATE_UPLOAD_ROOT", str(tmp_path))
     created = client.post("/api/v2/casos-ayuda", json={
@@ -594,3 +696,137 @@ def test_publish_endpoint_requires_ready_case_and_public_api_excludes_private_fi
     assert "Nombre privado" not in public_list.text
     assert "cedula" not in public_list.text.lower()
     assert "identificador" not in public_list.text.lower()
+
+
+def test_preview_matches_public_detail_after_publication_except_lifecycle_fields(crypto_environment):
+    created = client.post("/api/v2/casos-ayuda", json={
+        "beneficiary_name": "Nombre privado",
+        "beneficiary_identity": "V-10101010",
+        "internal_title": "Tratamiento inicial",
+        "category": "medicamentos",
+        "goal_amount": "250.00",
+        "goal_currency": "USD",
+    }).json()
+    with TestingSessionLocal() as db:
+        make_publishable_case(db, created["id"])
+
+    preview = client.get(f"/api/v2/casos-ayuda/{created['id']}/preview")
+    published = client.post(f"/api/v2/casos-ayuda/{created['id']}/publicar")
+    detail = client.get(f"/api/v2/public/casos-ayuda/{created['public_id']}")
+
+    assert preview.status_code == 200
+    assert published.status_code == 200
+    assert detail.status_code == 200
+    preview_dto = preview.json()
+    public_dto = detail.json()
+    assert preview_dto.pop("estado") == "listo_publicar"
+    assert public_dto.pop("estado") == "publicado"
+    assert preview_dto.pop("publicado_at") is None
+    assert public_dto.pop("publicado_at") is not None
+    assert preview_dto == public_dto
+    assert "organizacion_id" not in preview.text
+    assert "beneficiario" not in preview.text
+    assert "accounts" not in preview.text
+
+
+def test_preview_hides_case_from_another_organization(crypto_environment):
+    case_id = create_case(organization_id="org-1", suffix="preview-org", private_marker="encrypted")
+    app.dependency_overrides[require_verified_case_organization_actor] = lambda: ActorOrgContext(
+        "org-2", "coordinador", "other@example.com",
+    )
+    try:
+        response = client.get(f"/api/v2/casos-ayuda/{case_id}/preview")
+    finally:
+        app.dependency_overrides[require_verified_case_organization_actor] = coordinator
+
+    assert response.status_code == 404
+
+
+def test_public_manifest_uses_only_latest_approved_public_document_under_current_consent(
+    crypto_environment,
+):
+    case_id = create_case(organization_id="org-1", suffix="manifest", private_marker="encrypted")
+    with TestingSessionLocal() as db:
+        case = db.get(models.CasoAyudaV2, case_id)
+        publication = models.PublicacionCasoAyuda(
+            caso_id=case.id,
+            nombre_publico="Ana",
+            titulo_publico="Ayuda para tratamiento",
+            descripcion_publica="Descripcion publica autorizada",
+            localidad_general="Caracas",
+            version=1,
+            configurado_por="coordinador@example.com",
+        )
+        old_consent = models.ConsentimientoCasoAyuda(
+            caso_id=case.id,
+            version=1,
+            texto_version="mvp1-v1",
+            alcance_json="{}",
+            firmante_nombre_cifrado="encrypted-signer",
+            registrado_por="coordinador@example.com",
+            vigente=False,
+        )
+        current_consent = models.ConsentimientoCasoAyuda(
+            caso_id=case.id,
+            version=2,
+            texto_version="mvp1-v2",
+            alcance_json="{}",
+            firmante_nombre_cifrado="encrypted-signer",
+            registrado_por="coordinador@example.com",
+            vigente=True,
+        )
+        db.add_all([publication, old_consent, current_consent])
+        db.flush()
+
+        document_specs = [
+            ("current", 1, "publico", "aprobado", 2),
+            ("current", 2, "publico", "aprobado", 2),
+            ("now-private", 1, "publico", "aprobado", 2),
+            ("now-private", 2, "privado", "aprobado", None),
+            ("now-rejected", 1, "publico", "aprobado", 2),
+            ("now-rejected", 2, "publico", "rechazado", 2),
+            ("stale-consent", 1, "publico", "aprobado", 1),
+        ]
+        documents = []
+        for index, (document_key, version, classification, review_state, consent_version) in enumerate(
+            document_specs,
+            start=1,
+        ):
+            document = models.DocumentoCasoAyuda(
+                caso_id=case.id,
+                document_key=document_key,
+                version=version,
+                tipo="informe_medico",
+                clasificacion=classification,
+                estado_revision=review_state,
+                storage_path=f"{classification}/cases/{case.id}/document-{index}.pdf",
+                content_type="application/pdf",
+                size_bytes=100,
+                checksum_sha256=f"{index:x}" * 64,
+                consentimiento_version=consent_version,
+                cargado_por="uploader@example.com",
+                revisado_por="reviewer@example.com",
+            )
+            documents.append(document)
+            db.add(document)
+        db.commit()
+        expected_document_id = documents[1].id
+
+    preview = client.get(f"/api/v2/casos-ayuda/{case_id}/preview")
+    with TestingSessionLocal() as db:
+        case = db.get(models.CasoAyudaV2, case_id)
+        case.estado = "publicado"
+        db.query(models.PublicacionCasoAyuda).filter_by(caso_id=case_id).one().activa = True
+        db.commit()
+        public_id = case.public_id
+    detail = client.get(f"/api/v2/public/casos-ayuda/{public_id}")
+
+    assert preview.status_code == 200
+    assert detail.status_code == 200
+    expected_manifest = [{
+        "id": expected_document_id,
+        "tipo": "informe_medico",
+        "content_type": "application/pdf",
+    }]
+    assert preview.json()["documentos"] == expected_manifest
+    assert detail.json()["documentos"] == expected_manifest

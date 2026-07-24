@@ -2,6 +2,7 @@ from decimal import Decimal
 import base64
 import hashlib
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -15,6 +16,7 @@ from dependencies import ActorOrgContext, require_verified_actor_org, verify_api
 import models
 from routers.casos_ayuda_donantes import router
 from services.help_crypto import HelpDataCipher
+from services.help_confirmations import list_help_aids
 
 
 engine = create_engine(
@@ -68,13 +70,13 @@ def isolated_database(monkeypatch):
     Base.metadata.drop_all(bind=engine)
 
 
-def create_published_case():
+def create_published_case(public_id="ayuda-publicada-1", identity_suffix="a"):
     cipher = HelpDataCipher.from_environment()
     with TestingSessionLocal() as db:
         beneficiary = models.BeneficiarioAyuda(
             organizacion_id="org-1",
             nombres_apellidos_cifrado=cipher.encrypt("Persona beneficiaria", field="beneficiary.name"),
-            cedula_hash="a" * 64,
+            cedula_hash=identity_suffix * 64,
             cedula_cifrada=cipher.encrypt("V-12345678", field="beneficiary.identity"),
             datos_verificacion_cifrado=cipher.encrypt("Verificado", field="beneficiary.verification"),
             creado_por="coordinador@example.com",
@@ -82,7 +84,7 @@ def create_published_case():
         db.add(beneficiary)
         db.flush()
         case = models.CasoAyudaV2(
-            public_id="ayuda-publicada-1",
+            public_id=public_id,
             organizacion_id="org-1",
             beneficiario_id=beneficiary.id,
             titulo_interno="Caso interno",
@@ -246,6 +248,7 @@ def test_reports_monetary_aid_without_increasing_public_progress():
         "transfer_date": "2026-07-20",
         "status": "pendiente_confirmacion",
         "receipt_attached": False,
+        "receipt_id": None,
         "created_at": body["created_at"],
     }
     with TestingSessionLocal() as db:
@@ -254,6 +257,11 @@ def test_reports_monetary_aid_without_increasing_public_progress():
         operation = db.query(models.OperacionIdempotenteAyuda).one()
         audit = db.query(models.AuditoriaCasoAyuda).filter_by(accion="ayuda_reportada_donante").one()
         assert aid.donante_id == "firebase-donor-1"
+        assert aid.donante_email_hash == HelpDataCipher.from_environment().blind_index(
+            "donante@example.com", purpose="donor-email"
+        )
+        assert aid.donante_email_cifrado.startswith("enc:v1:")
+        assert "donante@example.com" not in aid.donante_email_cifrado
         assert aid.estado == "pendiente_confirmacion"
         assert aid.referencia_cifrada.startswith("enc:v1:")
         assert aid.comentario_cifrado.startswith("enc:v1:")
@@ -265,6 +273,9 @@ def test_reports_monetary_aid_without_increasing_public_progress():
         assert "REF-PRIVATE-123" not in operation.response_body
         assert "Comentario privado" not in audit.metadata_json
         assert "REF-PRIVATE-123" not in audit.metadata_json
+        notifications = db.query(models.NotificacionCasoAyuda).all()
+        assert {item.destinatario_tipo for item in notifications} == {"responsable", "coordinador"}
+        assert {item.evento_tipo for item in notifications} == {"ayuda_reportada"}
 
 
 def test_replays_same_aid_and_rejects_changed_payload_for_same_key():
@@ -365,6 +376,7 @@ def test_saves_optional_receipt_encrypted_and_private(tmp_path, monkeypatch):
 
     assert response.status_code == 201
     assert response.json()["receipt_attached"] is True
+    assert isinstance(response.json()["receipt_id"], int)
     assert "storage_path" not in response.text
     files = list(Path(tmp_path).rglob("*.enc"))
     assert len(files) == 1
@@ -377,3 +389,118 @@ def test_saves_optional_receipt_encrypted_and_private(tmp_path, monkeypatch):
         assert stored.checksum_sha256 == hashlib.sha256(receipt).hexdigest()
         assert stored.nombre_original_cifrado.startswith("enc:v1:")
         assert payload["receipt_base64"] not in operation.response_body
+
+
+def test_donor_cancels_own_pending_aid_without_deleting_evidence_or_progress(tmp_path, monkeypatch):
+    monkeypatch.setenv("HELP_PRIVATE_UPLOAD_ROOT", str(tmp_path))
+    public_id = create_published_case()
+    accept_current_terms()
+    receipt = b"%PDF-1.4 PRIVATE-CANCEL-RECEIPT"
+    created = report_aid(public_id, monetary_aid_payload(
+        public_id,
+        receipt_file_name="comprobante.pdf",
+        receipt_content_type="application/pdf",
+        receipt_base64=base64.b64encode(receipt).decode(),
+    )).json()
+
+    response = client.post(f"/api/v2/donante/ayudas/{created['id']}/cancelar")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelada"
+    assert response.json()["receipt_id"] == created["receipt_id"]
+    with TestingSessionLocal() as db:
+        aid = db.get(models.AyudaMonetaria, created["id"])
+        case = db.query(models.CasoAyudaV2).filter_by(public_id=public_id).one()
+        receipt_record = db.get(models.ComprobanteAyuda, created["receipt_id"])
+        operation = db.get(models.OperacionIdempotenteAyuda, aid.idempotency_id)
+        audit = db.query(models.AuditoriaCasoAyuda).filter_by(accion="ayuda_cancelada_donante").one()
+        assert aid.estado == "cancelada"
+        assert aid.cuenta_version == 1
+        assert receipt_record.estado == "vigente"
+        assert operation.estado == "completed"
+        assert case.monto_confirmado == Decimal("0.00")
+        assert case.ayudas_confirmadas == 0
+        organization_summary = list_help_aids(
+            db,
+            case_id=case.id,
+            actor=ActorOrgContext("org-1", "coordinador", "coordinador@example.com"),
+        )
+        assert organization_summary[0]["status"] == "cancelada"
+        assert audit.actor_id == "firebase-donor-1"
+        assert audit.actor_tipo == "donante"
+        assert audit.metadata_json == '{"cuenta_version":1,"estado_anterior":"pendiente_confirmacion","estado_nuevo":"cancelada"}'
+        assert "25.50" not in audit.metadata_json
+
+
+def test_donor_cancellation_hides_cross_donor_aid():
+    public_id = create_published_case()
+    accept_current_terms()
+    created = report_aid(public_id).json()
+    app.dependency_overrides[require_verified_actor_org] = lambda: ActorOrgContext(
+        "", "donor", "other@example.com", uid="firebase-donor-2", ip_hash="b" * 64,
+    )
+    try:
+        response = client.post(f"/api/v2/donante/ayudas/{created['id']}/cancelar")
+    finally:
+        app.dependency_overrides[require_verified_actor_org] = donor
+
+    assert response.status_code == 404
+    with TestingSessionLocal() as db:
+        assert db.get(models.AyudaMonetaria, created["id"]).estado == "pendiente_confirmacion"
+
+
+@pytest.mark.parametrize("status", ["problema_reportado", "en_revision", "confirmada", "rechazada", "cancelada"])
+def test_donor_cancellation_rejects_non_pending_or_reviewed_aid(status):
+    public_id = create_published_case()
+    accept_current_terms()
+    created = report_aid(public_id).json()
+    with TestingSessionLocal() as db:
+        aid = db.get(models.AyudaMonetaria, created["id"])
+        aid.estado = status
+        if status == "problema_reportado":
+            aid.problema_tipo = "transferencia_no_recibida"
+        db.commit()
+
+    response = client.post(f"/api/v2/donante/ayudas/{created['id']}/cancelar")
+
+    assert response.status_code == 409
+    with TestingSessionLocal() as db:
+        assert db.get(models.AyudaMonetaria, created["id"]).estado == status
+
+
+def test_donor_cancellation_rejects_pending_aid_with_problem_marker():
+    public_id = create_published_case()
+    accept_current_terms()
+    created = report_aid(public_id).json()
+    with TestingSessionLocal() as db:
+        db.get(models.AyudaMonetaria, created["id"]).problema_tipo = "transferencia_no_recibida"
+        db.commit()
+
+    response = client.post(f"/api/v2/donante/ayudas/{created['id']}/cancelar")
+
+    assert response.status_code == 409
+
+
+def test_donor_cancellation_rejects_aid_with_prior_review_audit():
+    public_id = create_published_case()
+    accept_current_terms()
+    created = report_aid(public_id).json()
+    with TestingSessionLocal() as db:
+        aid = db.get(models.AyudaMonetaria, created["id"])
+        case = db.get(models.CasoAyudaV2, aid.caso_id)
+        db.add(models.AuditoriaCasoAyuda(
+            event_id=str(uuid4()),
+            organizacion_id=case.organizacion_id,
+            caso_id=case.id,
+            accion="ayuda_en_revision",
+            actor_id="coordinador@example.com",
+            actor_tipo="coordinador",
+            entidad_tipo="ayuda",
+            entidad_id=str(aid.id),
+            metadata_json="{}",
+        ))
+        db.commit()
+
+    response = client.post(f"/api/v2/donante/ayudas/{created['id']}/cancelar")
+
+    assert response.status_code == 409

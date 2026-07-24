@@ -568,6 +568,7 @@ def test_admin_can_update_published_public_information_with_history(role):
             public_name="Ana actualizada",
             public_title="Titulo actualizado",
             public_description="Descripcion actualizada",
+            within_current_consent_scope=True,
         )
 
         assert updated.version == 2

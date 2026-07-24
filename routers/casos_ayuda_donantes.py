@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -15,16 +15,65 @@ from services.help_donors import (
     DonorPayloadError,
     DonorRateLimitError,
     DonorTermsRequiredError,
+    DonorAidStateError,
     accept_terms,
+    cancel_own_monetary_aid,
     disclose_donor_accounts,
     get_terms_acceptance,
     list_donor_monetary_aids,
     report_monetary_aid,
 )
 from services.help_idempotency import normalize_idempotency_key
+from services.help_receipts import ReceiptNotFoundError, download_help_receipt
 
 
 router = APIRouter(prefix="/api/v2/donante", tags=["casos-ayuda-donante-v2"])
+
+
+@router.post("/ayudas/{aid_id}/cancelar", response_model=schemas.AyudaMonetariaDonanteResponse)
+def cancel_donor_monetary_aid(
+    aid_id: int,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_actor_org),
+):
+    try:
+        response = cancel_own_monetary_aid(db, actor=actor, aid_id=aid_id)
+        db.commit()
+        return response
+    except DonorAccessError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DonorAidStateError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/ayudas/{aid_id}/comprobantes/{receipt_id}/descargar")
+def download_own_help_receipt(
+    aid_id: int,
+    receipt_id: int,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_actor_org),
+):
+    try:
+        download = download_help_receipt(
+            db,
+            receipt_id=receipt_id,
+            aid_id=aid_id,
+            actor=actor,
+            access="donor",
+        )
+        db.commit()
+        return Response(
+            content=download.content,
+            media_type=download.content_type,
+            headers=download.headers,
+        )
+    except ReceiptNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/terminos", response_model=schemas.EstadoTerminosDonanteResponse)
@@ -102,7 +151,7 @@ def get_donor_case_accounts(
         db.rollback()
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except DonorRateLimitError as exc:
-        db.rollback()
+        db.commit()
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     except DonorAccessError as exc:
         db.rollback()
@@ -164,7 +213,7 @@ def create_donor_monetary_aid(
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except DonorRateLimitError as exc:
-        db.rollback()
+        db.commit()
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     except DonorAccessError as exc:
         db.rollback()

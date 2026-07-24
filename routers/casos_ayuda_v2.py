@@ -3,7 +3,7 @@ from uuid import uuid4
 import json
 import hashlib
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -16,6 +16,7 @@ from dependencies import (
     verify_api_key,
 )
 from services.help_cases import (
+    build_public_help_case_response,
     CaseNotFoundError,
     CaseLifecycleAccessError,
     CaseReadinessError,
@@ -24,21 +25,30 @@ from services.help_cases import (
     OrganizationAccessError,
     create_help_case,
     get_help_case_detail,
+    get_help_case_preview,
     list_help_cases,
     mark_help_case_ready,
     publish_help_case,
     configure_help_case_publication,
     approve_exceptional_account,
+    audit_global_sensitive_read,
     create_account_version,
     register_beneficiary_verification,
     register_case_document,
     register_help_case_consent,
+    review_case_document,
+    require_expanded_publication_consent,
     submit_help_case_for_validation,
     transition_help_case,
     update_help_case,
 )
 from services.help_crypto import HelpDataCipher, HelpDataCryptoError
-from services.help_files import decode_private_evidence, save_encrypted_private_evidence
+from services.help_files import (
+    decode_help_document,
+    decode_private_evidence,
+    save_encrypted_case_document,
+    save_encrypted_private_evidence,
+)
 from services.help_confirmations import (
     HelpConfirmationIdempotencyError,
     HelpRateUnavailableError,
@@ -55,9 +65,52 @@ from services.help_exchange import (
     register_manual_bcv_rate,
 )
 from services.help_idempotency import normalize_idempotency_key
+from services.help_receipts import (
+    ReceiptNotFoundError,
+    ReceiptReasonForbiddenError,
+    ReceiptReasonRequiredError,
+    download_help_receipt,
+)
 
 
 router = APIRouter(prefix="/api/v2/casos-ayuda", tags=["casos-ayuda-v2"])
+
+
+@router.get("/{case_id}/ayudas/{aid_id}/comprobantes/{receipt_id}/descargar")
+def download_organization_help_receipt(
+    case_id: int,
+    aid_id: int,
+    receipt_id: int,
+    motivo: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        download = download_help_receipt(
+            db,
+            receipt_id=receipt_id,
+            aid_id=aid_id,
+            case_id=case_id,
+            actor=actor,
+            access="organization",
+            reason_code=motivo,
+        )
+        db.commit()
+        return Response(
+            content=download.content,
+            media_type=download.content_type,
+            headers=download.headers,
+        )
+    except ReceiptReasonRequiredError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ReceiptReasonForbiddenError as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ReceiptNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 def get_bcv_rate_provider():
@@ -120,7 +173,13 @@ def list_organization_help_aids(
     actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
 ):
     try:
-        return list_help_aids(db, case_id=case_id, actor=actor)
+        aids = list_help_aids(db, case_id=case_id, actor=actor)
+        case = db.get(models.CasoAyudaV2, case_id)
+        audit_global_sensitive_read(
+            db, case=case, actor=actor, action="acceso_global_ayudas_caso"
+        )
+        db.commit()
+        return aids
     except CaseNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -331,6 +390,12 @@ def _detail_response(db, case_id, actor):
         .order_by(models.ConsentimientoCasoAyuda.version.desc())
         .first()
     )
+    documents = (
+        db.query(models.DocumentoCasoAyuda)
+        .filter_by(caso_id=case.id)
+        .order_by(models.DocumentoCasoAyuda.document_key, models.DocumentoCasoAyuda.version.desc())
+        .all()
+    )
     return {
         **schemas.CasoAyudaV2ResumenResponse.model_validate(case).model_dump(),
         "readiness_blockers": blockers,
@@ -354,6 +419,7 @@ def _detail_response(db, case_id, actor):
             "nombre_legal": beneficiary_name,
             "cedula_enmascarada": masked_identity,
         },
+        "documentos": documents,
     }
 
 
@@ -368,7 +434,7 @@ def list_organization_help_cases(
     actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
 ):
     try:
-        return list_help_cases(
+        cases = list_help_cases(
             db,
             actor=actor,
             organization_id=organizacion_id,
@@ -376,6 +442,12 @@ def list_organization_help_cases(
             skip=skip,
             limit=limit,
         )
+        for case in cases:
+            audit_global_sensitive_read(
+                db, case=case, actor=actor, action="acceso_global_lista_casos"
+            )
+        db.commit()
+        return cases
     except OrganizationAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except HelpCaseDomainError as exc:
@@ -436,9 +508,125 @@ def get_organization_help_case(
     actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
 ):
     try:
-        return _detail_response(db, case_id, actor)
+        response = _detail_response(db, case_id, actor)
+        audit_global_sensitive_read(
+            db,
+            case=db.get(models.CasoAyudaV2, case_id),
+            actor=actor,
+            action="acceso_global_detalle_caso",
+        )
+        db.commit()
+        return response
     except CaseNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{case_id}/documentos",
+    response_model=schemas.DocumentoCasoAyudaResumenResponse,
+    status_code=201,
+)
+def upload_organization_help_case_document(
+    case_id: int,
+    payload: schemas.DocumentoCasoAyudaCreateRequest,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    destination = None
+    try:
+        plaintext = decode_help_document(payload.content_base64, payload.content_type)
+        cipher = HelpDataCipher.from_environment()
+        encrypted = cipher.encrypt_bytes(plaintext, field="document.content")
+        storage_path, destination = save_encrypted_case_document(
+            encrypted,
+            case_id,
+            payload.classification,
+        )
+        document = register_case_document(
+            db,
+            case_id=case_id,
+            actor=actor,
+            document_key=payload.document_key,
+            document_type=payload.document_type,
+            classification=payload.classification,
+            storage_path=storage_path,
+            content_type=payload.content_type,
+            size_bytes=len(plaintext),
+            checksum_sha256=hashlib.sha256(plaintext).hexdigest(),
+            original_name_encrypted=cipher.encrypt(payload.file_name, field="document.original_name"),
+        )
+        db.commit()
+        db.refresh(document)
+        return document
+    except CaseNotFoundError as exc:
+        db.rollback()
+        if destination:
+            destination.unlink(missing_ok=True)
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CaseStateError as exc:
+        db.rollback()
+        if destination:
+            destination.unlink(missing_ok=True)
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (HelpDataCryptoError, HelpCaseDomainError) as exc:
+        db.rollback()
+        if destination:
+            destination.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{case_id}/documentos/{document_id}/revisar",
+    response_model=schemas.DocumentoCasoAyudaResumenResponse,
+)
+def review_organization_help_case_document(
+    case_id: int,
+    document_id: int,
+    payload: schemas.DocumentoCasoAyudaReviewRequest,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        document = db.get(models.DocumentoCasoAyuda, document_id)
+        if document is None or document.caso_id != case_id:
+            raise CaseNotFoundError("Documento no encontrado")
+        reviewed = review_case_document(
+            db,
+            document_id=document_id,
+            actor=actor,
+            approve=payload.approve,
+            reason=payload.reason,
+        )
+        db.commit()
+        db.refresh(reviewed)
+        return reviewed
+    except CaseNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CaseStateError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except HelpCaseDomainError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/{case_id}/preview", response_model=schemas.CasoAyudaPublicoResponse)
+def preview_organization_help_case(
+    case_id: int,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        case, publication = get_help_case_preview(db, case_id=case_id, actor=actor)
+        return build_public_help_case_response(db, case=case, publication=publication)
+    except CaseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CaseStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.patch("/{case_id}", response_model=schemas.CasoAyudaV2DetalleResponse)
@@ -538,7 +726,36 @@ def configure_organization_help_case_publication(
             public_description=payload.public_description,
             general_location=payload.general_location,
             social_networks_json=json.dumps(payload.social_networks, separators=(",", ":")),
+            within_current_consent_scope=payload.within_current_consent_scope,
         )
+        db.commit()
+        return _detail_response(db, case_id, actor)
+    except CaseNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CaseLifecycleAccessError as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except CaseStateError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except HelpCaseDomainError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{case_id}/publicacion/requerir-consentimiento-ampliado",
+    response_model=schemas.CasoAyudaV2DetalleResponse,
+)
+def invalidate_organization_help_case_consent_for_publication(
+    case_id: int,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        require_expanded_publication_consent(db, case_id=case_id, actor=actor)
         db.commit()
         return _detail_response(db, case_id, actor)
     except CaseNotFoundError as exc:

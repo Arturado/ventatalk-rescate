@@ -17,6 +17,11 @@ from services.help_crypto import HelpDataCipher
 from services.help_exchange import BcvRateUnavailableError, get_or_create_bcv_conversion
 from services.help_feature_flags import is_help_v2_enabled_for_organization
 from services.help_idempotency import hash_idempotency_payload
+from services.help_notifications import (
+    configured_global_admin_emails,
+    decrypted_donor_email,
+    enqueue_case_recipient,
+)
 
 
 class HelpRateUnavailableError(ValueError):
@@ -67,7 +72,7 @@ def _problem_record(aid):
     return json.loads(decrypted)
 
 
-def _aid_summary(aid, confirmation=None, rate_record=None):
+def _aid_summary(aid, confirmation=None, rate_record=None, receipt_id=None):
     problem = _problem_record(aid)
     return {
         "aid_id": aid.id,
@@ -77,6 +82,7 @@ def _aid_summary(aid, confirmation=None, rate_record=None):
         "status": aid.estado,
         "account_id": aid.cuenta_id,
         "account_version": aid.cuenta_version,
+        "receipt_id": receipt_id,
         "problem_type": aid.problema_tipo,
         "problem_detail": problem.get("detail"),
         "resolution_reason": problem.get("resolution_reason"),
@@ -105,6 +111,13 @@ def list_help_aids(db: Session, *, case_id: int, actor: ActorOrgContext):
         else []
     )
     confirmations_by_aid = {confirmation.ayuda_id: confirmation for confirmation in confirmations}
+    receipts_by_aid = {
+        receipt.ayuda_id: receipt.id
+        for receipt in db.query(models.ComprobanteAyuda).filter(
+            models.ComprobanteAyuda.ayuda_id.in_(aid_ids),
+            models.ComprobanteAyuda.estado == "vigente",
+        ).order_by(models.ComprobanteAyuda.version.asc()).all()
+    } if aid_ids else {}
     rate_ids = {confirmation.tasa_id for confirmation in confirmations if confirmation.tasa_id}
     rates_by_id = {
         rate.id: rate
@@ -117,6 +130,7 @@ def list_help_aids(db: Session, *, case_id: int, actor: ActorOrgContext):
             rate_record=rates_by_id.get(confirmations_by_aid[aid.id].tasa_id)
             if aid.id in confirmations_by_aid
             else None,
+            receipt_id=receipts_by_aid.get(aid.id),
         )
         for aid in aids
     ]
@@ -171,6 +185,22 @@ def report_help_aid_problem(
         reason_code=problem_type,
         metadata={"estado_anterior": "pendiente_confirmacion", "estado_nuevo": "problema_reportado"},
     )
+    recipients = [("coordinador", case.creado_por)]
+    donor_email = decrypted_donor_email(aid)
+    if donor_email:
+        recipients.insert(0, ("donante", donor_email))
+    recipients.extend(("admin", email) for email in configured_global_admin_emails())
+    for recipient_type, recipient_email in recipients:
+        enqueue_case_recipient(
+            db,
+            case=case,
+            event_type="problema_reportado",
+            recipient_type=recipient_type,
+            recipient_email=recipient_email,
+            template_key="aid-problem-v1",
+            payload={"case_public_id": case.public_id},
+            domain_key=f"aid:{aid.id}",
+        )
     db.flush()
     return _aid_summary(aid)
 
@@ -204,6 +234,21 @@ def reject_help_aid(
         reason_code="rechazada",
         metadata={"estado_anterior": "en_revision", "estado_nuevo": "rechazada"},
     )
+    recipients = [("coordinador", case.creado_por)]
+    donor_email = decrypted_donor_email(aid)
+    if donor_email:
+        recipients.insert(0, ("donante", donor_email))
+    for recipient_type, recipient_email in recipients:
+        enqueue_case_recipient(
+            db,
+            case=case,
+            event_type="revision_resuelta",
+            recipient_type=recipient_type,
+            recipient_email=recipient_email,
+            template_key="aid-review-resolution-v1",
+            payload={"case_public_id": case.public_id, "resolution": "rechazada"},
+            domain_key=f"aid:{aid.id}",
+        )
     db.flush()
     return _aid_summary(aid)
 
@@ -328,6 +373,7 @@ def confirm_help_aid(
             ) from None
         return json.loads(conflicting.response_body), True
 
+    resolved_review = aid.estado == "en_revision"
     confirmation = models.ConfirmacionAyuda(
         ayuda_id=aid.id,
         idempotency_id=operation.id,
@@ -345,7 +391,8 @@ def confirm_help_aid(
     )
     db.add(confirmation)
     aid.estado = "confirmada"
-    case.monto_confirmado = Decimal(case.monto_confirmado) + conversion.equivalent_amount
+    previous_confirmed_amount = Decimal(case.monto_confirmado)
+    case.monto_confirmado = previous_confirmed_amount + conversion.equivalent_amount
     case.ayudas_confirmadas = int(case.ayudas_confirmadas) + 1
     goal_reached = Decimal(case.monto_confirmado) >= Decimal(case.meta_monto)
     if goal_reached:
@@ -371,5 +418,42 @@ def confirm_help_aid(
         entity_id=aid.id,
         metadata={"estado_nuevo": "confirmada", "meta_alcanzada": goal_reached},
     )
+    recipients = [("coordinador", case.creado_por)]
+    donor_email = decrypted_donor_email(aid)
+    if donor_email:
+        recipients.insert(0, ("donante", donor_email))
+    for recipient_type, recipient_email in recipients:
+        enqueue_case_recipient(
+            db,
+            case=case,
+            event_type="ayuda_confirmada",
+            recipient_type=recipient_type,
+            recipient_email=recipient_email,
+            template_key="aid-confirmed-v1",
+            payload={"case_public_id": case.public_id},
+            domain_key=f"aid:{aid.id}",
+        )
+        if resolved_review:
+            enqueue_case_recipient(
+                db,
+                case=case,
+                event_type="revision_resuelta",
+                recipient_type=recipient_type,
+                recipient_email=recipient_email,
+                template_key="aid-review-resolution-v1",
+                payload={"case_public_id": case.public_id, "resolution": "confirmada"},
+                domain_key=f"aid:{aid.id}",
+            )
+    if previous_confirmed_amount < Decimal(case.meta_monto) <= Decimal(case.monto_confirmado):
+        enqueue_case_recipient(
+            db,
+            case=case,
+            event_type="meta_alcanzada",
+            recipient_type="coordinador",
+            recipient_email=case.creado_por,
+            template_key="goal-reached-v1",
+            payload={"case_public_id": case.public_id},
+            domain_key=f"case:{case.id}",
+        )
     db.flush()
     return response, False

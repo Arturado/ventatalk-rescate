@@ -1,3 +1,4 @@
+import base64
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -20,6 +21,7 @@ from services.help_cases import (
     register_help_case_consent,
     review_case_document,
 )
+from services.help_crypto import HelpDataCipher
 
 
 engine = create_engine(
@@ -40,7 +42,10 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 
 
 @pytest.fixture(autouse=True)
-def isolated_database():
+def isolated_database(monkeypatch):
+    monkeypatch.setenv("HELP_DATA_ENCRYPTION_KEY_V1", base64.b64encode(b"e" * 32).decode())
+    monkeypatch.setenv("HELP_DATA_ACTIVE_KEY_VERSION", "v1")
+    monkeypatch.setenv("HELP_IDENTITY_HASH_KEY", base64.b64encode(b"h" * 32).decode())
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     yield
@@ -96,6 +101,7 @@ def add_consent(db, case):
 
 
 def account_kwargs(*, account_key="account-1", owner_type="beneficiario", justification=None):
+    cipher = HelpDataCipher.from_environment()
     return {
         "account_key": account_key,
         "owner_type": owner_type,
@@ -107,8 +113,12 @@ def account_kwargs(*, account_key="account-1", owner_type="beneficiario", justif
         "instructions_encrypted": "encrypted-instructions",
         "justification_encrypted": justification,
         "responsible_name_encrypted": "encrypted-responsible",
-        "responsible_email_hash": "r" * 64,
-        "responsible_email_encrypted": "encrypted-email",
+        "responsible_email_hash": cipher.blind_index(
+            "responsible@example.com", purpose="responsible-email"
+        ),
+        "responsible_email_encrypted": cipher.encrypt(
+            "responsible@example.com", field="account.responsible_email"
+        ),
     }
 
 
@@ -236,6 +246,10 @@ def test_regular_account_is_approved_against_current_consent():
         assert account.estado == "aprobada"
         assert account.consentimiento_version == consent.version
         assert account.aprobado_por == "coordinador@example.com"
+        notifications = db.query(models.NotificacionCasoAyuda).filter_by(
+            evento_tipo="account_changed"
+        ).all()
+        assert {item.destinatario_tipo for item in notifications} == {"responsable", "coordinador"}
 
 
 def test_exceptional_account_requires_justification_and_distinct_approval():
@@ -299,6 +313,9 @@ def test_new_account_version_inactivates_previous_and_revokes_linked_access():
         assert access.estado == "revocado"
         assert access.revocado_por == "coordinador@example.com"
         assert access.motivo_revocacion == "cuenta_versionada"
+        assert db.query(models.NotificacionCasoAyuda).filter_by(
+            evento_tipo="account_changed"
+        ).count() == 4
 
 
 def test_account_version_uses_new_consent_after_reconsent():

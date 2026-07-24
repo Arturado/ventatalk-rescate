@@ -132,28 +132,40 @@ class DolarApiBcvRateProvider:
             raise BcvRateUnavailableError("No fue posible consultar DolarApi") from exc
 
     def fetch_rates(self):
-        quotes = {
-            currency: parse_dolarapi_official_response(
-                self._fetch_json(url),
-                expected_currency=currency,
-                source_url=url,
+        from observability import metrics
+
+        started = time.monotonic()
+        try:
+            quotes = {
+                currency: parse_dolarapi_official_response(
+                    self._fetch_json(url),
+                    expected_currency=currency,
+                    source_url=url,
+                )
+                for currency, url in DOLARAPI_CURRENT_URLS.items()
+            }
+            quote_dates = {quote.rate_date for quote in quotes.values()}
+            if len(quote_dates) != 1:
+                raise BcvRateUnavailableError("Las cotizaciones oficiales de DolarApi tienen fechas diferentes")
+            quote_date = quote_dates.pop()
+            result = BcvRatesSnapshot(
+                rate_date=quote_date,
+                rates={currency: quote.value for currency, quote in quotes.items()},
+                evidence={
+                    "transport_source": "DolarApi",
+                    "upstream_source": "BCV",
+                    "provider_legal_url": DOLARAPI_LEGAL_URL,
+                    "requests": {currency: quote.evidence for currency, quote in quotes.items()},
+                },
             )
-            for currency, url in DOLARAPI_CURRENT_URLS.items()
-        }
-        quote_dates = {quote.rate_date for quote in quotes.values()}
-        if len(quote_dates) != 1:
-            raise BcvRateUnavailableError("Las cotizaciones oficiales de DolarApi tienen fechas diferentes")
-        quote_date = quote_dates.pop()
-        return BcvRatesSnapshot(
-            rate_date=quote_date,
-            rates={currency: quote.value for currency, quote in quotes.items()},
-            evidence={
-                "transport_source": "DolarApi",
-                "upstream_source": "BCV",
-                "provider_legal_url": DOLARAPI_LEGAL_URL,
-                "requests": {currency: quote.evidence for currency, quote in quotes.items()},
-            },
-        )
+        except Exception:
+            metrics.increment("bcv_requests_total", outcome="failure")
+            raise
+        else:
+            metrics.increment("bcv_requests_total", outcome="success")
+            return result
+        finally:
+            metrics.observe("bcv_request_duration_seconds", time.monotonic() - started)
 
 
 class CachedBcvRateProvider:

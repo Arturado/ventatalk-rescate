@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_serializer, model_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from typing import List, Literal, Optional
@@ -532,6 +532,21 @@ class BeneficiarioCasoAyudaResumenResponse(BaseModel):
     cedula_enmascarada: str
 
 
+class DocumentoCasoAyudaResumenResponse(BaseModel):
+    id: int
+    document_key: str
+    version: int
+    tipo: str
+    clasificacion: str
+    estado_revision: str
+    content_type: str
+    size_bytes: int
+    cargado_por: str
+    revisado_por: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
 class CasoAyudaV2DetalleResponse(CasoAyudaV2ResumenResponse):
     readiness_blockers: List[str]
     accounts: List[CuentaCasoAyudaResumenResponse] = []
@@ -539,6 +554,7 @@ class CasoAyudaV2DetalleResponse(CasoAyudaV2ResumenResponse):
     verificacion: VerificacionCasoAyudaResumenResponse
     consentimiento: ConsentimientoCasoAyudaResumenResponse
     beneficiario: BeneficiarioCasoAyudaResumenResponse
+    documentos: List[DocumentoCasoAyudaResumenResponse] = []
 
 
 class BeneficiarioAyudaVerificacionRequest(BaseModel):
@@ -555,6 +571,7 @@ class PublicacionCasoAyudaRequest(BaseModel):
     public_description: str = Field(min_length=10, max_length=10000)
     general_location: Optional[str] = Field(default=None, max_length=200)
     social_networks: dict[str, str] = Field(default_factory=dict)
+    within_current_consent_scope: Optional[bool] = None
 
 
 class ConsentimientoCasoAyudaCreateRequest(BaseModel):
@@ -565,6 +582,20 @@ class ConsentimientoCasoAyudaCreateRequest(BaseModel):
     evidence_file_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     evidence_content_type: Optional[Literal["application/pdf", "image/jpeg", "image/png"]] = None
     evidence_base64: Optional[str] = Field(default=None, min_length=8, max_length=7_100_000)
+
+
+class DocumentoCasoAyudaCreateRequest(BaseModel):
+    document_key: str = Field(min_length=1, max_length=100)
+    document_type: str = Field(min_length=1, max_length=80)
+    classification: Literal["publico", "privado"]
+    file_name: str = Field(min_length=1, max_length=255)
+    content_type: Literal["application/pdf", "image/jpeg", "image/png"]
+    content_base64: str = Field(min_length=8, max_length=7_100_000)
+
+
+class DocumentoCasoAyudaReviewRequest(BaseModel):
+    approve: bool
+    reason: Optional[str] = Field(default=None, max_length=2000)
 
 
 class CuentaCasoAyudaCreateRequest(BaseModel):
@@ -670,6 +701,7 @@ class AyudaMonetariaDonanteResponse(BaseModel):
     transfer_date: date
     status: str
     receipt_attached: bool
+    receipt_id: Optional[int] = None
     created_at: datetime
 
 
@@ -685,6 +717,7 @@ class AyudaMonetariaOrganizacionResumenResponse(BaseModel):
     status: str
     account_id: int
     account_version: int
+    receipt_id: Optional[int] = None
     problem_type: Optional[str] = None
     problem_detail: Optional[str] = None
     resolution_reason: Optional[str] = None
@@ -753,3 +786,82 @@ class ConfirmacionAyudaResponse(BaseModel):
     confirmed_help_count: int
     case_status: str
     goal_reached: bool
+
+
+class SolicitudAccesoTemporalRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    public_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    ip_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value):
+        normalized = value.strip().lower()
+        if "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
+            raise ValueError("email invalido")
+        return normalized
+
+
+class CanjeAccesoTemporalRequest(BaseModel):
+    challenge_token: str = Field(min_length=43, max_length=500)
+
+
+class CanjeAccesoTemporalResponse(BaseModel):
+    session_token: str
+    expires_at: datetime
+
+
+class AyudaAccesoTemporalResponse(BaseModel):
+    aid_id: int
+    reported_amount: Decimal
+    reported_currency: Literal["VES", "USD", "EUR"]
+    transfer_date: date
+    status: str
+    problem_type: Optional[str] = None
+    receipt_id: Optional[int] = None
+
+
+class CuentaAccesoTemporalResponse(BaseModel):
+    account_id: int
+    account_version: int
+    medium: str
+    currency: Literal["VES", "USD", "EUR"]
+    identifier: str
+    instructions: Optional[str] = None
+    aids: List[AyudaAccesoTemporalResponse]
+
+
+class CasoAccesoTemporalResponse(BaseModel):
+    case_id: int
+    public_id: str
+    public_name: str
+    public_title: str
+    status: str
+    goal_amount: Decimal
+    goal_currency: Literal["VES", "USD", "EUR"]
+    confirmed_amount: Decimal
+    confirmed_help_count: int
+    accounts: List[CuentaAccesoTemporalResponse]
+
+
+class ContextoAccesoTemporalResponse(BaseModel):
+    cases: List[CasoAccesoTemporalResponse]
+
+
+class AccesoTemporalOrganizacionResponse(BaseModel):
+    access_id: int
+    status: str
+    account_ids: List[int]
+    created_at: datetime
+    expires_at: Optional[datetime] = None
+    revoked_at: Optional[datetime] = None
+
+
+class RevocacionAccesoTemporalRequest(BaseModel):
+    reason: Literal[
+        "solicitud_responsable",
+        "riesgo_seguridad",
+        "cuenta_actualizada",
+        "caso_cerrado",
+        "otro",
+    ]

@@ -11,7 +11,7 @@ V2_EXPECTED_RATE_SOURCE ?= DOLARAPI-BCV
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up down build restart logs ps health \
+.PHONY: help up down build restart logs ps health notifications \
 	postman-test postman-test-casos-ayuda postman-test-yo-te-ayudo-public postman-test-yo-te-ayudo-protegido postman-test-yo-te-ayudo-donante postman-test-bcv-manual test-no-auth test-solicitudes test-aprobar test-rechazar test-nuevo-centro test-admin-dual
 
 help: ## Muestra esta ayuda
@@ -38,6 +38,9 @@ ps: ## Estado de los contenedores
 
 health: ## Chequea GET /health
 	curl -sf $(BASE)/health && echo " OK"
+
+notifications: ## Procesa un lote de la outbox de ayuda mediante Postmark
+	docker compose run --rm rescate-api python -m scripts.help_notifications --limit 25
 
 postman-test: ## Ejecuta la suite automatizada de API con Newman
 	@npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \

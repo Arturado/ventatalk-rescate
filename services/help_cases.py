@@ -13,6 +13,8 @@ from services.help_feature_flags import (
     is_help_v2_enabled_for_organization,
     require_help_v2_organization,
 )
+from services.help_crypto import HelpDataCipher
+from services.help_notifications import enqueue_case_recipient
 
 
 class HelpCaseDomainError(ValueError):
@@ -169,6 +171,20 @@ def _add_audit_event(db, *, case, actor, action, entity_type, entity_id, metadat
         motivo_codigo=reason_code,
         metadata_json=json.dumps(metadata or {}, sort_keys=True, separators=(",", ":")),
     ))
+
+
+def audit_global_sensitive_read(db, *, case, actor, action):
+    if actor.organizacion_id or actor.role not in {"admin", "super_admin"}:
+        return
+    _add_audit_event(
+        db,
+        case=case,
+        actor=actor,
+        action=action,
+        entity_type="caso",
+        entity_id=case.id,
+    )
+    db.flush()
 
 
 def list_help_cases(
@@ -435,6 +451,7 @@ def configure_help_case_publication(
     public_description: str,
     general_location=None,
     social_networks_json=None,
+    within_current_consent_scope=None,
 ):
     case = _get_managed_case(db, case_id, actor, lock=True)
     if case.estado not in {"borrador", "pendiente_validacion"}:
@@ -444,7 +461,12 @@ def configure_help_case_publication(
             raise CaseLifecycleAccessError(
                 "Solo admin o super_admin puede editar informacion publica despues de publicar"
             )
+        if within_current_consent_scope is not True:
+            raise HelpCaseDomainError(
+                "Debe afirmar que el cambio permanece dentro del alcance del consentimiento vigente"
+            )
     publication = db.query(models.PublicacionCasoAyuda).filter_by(caso_id=case.id).one_or_none()
+    previous_version = publication.version if publication is not None else None
     if publication is None:
         publication = models.PublicacionCasoAyuda(caso_id=case.id, version=1)
         db.add(publication)
@@ -494,10 +516,57 @@ def configure_help_case_publication(
         action="publicacion_configurada",
         entity_type="publicacion",
         entity_id=publication.id,
-        metadata={"version": publication.version},
+        metadata=(
+            {
+                "dentro_alcance_consentimiento_vigente": True,
+                "version_publicacion_anterior": previous_version,
+                "version_publicacion_nueva": publication.version,
+            }
+            if within_current_consent_scope is True
+            else {"version": publication.version}
+        ),
     )
     db.flush()
     return publication
+
+
+def require_expanded_publication_consent(db: Session, *, case_id: int, actor: ActorOrgContext):
+    case = _get_managed_case(db, case_id, actor, lock=True)
+    if actor.role not in {"admin", "super_admin"}:
+        raise CaseLifecycleAccessError(
+            "Solo admin o super_admin puede requerir una ampliacion de consentimiento"
+        )
+    if case.estado not in {"publicado", "pausado", "meta_alcanzada"}:
+        raise CaseStateError("Solo una publicacion vigente puede requerir consentimiento ampliado")
+    publication = db.query(models.PublicacionCasoAyuda).filter_by(caso_id=case.id).one_or_none()
+    consent = _current_consent(db, case.id)
+    if publication is None:
+        raise CaseStateError("El caso no tiene una publicacion configurada")
+
+    previous_status = case.estado
+    now = datetime.now(timezone.utc)
+    consent.vigente = False
+    consent.retirado_at = now
+    consent.retirado_por = actor.email
+    consent.motivo_retiro = "ampliacion_alcance_publicacion"
+    publication.activa = False
+    case.estado = "pendiente_validacion"
+    _add_audit_event(
+        db,
+        case=case,
+        actor=actor,
+        action="consentimiento_ampliado_requerido",
+        entity_type="consentimiento",
+        entity_id=consent.id,
+        metadata={
+            "consentimiento_version": consent.version,
+            "estado_anterior": previous_status,
+            "estado_nuevo": "pendiente_validacion",
+            "publicacion_version": publication.version,
+        },
+    )
+    db.flush()
+    return case
 
 
 def register_help_case_consent(
@@ -813,6 +882,24 @@ def create_account_version(
             "version": account.version,
         },
     )
+    responsible_email = HelpDataCipher.from_environment().decrypt(
+        account.responsable_email_cifrado,
+        field="account.responsible_email",
+    )
+    for recipient_type, recipient_email in (
+        ("responsable", responsible_email),
+        ("coordinador", case.creado_por),
+    ):
+        enqueue_case_recipient(
+            db,
+            case=case,
+            event_type="account_changed",
+            recipient_type=recipient_type,
+            recipient_email=recipient_email,
+            template_key="account-changed-v1",
+            payload={"case_public_id": case.public_id, "account_version": account.version},
+            domain_key=f"account:{account.id}:version:{account.version}",
+        )
     db.flush()
     return account
 
@@ -942,6 +1029,72 @@ def mark_help_case_ready(db: Session, *, case_id: int, actor: ActorOrgContext):
 def get_help_case_detail(db: Session, *, case_id: int, actor: ActorOrgContext):
     case = _get_managed_case(db, case_id, actor)
     return case, _readiness_blockers(db, case)
+
+
+def get_help_case_preview(db: Session, *, case_id: int, actor: ActorOrgContext):
+    case = _get_managed_case(db, case_id, actor)
+    publication = db.query(models.PublicacionCasoAyuda).filter_by(caso_id=case.id).one_or_none()
+    if publication is None:
+        raise CaseStateError("El caso no tiene informacion publica para previsualizar")
+    return case, publication
+
+
+def build_public_help_case_response(db: Session, *, case, publication):
+    current_public_documents = list_current_public_case_documents(db, case_id=case.id)
+    return {
+        "id": case.id,
+        "public_id": case.public_id,
+        "nombre_publico": publication.nombre_publico,
+        "titulo_publico": publication.titulo_publico,
+        "descripcion_publica": publication.descripcion_publica,
+        "categoria": case.categoria,
+        "localidad_general": publication.localidad_general,
+        "meta_monto": case.meta_monto,
+        "meta_moneda": case.meta_moneda,
+        "monto_confirmado": case.monto_confirmado,
+        "ayudas_confirmadas": case.ayudas_confirmadas,
+        "estado": case.estado,
+        "prioridad_especial": case.prioridad_especial,
+        "publicado_at": case.publicado_at,
+        "documentos": [
+            {"id": document.id, "tipo": document.tipo, "content_type": document.content_type}
+            for document in current_public_documents
+        ],
+    }
+
+
+def list_current_public_case_documents(db: Session, *, case_id: int):
+    consent = (
+        db.query(models.ConsentimientoCasoAyuda)
+        .filter_by(caso_id=case_id, vigente=True)
+        .order_by(models.ConsentimientoCasoAyuda.version.desc())
+        .first()
+    )
+    documents = (
+        db.query(models.DocumentoCasoAyuda)
+        .filter_by(caso_id=case_id)
+        .order_by(models.DocumentoCasoAyuda.document_key, models.DocumentoCasoAyuda.version.desc())
+        .all()
+    )
+    return [
+        document
+        for document in _latest_by_key(documents, "document_key")
+        if consent is not None
+        and document.clasificacion == "publico"
+        and document.estado_revision == "aprobado"
+        and document.consentimiento_version == consent.version
+    ]
+
+
+def get_current_public_case_document(db: Session, *, case_id: int, document_id: int):
+    return next(
+        (
+            document
+            for document in list_current_public_case_documents(db, case_id=case_id)
+            if document.id == document_id
+        ),
+        None,
+    )
 
 
 def publish_help_case(db: Session, *, case_id: int, actor: ActorOrgContext):

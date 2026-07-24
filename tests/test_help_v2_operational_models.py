@@ -83,7 +83,7 @@ def create_account(db, case, *, version=1):
     return account
 
 
-def create_access(db, *, suffix="1", challenge_ttl=900, session_ttl=86400):
+def create_access(db, *, suffix="1", challenge_ttl=900, session_ttl=28800):
     now = datetime.now(timezone.utc)
     access = models.AccesoTemporalAyuda(
         destinatario_email_hash=(suffix * 64)[:64],
@@ -112,7 +112,7 @@ def test_create_all_is_idempotent_and_creates_operational_tables():
     }.issubset(table_names)
 
 
-@pytest.mark.parametrize(("challenge_ttl", "session_ttl"), [(901, 86400), (900, 86401), (0, 86400)])
+@pytest.mark.parametrize(("challenge_ttl", "session_ttl"), [(901, 28800), (900, 28801), (0, 28800)])
 def test_temporary_access_rejects_ttl_above_limits_or_non_positive(challenge_ttl, session_ttl):
     with TestingSessionLocal() as db:
         with pytest.raises(IntegrityError):
@@ -123,7 +123,7 @@ def test_temporary_access_hashes_are_unique_and_not_plain_tokens():
     with TestingSessionLocal() as db:
         access = create_access(db)
         access.session_hash = "s" * 64
-        access.session_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+        access.session_expires_at = datetime.now(timezone.utc) + timedelta(hours=8)
         access.challenge_consumed_at = datetime.now(timezone.utc)
         access.estado = "activo"
         db.commit()

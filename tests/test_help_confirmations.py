@@ -79,6 +79,7 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def isolated_database(monkeypatch):
+    monkeypatch.delenv("HELP_ADMIN_NOTIFICATION_EMAILS", raising=False)
     monkeypatch.setenv("HELP_DATA_ENCRYPTION_KEY_V1", base64.b64encode(b"e" * 32).decode())
     monkeypatch.setenv("HELP_DATA_ACTIVE_KEY_VERSION", "v1")
     monkeypatch.setenv("HELP_IDENTITY_HASH_KEY", base64.b64encode(b"h" * 32).decode())
@@ -172,6 +173,8 @@ def create_aid(
             cuenta_id=account.id,
             cuenta_version=account.version,
             donante_id="donor-uid-private",
+            donante_email_hash=cipher.blind_index("donor@example.com", purpose="donor-email"),
+            donante_email_cifrado=cipher.encrypt("donor@example.com", field="aid.donor_email"),
             monto_reportado=Decimal(reported_amount),
             moneda_reportada=reported_currency,
             fecha_transferencia=date(2026, 7, 20),
@@ -230,6 +233,7 @@ def test_lists_only_safe_organization_scoped_aid_summaries():
         "status": "pendiente_confirmacion",
         "account_id": response.json()[0]["account_id"],
         "account_version": 1,
+        "receipt_id": response.json()[0]["receipt_id"],
         "problem_type": None,
         "problem_detail": None,
         "resolution_reason": None,
@@ -241,6 +245,7 @@ def test_lists_only_safe_organization_scoped_aid_summaries():
         "rate_date": None,
         "created_at": response.json()[0]["created_at"],
     }]
+    assert isinstance(response.json()[0]["receipt_id"], int)
     for private_value in (
         "BANK-PRIVATE-123",
         "receipt-private.enc",
@@ -281,6 +286,10 @@ def test_assigned_responsible_confirms_pending_aid_and_progresses_once():
         assert "CONFIRMATION-COMMENT-PRIVATE" not in operation.response_body
         assert "25.00" not in audit.metadata_json
         assert "CONFIRMATION-COMMENT-PRIVATE" not in audit.metadata_json
+        assert {
+            (item.evento_tipo, item.destinatario_tipo)
+            for item in db.query(models.NotificacionCasoAyuda).all()
+        } == {("ayuda_confirmada", "donante"), ("ayuda_confirmada", "coordinador")}
 
 
 def test_same_organization_coordinator_directly_confirms_pending_aid_without_being_responsible():
@@ -296,6 +305,22 @@ def test_same_organization_coordinator_directly_confirms_pending_aid_without_bei
         assert db.query(models.ConfirmacionAyuda).count() == 1
         assert case.monto_confirmado == Decimal("25.00")
         assert case.ayudas_confirmadas == 1
+
+
+def test_legacy_aid_without_donor_email_fails_closed_for_donor_notification():
+    case_id, aid_id, _ = create_aid()
+    with TestingSessionLocal() as db:
+        aid = db.get(models.AyudaMonetaria, aid_id)
+        aid.donante_email_hash = None
+        aid.donante_email_cifrado = None
+        db.commit()
+
+    response = confirm(case_id, aid_id)
+
+    assert response.status_code == 200
+    with TestingSessionLocal() as db:
+        notifications = db.query(models.NotificacionCasoAyuda).all()
+        assert [item.destinatario_tipo for item in notifications] == ["coordinador"]
 
 
 def test_coordinator_can_review_then_confirm_unassigned_aid():
@@ -337,6 +362,12 @@ def test_coordinator_reports_problem_with_encrypted_detail_without_progress():
         assert audit.motivo_codigo == "transferencia_no_recibida"
         assert case.monto_confirmado == Decimal("0.00")
         assert case.ayudas_confirmadas == 0
+        assert {
+            item.destinatario_tipo
+            for item in db.query(models.NotificacionCasoAyuda).filter_by(
+                evento_tipo="problema_reportado"
+            )
+        } == {"donante", "coordinador"}
 
 
 def test_coordinator_reviews_and_rejects_problem_preserving_encrypted_history():
@@ -372,6 +403,12 @@ def test_coordinator_reviews_and_rejects_problem_preserving_encrypted_history():
         assert audit.motivo_codigo == "rechazada"
         assert case.monto_confirmado == Decimal("0.00")
         assert case.ayudas_confirmadas == 0
+        assert {
+            item.destinatario_tipo
+            for item in db.query(models.NotificacionCasoAyuda).filter_by(
+                evento_tipo="revision_resuelta"
+            )
+        } == {"donante", "coordinador"}
 
 
 def test_problem_and_rejection_require_valid_state_transitions():
@@ -481,6 +518,33 @@ def test_reaching_goal_updates_state_and_keeps_case_publicly_visible():
     assert any(item["public_id"] == public_id for item in public_list.json())
     assert public_detail.status_code == 200
     assert public_detail.json()["estado"] == "meta_alcanzada"
+    with TestingSessionLocal() as db:
+        assert db.query(models.NotificacionCasoAyuda).filter_by(
+            evento_tipo="meta_alcanzada", destinatario_tipo="coordinador"
+        ).count() == 1
+
+
+def test_problem_notifies_valid_normalized_global_admins(monkeypatch):
+    monkeypatch.setenv(
+        "HELP_ADMIN_NOTIFICATION_EMAILS",
+        " Admin@One.Example,admin@one.example, second@two.example ",
+    )
+    case_id, aid_id, _ = create_aid()
+
+    response = client.post(
+        f"/api/v2/casos-ayuda/{case_id}/ayudas/{aid_id}/problema",
+        json={"problem_type": "otro", "detail": "private detail"},
+    )
+
+    assert response.status_code == 200
+    with TestingSessionLocal() as db:
+        admins = db.query(models.NotificacionCasoAyuda).filter_by(
+            evento_tipo="problema_reportado", destinatario_tipo="admin"
+        ).all()
+        assert len(admins) == 2
+        serialized = "".join(item.destinatario_email_cifrado + item.payload_json for item in admins)
+        assert "admin@one.example" not in serialized.lower()
+        assert "second@two.example" not in serialized.lower()
 
 
 def test_missing_cross_currency_rate_moves_aid_to_review_without_progress():
