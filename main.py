@@ -434,6 +434,8 @@ app.add_middleware(
     allow_origins=[
         "https://venezuelarescate.com",
         "https://www.venezuelarescate.com",
+        "https://sos-ve-20fa3.web.app",
+        "https://sos-ve-20fa3.firebaseapp.com",
         "https://rescate.ventatalk.com",
         "http://localhost:3000",
         "http://localhost:5173",
