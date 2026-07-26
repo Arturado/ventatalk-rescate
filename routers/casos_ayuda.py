@@ -297,8 +297,12 @@ def obtener_contacto_caso(
     caso_id: int,
     request: Request,
     db: Session = Depends(get_db),
+    actor: str = Depends(verify_api_key),
 ):
     caso = _get_caso_o_404(db, caso_id)
+    if caso.estado != "publicado":
+        raise HTTPException(status_code=404, detail="Contacto no disponible")
+
     contacto = db.query(models.ContactoCasoAyuda).filter(
         models.ContactoCasoAyuda.caso_id == caso_id
     ).first()
@@ -309,6 +313,7 @@ def obtener_contacto_caso(
     historial = models.CasoAyudaHistorial(
         caso_id=caso_id,
         tipo_cambio="contacto_accedido",
+        cambiado_por=actor,
         descripcion=f"Acceso a datos de contacto — IP: {ip} — {datetime.now(VE_TZ).isoformat()}",
     )
     db.add(historial)

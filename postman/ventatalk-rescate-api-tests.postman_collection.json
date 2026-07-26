@@ -1,0 +1,1160 @@
+{
+  "info": {
+    "_postman_id": "729d9b89-f095-49ae-8709-1784d7feb138",
+    "name": "Ventatalk Rescate - API tests automatizados",
+    "description": "Pruebas de integracion repetibles para salud, autenticacion, personas, hospitales/pacientes y casos de ayuda. Ejecutar la coleccion completa en orden contra una instancia local o de pruebas. Los datos creados se eliminan al final de cada flujo.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (pm.info.requestName === 'Health' || pm.info.requestName === 'Crear caso de ayuda') {",
+          "  const runId = pm.variables.replaceIn('{{$guid}}');",
+          "  pm.collectionVariables.set('run_id', runId);",
+          "  pm.collectionVariables.set('test_cedula', String(Date.now()).slice(-8));",
+          "  const keys = pm.info.requestName === 'Health' ? ['persona_id', 'hospital_id', 'paciente_id', 'caso_id'] : ['caso_id'];",
+          "  keys.forEach((key) => pm.collectionVariables.unset(key));",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "06 - Yo te ayudo V2 donante y confirmacion",
+      "event": [{
+        "listen": "prerequest",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+            "const publicId = pm.variables.replaceIn('{{v2_public_id}}');",
+            "if (!secret || !publicId) { pm.execution.skipRequest(); return; }",
+            "const cryptoJs = require('crypto-js');",
+            "const timestamp = Math.floor(Date.now() / 1000).toString();",
+            "const hmac = (message) => cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex);",
+            "const donorEmail = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+            "const donorUid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+            "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+            "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+            "pm.collectionVariables.set('v2_donor_signature', hmac(`|donor|${donorEmail}|${donorUid}|${ipHash}|${timestamp}`));",
+            "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+            "const actorEmail = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+            "const actorUid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+            "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+            "pm.collectionVariables.set('v2_actor_signature', hmac(`${organization}|coordinador|${actorEmail}|${actorUid}|${ipHash}|${timestamp}`));",
+            "if (!pm.collectionVariables.get('v2_report_key')) pm.collectionVariables.set('v2_report_key', `help:${pm.variables.replaceIn('{{$guid}}')}`);",
+            "if (!pm.collectionVariables.get('v2_problem_report_key')) pm.collectionVariables.set('v2_problem_report_key', `help:${pm.variables.replaceIn('{{$guid}}')}`);",
+            "if (!pm.collectionVariables.get('v2_confirm_key')) pm.collectionVariables.set('v2_confirm_key', `confirm:${pm.variables.replaceIn('{{$guid}}')}`);",
+            "pm.collectionVariables.set('v2_transfer_date', new Date().toISOString().slice(0, 10));"
+          ]
+        }
+      }],
+      "item": [
+        {
+          "name": "Consultar equivalencias actuales de la meta",
+          "request": {"method":"GET","url":"{{base_url}}/api/v2/public/casos-ayuda/{{v2_public_id}}/equivalencias"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('equivalencias responde 200', () => pm.response.to.have.status(200));","pm.test('incluye VES USD y EUR como referencia', () => { const body = pm.response.json(); pm.expect(body.referential).to.eql(true); pm.expect(body.equivalents).to.have.all.keys('VES', 'USD', 'EUR'); pm.expect(body.transport_source).to.eql('DolarApi'); pm.expect(body.upstream_source).to.eql('BCV'); });"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Consultar terminos del donante",
+          "request": {"method":"GET","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"url":"{{base_url}}/api/v2/donante/terminos"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('terminos responde 200', () => pm.response.to.have.status(200));","pm.test('informa version requerida', () => pm.expect(pm.response.json().required_version).to.eql('donor-v1'));"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Aceptar terminos del donante",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"body":{"mode":"raw","raw":"{\"terms_version\":\"donor-v1\"}"},"url":"{{base_url}}/api/v2/donante/terminos/aceptar"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('acepta terminos', () => pm.response.to.have.status(200));","pm.test('queda aceptado', () => pm.expect(pm.response.json().accepted).to.eql(true));"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Consultar cuentas aprobadas",
+          "request": {"method":"GET","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"url":"{{base_url}}/api/v2/donante/casos-ayuda/{{v2_public_id}}/cuentas"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('cuentas responde 200', () => pm.response.to.have.status(200));","pm.test('devuelve cuentas', () => pm.expect(pm.response.json().accounts).to.be.an('array').that.is.not.empty);","if (pm.response.code === 200 && pm.response.json().accounts.length) pm.collectionVariables.set('v2_donor_account_id', pm.response.json().accounts[0].id);"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Reportar ayuda monetaria",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"Idempotency-Key","value":"{{v2_report_key}}"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"body":{"mode":"raw","raw":"{\"account_id\":{{v2_donor_account_id}},\"amount\":\"{{v2_help_amount}}\",\"currency\":\"{{v2_help_currency}}\",\"transfer_date\":\"{{v2_transfer_date}}\",\"reference\":\"REF-DEMO-001\",\"comment\":\"Prueba local Postman\"}"},"url":"{{base_url}}/api/v2/donante/casos-ayuda/{{v2_public_id}}/ayudas"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('reporta ayuda', () => pm.response.to.have.status(201));","pm.test('queda pendiente', () => pm.expect(pm.response.json().status).to.eql('pendiente_confirmacion'));","if (pm.response.code === 201) pm.collectionVariables.set('v2_aid_id', pm.response.json().id);"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Listar mis ayudas",
+          "request": {"method":"GET","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"url":"{{base_url}}/api/v2/donante/ayudas"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('mis ayudas responde 200', () => pm.response.to.have.status(200));","pm.test('incluye ayuda creada', () => pm.expect(pm.response.json().some(item => String(item.id) === String(pm.collectionVariables.get('v2_aid_id')))).to.eql(true));"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Pasar ayuda a revision",
+          "request": {"method":"POST","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/en-revision"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('pasa a revision', () => pm.response.to.have.status(200));","pm.test('estado en revision', () => pm.expect(pm.response.json().status).to.eql('en_revision'));"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Confirmar recepcion",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"Idempotency-Key","value":"{{v2_confirm_key}}"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"received_amount\":\"{{v2_received_amount}}\",\"received_currency\":\"{{v2_received_currency}}\",\"effective_date\":\"{{v2_transfer_date}}\",\"comment\":\"Confirmación local Postman\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/confirmar"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('confirma recepcion', () => pm.response.to.have.status(200));","const body = pm.response.json();","pm.test('ayuda confirmada', () => pm.expect(body.status).to.eql('confirmada'));","pm.test('incrementa contador', () => pm.expect(body.confirmed_help_count).to.be.above(0));","pm.test('conserva equivalente positivo en moneda meta', () => pm.expect(Number(body.goal_equivalent_amount)).to.be.above(0));","const sameCurrency = pm.variables.replaceIn('{{v2_received_currency}}') === pm.variables.replaceIn('{{v2_help_currency}}');","pm.test('aplica tasa solo al convertir moneda', () => { if (sameCurrency) pm.expect(body.applied_rate).to.eql(null); else { pm.expect(Number(body.applied_rate)).to.be.above(0); pm.expect(body.rate_source).to.eql(pm.variables.replaceIn('{{v2_expected_rate_source}}')); } });","pm.collectionVariables.set('v2_confirmed_help_count', body.confirmed_help_count);","pm.collectionVariables.set('v2_goal_equivalent_amount', body.goal_equivalent_amount);"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Reintentar confirmacion idempotente",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"Idempotency-Key","value":"{{v2_confirm_key}}"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"received_amount\":\"{{v2_received_amount}}\",\"received_currency\":\"{{v2_received_currency}}\",\"effective_date\":\"{{v2_transfer_date}}\",\"comment\":\"Confirmación local Postman\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/confirmar"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('reintento responde 200', () => pm.response.to.have.status(200));","const body = pm.response.json();","pm.test('reintento no incrementa progreso', () => { pm.expect(body.confirmed_help_count).to.eql(Number(pm.collectionVariables.get('v2_confirmed_help_count'))); pm.expect(body.goal_equivalent_amount).to.eql(pm.collectionVariables.get('v2_goal_equivalent_amount')); });"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Reportar segunda ayuda para incidencia",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"Idempotency-Key","value":"{{v2_problem_report_key}}"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"body":{"mode":"raw","raw":"{\"account_id\":{{v2_donor_account_id}},\"amount\":\"{{v2_help_amount}}\",\"currency\":\"{{v2_help_currency}}\",\"transfer_date\":\"{{v2_transfer_date}}\",\"reference\":\"REF-DEMO-002\",\"comment\":\"Prueba local de incidencia\"}"},"url":"{{base_url}}/api/v2/donante/casos-ayuda/{{v2_public_id}}/ayudas"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('reporta segunda ayuda', () => pm.response.to.have.status(201));","if (pm.response.code === 201) pm.collectionVariables.set('v2_problem_aid_id', pm.response.json().id);"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Reportar problema de ayuda",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"problem_type\":\"transferencia_no_recibida\",\"detail\":\"Incidencia ficticia creada por Postman\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_problem_aid_id}}/problema"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('reporta problema', () => pm.response.to.have.status(200));","pm.test('estado problema reportado', () => pm.expect(pm.response.json().status).to.eql('problema_reportado'));"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Pasar incidencia a revision",
+          "request": {"method":"POST","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_problem_aid_id}}/en-revision"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('incidencia pasa a revision', () => pm.response.to.have.status(200));","pm.test('incidencia en revision', () => pm.expect(pm.response.json().status).to.eql('en_revision'));"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Rechazar incidencia",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"reason\":\"No fue posible verificar la transferencia ficticia\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_problem_aid_id}}/rechazar"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('rechaza incidencia', () => pm.response.to.have.status(200));","pm.test('incidencia rechazada', () => pm.expect(pm.response.json().status).to.eql('rechazada'));"],"type":"text/javascript"}}]
+        }
+      ]
+    },
+    {
+      "name": "07 - Contingencia manual BCV",
+      "event": [{
+        "listen": "prerequest",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+            "const value = pm.variables.replaceIn('{{v2_manual_rate_value}}');",
+            "if (!secret || !value) { pm.execution.skipRequest(); return; }",
+            "const cryptoJs = require('crypto-js');",
+            "const timestamp = Math.floor(Date.now() / 1000).toString();",
+            "const email = pm.variables.replaceIn('{{v2_super_admin_email}}').toLowerCase();",
+            "const uid = pm.variables.replaceIn('{{v2_super_admin_uid}}');",
+            "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+            "const signature = cryptoJs.HmacSHA256(`|super_admin|${email}|${uid}|${ipHash}|${timestamp}`, secret).toString(cryptoJs.enc.Hex);",
+            "pm.collectionVariables.set('v2_super_admin_timestamp', timestamp);",
+            "pm.collectionVariables.set('v2_super_admin_signature', signature);",
+            "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+            "const actorEmail = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+            "const actorUid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+            "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+            "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(`${organization}|coordinador|${actorEmail}|${actorUid}|${ipHash}|${timestamp}`, secret).toString(cryptoJs.enc.Hex));"
+          ]
+        }
+      }],
+      "item": [
+        {
+          "name": "Rechazar tasa manual de coordinador",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"rate_date\":\"{{v2_manual_rate_date}}\",\"source_currency\":\"{{v2_manual_rate_source_currency}}\",\"target_currency\":\"{{v2_manual_rate_target_currency}}\",\"value\":\"{{v2_manual_rate_value}}\",\"source_reference\":\"{{v2_manual_rate_reference}}\",\"reason\":\"{{v2_manual_rate_reason}}\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/tasas/manual"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('coordinador recibe 403', () => pm.response.to.have.status(403));"],"type":"text/javascript"}}]
+        },
+        {
+          "name": "Registrar tasa manual BCV",
+          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"super_admin"},{"key":"x-actor-email","value":"{{v2_super_admin_email}}"},{"key":"x-actor-uid","value":"{{v2_super_admin_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_super_admin_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_super_admin_signature}}"}],"body":{"mode":"raw","raw":"{\"rate_date\":\"{{v2_manual_rate_date}}\",\"source_currency\":\"{{v2_manual_rate_source_currency}}\",\"target_currency\":\"{{v2_manual_rate_target_currency}}\",\"value\":\"{{v2_manual_rate_value}}\",\"source_reference\":\"{{v2_manual_rate_reference}}\",\"reason\":\"{{v2_manual_rate_reason}}\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/tasas/manual"},
+          "event":[{"listen":"test","script":{"exec":["pm.test('registra tasa manual', () => pm.response.to.have.status(201));","pm.test('marca fuente manual', () => pm.expect(pm.response.json().source).to.eql('BCV-MANUAL'));"],"type":"text/javascript"}}]
+        }
+      ]
+    },
+    {
+      "name": "00 - Salud y autenticacion",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const responseJson = pm.response.json();",
+                  "pm.test('servicio saludable', () => {",
+                  "  pm.expect(responseJson.status).to.eql('ok');",
+                  "  pm.expect(responseJson.service).to.eql('ventatalk-rescate');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rechaza request sin API key",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/personas/count"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 401', () => pm.response.to.have.status(401));",
+                  "pm.test('no filtra datos protegidos', () => pm.expect(pm.response.json().detail).to.eql('API Key inválida'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Acepta API key valida",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" }
+            ],
+            "url": "{{base_url}}/api/personas/count"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('total numerico', () => pm.expect(pm.response.json().total).to.be.a('number'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 - Personas",
+      "item": [
+        {
+          "name": "Crear reporte de persona",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "nombres_apellidos", "value": "Persona Postman {{run_id}}", "type": "text" },
+                { "key": "cedula", "value": "{{test_cedula}}", "type": "text" },
+                { "key": "ultima_ubicacion", "value": "Zona prueba {{run_id}}", "type": "text" },
+                { "key": "descripcion", "value": "Creado por pruebas Postman", "type": "text" },
+                { "key": "numero_contacto", "value": "04121234567", "type": "text" },
+                { "key": "tipo_reporte", "value": "desaparecido", "type": "text" },
+                { "key": "tipo_reportante", "value": "integracion", "type": "text" },
+                { "key": "sexo", "value": "no_determinado", "type": "text" },
+                { "key": "edad_aproximada", "value": "adulto", "type": "text" },
+                { "key": "sin_documentos", "value": "false", "type": "text" }
+              ]
+            },
+            "url": "{{base_url}}/api/reportes/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('crea la persona', () => pm.response.to.have.status(201));",
+                  "const responseJson = pm.response.json();",
+                  "pm.collectionVariables.set('persona_id', responseJson.id);",
+                  "pm.test('aplica valores iniciales', () => {",
+                  "  pm.expect(responseJson.id).to.be.a('number');",
+                  "  pm.expect(responseJson.estado).to.eql('desaparecido');",
+                  "  pm.expect(responseJson.nombres_apellidos).to.include(pm.collectionVariables.get('run_id'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Buscar persona publicamente",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/buscar?nombre={{run_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const responseJson = pm.response.json();",
+                  "pm.test('encuentra solo datos del flujo', () => {",
+                  "  pm.expect(responseJson).to.be.an('array');",
+                  "  pm.expect(responseJson.some((item) => item.id === Number(pm.collectionVariables.get('persona_id')))).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar persona protegida",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" }
+            ],
+            "url": "{{base_url}}/api/personas/{{persona_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const responseJson = pm.response.json();",
+                  "pm.test('devuelve la persona creada', () => {",
+                  "  pm.expect(responseJson.id).to.eql(Number(pm.collectionVariables.get('persona_id')));",
+                  "  pm.expect(responseJson.created_at).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar persona",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descripcion\": \"Editado por Postman {{run_id}}\",\n  \"contextura\": \"media\"\n}"
+            },
+            "url": "{{base_url}}/api/personas/{{persona_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const responseJson = pm.response.json();",
+                  "pm.test('persiste cambios', () => {",
+                  "  pm.expect(responseJson.contextura).to.eql('media');",
+                  "  pm.expect(responseJson.descripcion).to.include(pm.collectionVariables.get('run_id'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar estado de persona",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"en_proceso\",\n  \"descripcion_cambio\": \"Prueba automatizada\"\n}"
+            },
+            "url": "{{base_url}}/api/personas/{{persona_id}}/estado"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('actualiza el estado', () => pm.expect(pm.response.json().estado).to.eql('en_proceso'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar persona de prueba",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" }
+            ],
+            "url": "{{base_url}}/api/personas/{{persona_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('confirma eliminacion', () => pm.expect(pm.response.json().ok).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirmar persona eliminada",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" }
+            ],
+            "url": "{{base_url}}/api/personas/{{persona_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ya no existe', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Hospitales y pacientes",
+      "item": [
+        {
+          "name": "Listar hospitales",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/hospitales/?zona=Caracas&tipo=publico"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const responseJson = pm.response.json();",
+                  "pm.test('hay hospitales sembrados', () => pm.expect(responseJson.length).to.be.above(0));",
+                  "if (responseJson.length) pm.collectionVariables.set('hospital_id', responseJson[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar hospital",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/hospitales/{{hospital_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve el hospital elegido', () => pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('hospital_id'))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear paciente",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "nombres_apellidos", "value": "Paciente Postman {{run_id}}", "type": "text" },
+                { "key": "hospital_id", "value": "{{hospital_id}}", "type": "text" },
+                { "key": "nombre_hospital", "value": "Hospital de prueba", "type": "text" },
+                { "key": "edad", "value": "35", "type": "text" },
+                { "key": "sexo", "value": "no_determinado", "type": "text" },
+                { "key": "cedula", "value": "{{test_cedula}}", "type": "text" },
+                { "key": "procedencia", "value": "Integracion", "type": "text" },
+                { "key": "estado_paciente", "value": "ingresado", "type": "text" },
+                { "key": "reportado_por", "value": "Postman", "type": "text" },
+                { "key": "necesita_ayuda", "value": "false", "type": "text" }
+              ]
+            },
+            "url": "{{base_url}}/api/pacientes/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('crea el paciente', () => pm.response.to.have.status(201));",
+                  "const responseJson = pm.response.json();",
+                  "pm.collectionVariables.set('paciente_id', responseJson.id);",
+                  "pm.test('asocia el hospital', () => {",
+                  "  pm.expect(responseJson.id).to.be.a('number');",
+                  "  pm.expect(responseJson.hospital_id).to.eql(Number(pm.collectionVariables.get('hospital_id')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Buscar paciente publicamente",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/pacientes/buscar?nombre={{run_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const responseJson = pm.response.json();",
+                  "pm.test('encuentra el paciente', () => pm.expect(responseJson.some((item) => item.id === Number(pm.collectionVariables.get('paciente_id')))).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar paciente con API key",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" }
+            ],
+            "url": "{{base_url}}/api/pacientes/?nombre={{run_id}}&limit=10"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('incluye el paciente', () => pm.expect(pm.response.json().some((item) => item.id === Number(pm.collectionVariables.get('paciente_id')))).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar paciente",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado_paciente\": \"estable\",\n  \"observaciones\": \"Editado por Postman {{run_id}}\",\n  \"necesita_ayuda\": true,\n  \"tipo_ayuda\": \"medicinas\"\n}"
+            },
+            "url": "{{base_url}}/api/pacientes/{{paciente_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const responseJson = pm.response.json();",
+                  "pm.test('persiste cambios', () => {",
+                  "  pm.expect(responseJson.estado_paciente).to.eql('estable');",
+                  "  pm.expect(responseJson.necesita_ayuda).to.eql(true);",
+                  "  pm.expect(responseJson.tipo_ayuda).to.eql('medicinas');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar paciente de prueba",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" }
+            ],
+            "url": "{{base_url}}/api/pacientes/{{paciente_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('confirma eliminacion', () => pm.expect(pm.response.json().ok).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Casos de ayuda",
+      "item": [
+        {
+          "name": "Crear caso de ayuda",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cedula\": \"{{test_cedula}}\",\n  \"nombre\": \"Caso Postman {{run_id}}\",\n  \"relato\": \"Relato automatizado {{run_id}}\",\n  \"condicion_resumen\": \"Condicion de prueba\",\n  \"monto_necesario\": 25.5,\n  \"moneda\": \"USD\",\n  \"consentimiento_publicacion\": true,\n  \"creado_por\": \"postman@example.test\",\n  \"contacto\": {\n    \"telefono\": \"04121234567\",\n    \"metodo_pago\": \"Transferencia\",\n    \"datos_pago\": \"Datos {{run_id}}\",\n    \"contacto_alterno\": \"postman@example.test\"\n  }\n}"
+            },
+            "url": "{{base_url}}/api/casos-ayuda/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('crea el caso', () => pm.response.to.have.status(201));",
+                  "const responseJson = pm.response.json();",
+                  "pm.collectionVariables.set('caso_id', responseJson.id);",
+                  "pm.test('inicia pendiente de revision', () => {",
+                  "  pm.expect(responseJson.id).to.be.a('number');",
+                  "  pm.expect(responseJson.estado).to.eql('pendiente_revision');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Contacto rechaza request sin API key",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/contacto"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 401', () => pm.response.to.have.status(401));",
+                  "pm.test('no filtra el contacto', () => pm.expect(pm.response.json().detail).to.eql('API Key inválida'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Contacto rechaza API key invalida",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "invalid-postman-key" }
+            ],
+            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/contacto"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 401', () => pm.response.to.have.status(401));",
+                  "pm.test('no filtra el contacto', () => pm.expect(pm.response.json().detail).to.eql('API Key inválida'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Contacto oculta caso no publicado",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" }
+            ],
+            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/contacto"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 404', () => pm.response.to.have.status(404));",
+                  "pm.test('no filtra el contacto', () => pm.expect(pm.response.json().detail).to.eql('Contacto no disponible'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar caso protegido",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" }
+            ],
+            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const responseJson = pm.response.json();",
+                  "pm.test('devuelve campos privados', () => {",
+                  "  pm.expect(responseJson.id).to.eql(Number(pm.collectionVariables.get('caso_id')));",
+                  "  pm.expect(responseJson.cedula).to.eql(pm.collectionVariables.get('test_cedula'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Elevar nivel de verificacion",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nivel_verificacion\": \"institucional\",\n  \"avalado_por\": \"postman@example.test\",\n  \"notas\": \"Validacion automatizada\"\n}"
+            },
+            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/nivel"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('eleva el nivel', () => pm.expect(pm.response.json().nivel_verificacion).to.eql('institucional'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publicar caso",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"publicado\",\n  \"descripcion_cambio\": \"Publicacion automatizada\",\n  \"cambiado_por\": \"postman@example.test\"\n}"
+            },
+            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/estado"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('publica el caso', () => pm.expect(pm.response.json().estado).to.eql('publicado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar caso publicamente sin cedula",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/casos-ayuda/?estado=publicado"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const responseJson = pm.response.json();",
+                  "const caso = responseJson.find((item) => item.id === Number(pm.collectionVariables.get('caso_id')));",
+                  "pm.test('expone el caso publicado', () => pm.expect(caso).to.be.an('object'));",
+                  "pm.test('protege la cedula', () => pm.expect(caso).not.to.have.property('cedula'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar contacto y auditar actor",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" },
+              { "key": "x-actor-id", "value": "postman-{{run_id}}@example.test" }
+            ],
+            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/contacto"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const responseJson = pm.response.json();",
+                  "pm.test('devuelve el contacto', () => {",
+                  "  pm.expect(responseJson.caso_id).to.eql(Number(pm.collectionVariables.get('caso_id')));",
+                  "  pm.expect(responseJson.telefono).to.eql('04121234567');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar historial del caso",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" }
+            ],
+            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/historial"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const tipos = pm.response.json().map((item) => item.tipo_cambio);",
+                  "pm.test('registra cambios sensibles', () => {",
+                  "  pm.expect(tipos).to.include('nivel');",
+                  "  pm.expect(tipos).to.include('estado');",
+                  "  pm.expect(tipos).to.include('contacto_accedido');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolver caso",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"resuelto\",\n  \"descripcion_cambio\": \"Cierre de prueba\",\n  \"cambiado_por\": \"postman@example.test\"\n}"
+            },
+            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/estado"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('resuelve el caso', () => pm.expect(pm.response.json().estado).to.eql('resuelto'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archivar caso",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"archivado\",\n  \"descripcion_cambio\": \"Limpieza de prueba\",\n  \"cambiado_por\": \"postman@example.test\"\n}"
+            },
+            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/estado"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('archiva el caso', () => pm.expect(pm.response.json().estado).to.eql('archivado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar caso de prueba",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" }
+            ],
+            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('confirma eliminacion', () => pm.expect(pm.response.json().ok).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirmar caso eliminado",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" }
+            ],
+            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ya no existe', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 - Yo te ayudo V2 publico",
+      "item": [
+        {
+          "name": "Listar casos V2 publicados",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v2/public/casos-ayuda"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json();",
+                  "pm.test('devuelve una lista', () => pm.expect(items).to.be.an('array'));",
+                  "items.forEach((item) => {",
+                  "  pm.test('respuesta publica no expone datos sensibles', () => {",
+                  "    pm.expect(item).not.to.have.property('cedula');",
+                  "    pm.expect(item).not.to.have.property('contacto');",
+                  "    pm.expect(item).not.to.have.property('cuentas');",
+                  "    pm.expect(item).not.to.have.property('comprobantes');",
+                  "    pm.expect(JSON.stringify(item)).not.to.include('cifrado');",
+                  "    pm.expect(JSON.stringify(item)).not.to.include('hash');",
+                  "  });",
+                  "});",
+                  "if (items.length > 0) pm.collectionVariables.set('v2_public_id', items[0].public_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar detalle V2 publicado",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v2/public/casos-ayuda/{{v2_public_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const publicId = pm.collectionVariables.get('v2_public_id');",
+                  "if (!publicId) {",
+                  "  pm.test('sin casos publicados: se omite detalle', () => pm.expect(true).to.eql(true));",
+                  "} else {",
+                  "  pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "  const item = pm.response.json();",
+                  "  pm.test('detalle publico seguro', () => {",
+                  "    pm.expect(item.public_id).to.eql(publicId);",
+                  "    pm.expect(item).not.to.have.property('cedula');",
+                  "    pm.expect(item).not.to.have.property('cuentas');",
+                  "    pm.expect(JSON.stringify(item)).not.to.include('enc:v');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 - Yo te ayudo V2 protegido",
+      "item": [
+        {
+          "name": "Rechaza listado V2 sin API key",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v2/casos-ayuda"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rechaza actor V2 sin firma HMAC",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda?organizacion_id={{v2_organization_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 401', () => pm.response.to.have.status(401));",
+                  "pm.test('no permite omitir firma', () => pm.expect(['API Key inválida', 'Falta la firma de organización del actor']).to.include(pm.response.json().detail))"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar V2 con actor HMAC",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_key}}" },
+              { "key": "x-actor-org-id", "value": "{{v2_organization_id}}" },
+              { "key": "x-actor-role", "value": "{{v2_actor_role}}" },
+              { "key": "x-actor-email", "value": "{{v2_actor_email}}" },
+              { "key": "x-actor-uid", "value": "" },
+              { "key": "x-actor-ip-hash", "value": "" },
+              { "key": "x-actor-org-timestamp", "value": "{{v2_actor_timestamp}}" },
+              { "key": "x-actor-org-signature", "value": "{{v2_actor_signature}}" }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda?organizacion_id={{v2_organization_id}}"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|||${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve lista V2', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8010" },
+    { "key": "api_key", "value": "" },
+    { "key": "run_id", "value": "" },
+    { "key": "test_cedula", "value": "" },
+    { "key": "persona_id", "value": "" },
+    { "key": "hospital_id", "value": "" },
+    { "key": "paciente_id", "value": "" },
+    { "key": "caso_id", "value": "" },
+    { "key": "v2_public_id", "value": "" },
+    { "key": "v2_organization_id", "value": "org-prueba" },
+    { "key": "v2_actor_role", "value": "coordinador" },
+    { "key": "v2_actor_email", "value": "coordinador1@example.test" },
+    { "key": "actor_signing_secret", "value": "" },
+    { "key": "v2_actor_timestamp", "value": "" },
+    { "key": "v2_actor_signature", "value": "" }
+    ,{ "key": "v2_case_id", "value": "" }
+    ,{ "key": "v2_actor_uid", "value": "postman-coordinator-uid" }
+    ,{ "key": "v2_donor_email", "value": "donante.demo@example.test" }
+    ,{ "key": "v2_donor_uid", "value": "postman-donor-uid" }
+    ,{ "key": "v2_actor_ip_hash", "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+    ,{ "key": "v2_donor_timestamp", "value": "" }
+    ,{ "key": "v2_donor_signature", "value": "" }
+    ,{ "key": "v2_donor_account_id", "value": "" }
+    ,{ "key": "v2_aid_id", "value": "" }
+    ,{ "key": "v2_report_key", "value": "" }
+    ,{ "key": "v2_confirm_key", "value": "" }
+    ,{ "key": "v2_transfer_date", "value": "" }
+    ,{ "key": "v2_help_amount", "value": "10.00" }
+    ,{ "key": "v2_help_currency", "value": "USD" }
+    ,{ "key": "v2_super_admin_email", "value": "" }
+    ,{ "key": "v2_super_admin_uid", "value": "" }
+    ,{ "key": "v2_super_admin_timestamp", "value": "" }
+    ,{ "key": "v2_super_admin_signature", "value": "" }
+    ,{ "key": "v2_manual_rate_date", "value": "" }
+    ,{ "key": "v2_manual_rate_source_currency", "value": "USD" }
+    ,{ "key": "v2_manual_rate_target_currency", "value": "EUR" }
+    ,{ "key": "v2_manual_rate_value", "value": "" }
+    ,{ "key": "v2_manual_rate_reference", "value": "" }
+    ,{ "key": "v2_manual_rate_reason", "value": "" }
+  ]
+}

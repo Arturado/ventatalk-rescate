@@ -1,8 +1,9 @@
 import os
 import bcrypt
+import json
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
@@ -23,9 +24,16 @@ from routers.hospitales import router as hospitales_router, pacientes_router
 from routers.bomberos import router as bomberos_router
 from routers.albergues import router as albergues_router
 from routers.casos_ayuda import router as casos_ayuda_router
+from routers.casos_ayuda_publicos import router as casos_ayuda_publicos_router
+from routers.casos_ayuda_v2 import router as casos_ayuda_v2_router
+from routers.casos_ayuda_donantes import router as casos_ayuda_donantes_router
+from routers.casos_ayuda_accesos import router as casos_ayuda_accesos_router
 from sqlalchemy import text as sql_text
 from sqlalchemy import inspect
 from services.shelter_centers import DEFAULT_ORGANIZACION_ID
+from services.help_config import donor_limit_config
+from services.help_retention_schema import ensure_retention_schema
+from observability import install_observability, router as observability_router
 
 templates = Jinja2Templates(directory="templates")
 limiter = Limiter(key_func=get_remote_address)
@@ -141,6 +149,107 @@ def seed_hospitales(db: Session):
     print(f"Seed: {len(hospitales_data)} hospitales insertados")
 
 
+NOTIFICATION_EVENT_TYPES = (
+    "ayuda_reportada",
+    "ayuda_confirmada",
+    "problema_reportado",
+    "revision_resuelta",
+    "meta_alcanzada",
+    "acceso_temporal",
+    "account_changed",
+)
+
+AID_STATE_TYPES = (
+    "pendiente_confirmacion",
+    "confirmada",
+    "problema_reportado",
+    "en_revision",
+    "rechazada",
+    "cancelada",
+)
+
+
+def ensure_notification_outbox_schema(target_engine=engine):
+    inspector = inspect(target_engine)
+    columns_by_table = {
+        "casos_ayuda_ayudas": {
+            "donante_email_hash": "VARCHAR(64)",
+            "donante_email_cifrado": "TEXT",
+        },
+        "casos_ayuda_notificaciones": {
+            "procesando_desde": "TIMESTAMP WITH TIME ZONE"
+            if target_engine.dialect.name == "postgresql"
+            else "DATETIME",
+        },
+    }
+    with target_engine.begin() as conn:
+        for table_name, columns in columns_by_table.items():
+            existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+            for column_name, column_type in columns.items():
+                if column_name not in existing_columns:
+                    conn.execute(sql_text(
+                        f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+                    ))
+
+        if target_engine.dialect.name != "postgresql":
+            return
+        allowed_sql = ", ".join(f"'{value}'" for value in NOTIFICATION_EVENT_TYPES)
+        incompatible_count = conn.execute(sql_text(
+            "SELECT COUNT(*) FROM casos_ayuda_notificaciones "
+            f"WHERE evento_tipo NOT IN ({allowed_sql})"
+        )).scalar_one()
+        if incompatible_count:
+            raise RuntimeError(
+                "La migracion del outbox encontro eventos incompatibles; no se modifico el constraint"
+            )
+        constraints = {
+            constraint["name"]: constraint.get("sqltext", "")
+            for constraint in inspect(conn).get_check_constraints("casos_ayuda_notificaciones")
+        }
+        event_constraint = constraints.get("ck_casos_ayuda_notificacion_evento", "")
+        if "account_changed" not in event_constraint:
+            if "ck_casos_ayuda_notificacion_evento" in constraints:
+                conn.execute(sql_text(
+                    "ALTER TABLE casos_ayuda_notificaciones "
+                    "DROP CONSTRAINT ck_casos_ayuda_notificacion_evento"
+                ))
+            conn.execute(sql_text(
+                "ALTER TABLE casos_ayuda_notificaciones "
+                "ADD CONSTRAINT ck_casos_ayuda_notificacion_evento "
+                f"CHECK (evento_tipo IN ({allowed_sql}))"
+            ))
+
+
+def ensure_help_aid_state_schema(target_engine=engine):
+    if target_engine.dialect.name != "postgresql":
+        return
+    allowed_sql = ", ".join(f"'{value}'" for value in AID_STATE_TYPES)
+    with target_engine.begin() as conn:
+        constraints = {
+            constraint["name"]: constraint.get("sqltext", "")
+            for constraint in inspect(conn).get_check_constraints("casos_ayuda_ayudas")
+        }
+        state_constraint = constraints.get("ck_casos_ayuda_ayuda_estado", "")
+        if "cancelada" in state_constraint:
+            return
+        incompatible_count = conn.execute(sql_text(
+            "SELECT COUNT(*) FROM casos_ayuda_ayudas "
+            f"WHERE estado NOT IN ({allowed_sql})"
+        )).scalar_one()
+        if incompatible_count:
+            raise RuntimeError(
+                "La migracion de estados de ayuda encontro datos incompatibles; no se modifico el constraint"
+            )
+        if "ck_casos_ayuda_ayuda_estado" in constraints:
+            conn.execute(sql_text(
+                "ALTER TABLE casos_ayuda_ayudas DROP CONSTRAINT ck_casos_ayuda_ayuda_estado"
+            ))
+        conn.execute(sql_text(
+            "ALTER TABLE casos_ayuda_ayudas ADD CONSTRAINT ck_casos_ayuda_ayuda_estado "
+            f"CHECK (estado IN ({allowed_sql}))"
+        ))
+
+
 def ensure_optional_columns():
     columns_by_table = {
         "centros": {
@@ -167,9 +276,20 @@ def ensure_optional_columns():
             "before_submit_acknowledged_at": "VARCHAR(40)",
             "before_submit_source": "VARCHAR(50)",
         },
+        "casos_ayuda_accesos": {
+            "request_ip_hash": "VARCHAR(64)",
+        },
     }
 
     inspector = inspect(engine)
+    access_constraints = {
+        constraint["name"]: constraint.get("sqltext", "")
+        for constraint in inspector.get_check_constraints("casos_ayuda_accesos")
+    }
+    session_constraint = access_constraints.get("ck_casos_ayuda_acceso_session_ttl", "")
+    tighten_session_constraint = (
+        engine.dialect.name == "postgresql" and "28800" not in session_constraint
+    )
 
     with engine.begin() as conn:
         for table_name, columns in columns_by_table.items():
@@ -183,6 +303,17 @@ def ensure_optional_columns():
                         f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
                     )
                 )
+
+        if tighten_session_constraint:
+            conn.execute(sql_text(
+                "ALTER TABLE casos_ayuda_accesos "
+                "DROP CONSTRAINT ck_casos_ayuda_acceso_session_ttl"
+            ))
+            conn.execute(sql_text(
+                "ALTER TABLE casos_ayuda_accesos "
+                "ADD CONSTRAINT ck_casos_ayuda_acceso_session_ttl "
+                "CHECK (session_ttl_seconds > 0 AND session_ttl_seconds <= 28800)"
+            ))
 
         conn.execute(
             sql_text(
@@ -225,8 +356,12 @@ def ensure_optional_columns():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    donor_limit_config()
     models.Base.metadata.create_all(bind=engine)
+    ensure_notification_outbox_schema()
+    ensure_help_aid_state_schema()
     ensure_optional_columns()
+    ensure_retention_schema(engine)
     db = SessionLocal()
     try:
         seed_admin_users(db)
@@ -251,19 +386,26 @@ app = FastAPI(
 
 # Docs protegidos por API key en /cowboy-bebop
 @app.get("/cowboy-bebop", include_in_schema=False)
-async def custom_swagger(api_key: str = Query(None)):
+async def custom_swagger(x_api_key: str = Header(None)):
     expected = os.getenv("API_KEY")
-    if not expected or api_key != expected:
+    if not expected or x_api_key != expected:
         raise HTTPException(status_code=403, detail="Acceso denegado")
-    return get_swagger_ui_html(
-        openapi_url=f"/cowboy-bebop/openapi.json?api_key={api_key}",
+    response = get_swagger_ui_html(
+        openapi_url="/cowboy-bebop/openapi.json",
         title="Venezuela Rescate API"
     )
+    schema = get_openapi(title="Venezuela Rescate API", version="1.0.0", routes=app.routes)
+    schema_json = json.dumps(schema, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    html = response.body.decode().replace(
+        "url: '/cowboy-bebop/openapi.json',",
+        f"spec: {schema_json},",
+    )
+    return HTMLResponse(html)
 
 @app.get("/cowboy-bebop/openapi.json", include_in_schema=False)
-async def custom_openapi(api_key: str = Query(None)):
+async def custom_openapi(x_api_key: str = Header(None)):
     expected = os.getenv("API_KEY")
-    if not expected or api_key != expected:
+    if not expected or x_api_key != expected:
         raise HTTPException(status_code=403, detail="Acceso denegado")
     return get_openapi(
         title="Venezuela Rescate API",
@@ -284,6 +426,7 @@ async def limit_body_size(request: Request, call_next):
     return await call_next(request)
 
 app.state.limiter = limiter
+install_observability(app)
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
@@ -291,6 +434,8 @@ app.add_middleware(
     allow_origins=[
         "https://venezuelarescate.com",
         "https://www.venezuelarescate.com",
+        "https://sos-ve-20fa3.web.app",
+        "https://sos-ve-20fa3.firebaseapp.com",
         "https://rescate.ventatalk.com",
         "http://localhost:3000",
         "http://localhost:5173",
@@ -306,7 +451,9 @@ app.add_middleware(
 
 app.mount("/uploads/capturas", StaticFiles(directory="uploads/capturas"), name="capturas")
 app.mount("/uploads/adjuntos", StaticFiles(directory="uploads/adjuntos"), name="adjuntos")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/uploads/fotos", StaticFiles(directory="uploads/fotos"), name="fotos")
+app.mount("/uploads/notificaciones", StaticFiles(directory="uploads/notificaciones"), name="notificaciones")
+app.mount("/uploads/albergue_entregas", StaticFiles(directory="uploads/albergue_entregas", check_dir=False), name="albergue-entregas")
 app.mount("/widget", StaticFiles(directory="static"), name="widget")
 app.mount("/static", StaticFiles(directory="static"), name="static-files")
 
@@ -321,7 +468,12 @@ app.include_router(pacientes_router)
 app.include_router(bomberos_router)
 app.include_router(albergues_router)
 app.include_router(casos_ayuda_router)
+app.include_router(casos_ayuda_v2_router)
+app.include_router(casos_ayuda_publicos_router)
+app.include_router(casos_ayuda_donantes_router)
+app.include_router(casos_ayuda_accesos_router)
 app.include_router(admin_router)
+app.include_router(observability_router)
 
 
 @app.get("/", response_class=HTMLResponse)
