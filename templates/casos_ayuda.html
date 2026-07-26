@@ -300,24 +300,13 @@ async function loadCasos() {
 loadCasos();
 
 /* ── Modal contacto ── */
-async function abrirContacto(id) {
+function abrirContacto(id) {
   var item = _data.find(function(c) { return c.id === id; });
-  document.getElementById('modal-title').textContent = 'Contacto — ' + (item ? item.nombre : '');
-  document.getElementById('modal-body').innerHTML = '<div class="contacto-loading">Cargando...</div>';
+  document.getElementById('modal-title').textContent = 'Ayudar a ' + (item ? item.nombre : 'este caso');
+  document.getElementById('modal-body').innerHTML =
+    '<div class="contacto-empty">Para proteger los datos personales y bancarios, el acceso directo al contacto está temporalmente deshabilitado mientras habilitamos el flujo autenticado de “Yo te ayudo”.</div>' +
+    _disclaimerHtml();
   document.getElementById('modal-bd').classList.add('open');
-
-  try {
-    var res = await fetch('/api/casos-ayuda/' + id + '/contacto');
-    if (res.status === 404) {
-      document.getElementById('modal-body').innerHTML = _contactoBodyHtml(null);
-      return;
-    }
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    var contacto = await res.json();
-    document.getElementById('modal-body').innerHTML = _contactoBodyHtml(contacto);
-  } catch (e) {
-    document.getElementById('modal-body').innerHTML = '<div class="contacto-empty">❌ Error al cargar los datos de contacto.</div>' + _disclaimerHtml();
-  }
 }
 
 function _contactoBodyHtml(contacto) {
@@ -341,7 +330,7 @@ function _contactoBodyHtml(contacto) {
 }
 
 function _disclaimerHtml() {
-  return '<div class="disclaimer">Venezuela Rescate no custodia fondos ni verifica transacciones. El contacto y cualquier acuerdo es entre las partes.</div>' +
+  return '<div class="disclaimer">Venezuela Rescate no custodia fondos ni procesa pagos. Las transferencias ocurren fuera de la plataforma.</div>' +
     '<button class="modal-cerrar-btn" onclick="closeContactoModal()">Cerrar</button>';
 }
 
