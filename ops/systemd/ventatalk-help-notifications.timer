@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Ventatalk Rescate Help notification worker every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=ventatalk-help-notifications.service
+
+[Install]
+WantedBy=timers.target
