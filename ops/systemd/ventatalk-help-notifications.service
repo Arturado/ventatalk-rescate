@@ -1,0 +1,10 @@
+[Unit]
+Description=Ventatalk Rescate Help notification outbox worker
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=hanowar
+WorkingDirectory=/home/hanowar/ventatalk-rescate
+ExecStart=/usr/bin/docker exec rescate-api python -m scripts.help_notifications --limit 25
