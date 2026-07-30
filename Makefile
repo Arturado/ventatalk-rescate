@@ -39,7 +39,7 @@ ps: ## Estado de los contenedores
 health: ## Chequea GET /health
 	curl -sf $(BASE)/health && echo " OK"
 
-notifications: ## Procesa un lote de la outbox de ayuda mediante Postmark
+notifications: ## Procesa un lote de la outbox de ayuda mediante Resend
 	docker compose run --rm rescate-api python -m scripts.help_notifications --limit 25
 
 postman-test: ## Ejecuta la suite automatizada de API con Newman
