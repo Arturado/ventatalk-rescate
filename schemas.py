@@ -3,6 +3,8 @@ from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from typing import List, Literal, Optional
 
+from services.help_identity import HelpIdentityError, normalize_venezuelan_identity
+
 VE_TZ = timezone(timedelta(hours=-4))
 
 class PersonaResponse(BaseModel):
@@ -468,6 +470,196 @@ class CasoAyudaV2UpdateRequest(BaseModel):
     goal_amount: Optional[Decimal] = Field(default=None, gt=0, max_digits=18, decimal_places=2)
     goal_currency: Optional[Literal["VES", "USD", "EUR"]] = None
     private_story: Optional[str] = Field(default=None, min_length=2, max_length=10000)
+
+
+HelpCaseCategory = Literal["salud", "empleo", "insumo_recurso"]
+HelpCaseSubjectType = Literal["persona", "campana_organizacion"]
+HelpCaseAidMode = Literal["monetaria", "directa", "oferta_laboral"]
+HelpCaseState = Literal[
+    "borrador",
+    "publicado",
+    "pausado",
+    "meta_alcanzada",
+    "cerrado",
+    "suspendido",
+    "archivado",
+]
+
+
+def _ordered_help_case_modes(values):
+    selected = set(values or [])
+    return [mode for mode in ("monetaria", "directa", "oferta_laboral") if mode in selected]
+
+
+class CasoAyudaV2DraftCreateRequest(BaseModel):
+    organizacion_id: Optional[str] = None
+    category: HelpCaseCategory
+    subject_type: HelpCaseSubjectType
+    aid_modes: List[HelpCaseAidMode] = Field(min_length=1)
+    beneficiary_name: Optional[str] = Field(default=None, min_length=2, max_length=500)
+    beneficiary_identity: Optional[str] = Field(default=None, min_length=6, max_length=30)
+    title: str = Field(min_length=3, max_length=250)
+    story: str = Field(min_length=10, max_length=10000)
+    goal_amount: Optional[Decimal] = Field(default=None, gt=0, max_digits=18, decimal_places=2)
+    goal_currency: Optional[Literal["VES", "USD", "EUR"]] = None
+    direct_request: Optional[str] = Field(default=None, min_length=2, max_length=5000)
+    profession: Optional[str] = Field(default=None, min_length=2, max_length=250)
+    beneficiary_access_email: Optional[str] = Field(default=None, min_length=5, max_length=320)
+
+    @field_validator("aid_modes")
+    @classmethod
+    def normalize_modes(cls, value):
+        return _ordered_help_case_modes(value)
+
+    @field_validator("beneficiary_identity")
+    @classmethod
+    def normalize_identity(cls, value):
+        if value is None:
+            return None
+        try:
+            return normalize_venezuelan_identity(value)
+        except HelpIdentityError as exc:
+            raise ValueError(str(exc)) from exc
+
+    @field_validator("beneficiary_access_email")
+    @classmethod
+    def normalize_access_email(cls, value):
+        normalized = str(value or "").strip().lower()
+        if value is not None and (
+            normalized.count("@") != 1
+            or "." not in normalized.rsplit("@", 1)[-1]
+            or any(character.isspace() for character in normalized)
+        ):
+            raise ValueError("El correo de acceso no es valido")
+        return normalized or None
+
+    @model_validator(mode="after")
+    def validate_contract_matrix(self):
+        modes = set(self.aid_modes)
+        if self.subject_type == "persona":
+            if not self.beneficiary_name or not self.beneficiary_identity:
+                raise ValueError("Los casos de persona requieren beneficiario y cedula")
+        elif any((
+            self.beneficiary_name,
+            self.beneficiary_identity,
+            self.profession,
+            self.beneficiary_access_email,
+        )):
+            raise ValueError("Las campanas no admiten datos personales")
+
+        if self.category == "empleo":
+            if (
+                self.subject_type != "persona"
+                or modes != {"oferta_laboral"}
+                or not self.profession
+                or not self.beneficiary_access_email
+                or any((self.goal_amount, self.goal_currency, self.direct_request))
+            ):
+                raise ValueError("El contrato de Empleo no es valido")
+            return self
+
+        if not modes or not modes.issubset({"monetaria", "directa"}):
+            raise ValueError("La modalidad del caso no es valida")
+        has_money = "monetaria" in modes
+        if has_money != (self.goal_amount is not None and self.goal_currency is not None):
+            raise ValueError("La modalidad monetaria requiere meta y moneda")
+        has_direct = "directa" in modes
+        if has_direct != (self.direct_request is not None):
+            raise ValueError("La modalidad directa requiere la ayuda solicitada")
+        if self.profession or self.beneficiary_access_email:
+            raise ValueError("Los campos laborales solo aplican a Empleo")
+        return self
+
+
+class CasoAyudaV2DraftUpdateRequest(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=3, max_length=250)
+    story: Optional[str] = Field(default=None, min_length=10, max_length=10000)
+    goal_amount: Optional[Decimal] = Field(default=None, gt=0, max_digits=18, decimal_places=2)
+    goal_currency: Optional[Literal["VES", "USD", "EUR"]] = None
+    direct_request: Optional[str] = Field(default=None, min_length=2, max_length=5000)
+    profession: Optional[str] = Field(default=None, min_length=2, max_length=250)
+    beneficiary_access_email: Optional[str] = Field(default=None, min_length=5, max_length=320)
+
+    @field_validator("beneficiary_access_email")
+    @classmethod
+    def normalize_access_email(cls, value):
+        normalized = str(value or "").strip().lower()
+        if value is not None and (
+            normalized.count("@") != 1
+            or "." not in normalized.rsplit("@", 1)[-1]
+            or any(character.isspace() for character in normalized)
+        ):
+            raise ValueError("El correo de acceso no es valido")
+        return normalized or None
+
+    @model_validator(mode="after")
+    def validate_update(self):
+        if not self.model_fields_set:
+            raise ValueError("La actualizacion no contiene cambios")
+        goal_fields = {"goal_amount", "goal_currency"}
+        if self.model_fields_set.intersection(goal_fields) and not goal_fields.issubset(self.model_fields_set):
+            raise ValueError("Meta y moneda deben actualizarse juntas")
+        return self
+
+
+class CasoAyudaV2ContractSummaryResponse(BaseModel):
+    id: int
+    public_id: str
+    organizacion_id: str
+    title: str
+    category: HelpCaseCategory
+    subject_type: HelpCaseSubjectType
+    aid_modes: List[HelpCaseAidMode]
+    state: HelpCaseState
+    goal_amount: Optional[Decimal] = None
+    goal_currency: Optional[Literal["VES", "USD", "EUR"]] = None
+    confirmed_amount: Optional[Decimal] = None
+    confirmed_aids: Optional[int] = None
+
+    @model_validator(mode="after")
+    def validate_financial_projection(self):
+        monetary = "monetaria" in self.aid_modes
+        financial_values = (
+            self.goal_amount,
+            self.goal_currency,
+            self.confirmed_amount,
+            self.confirmed_aids,
+        )
+        if monetary and any(value is None for value in financial_values):
+            raise ValueError("El resumen monetario requiere valores financieros completos")
+        if not monetary and any(value is not None for value in financial_values):
+            raise ValueError("Un caso no monetario no expone valores financieros")
+        return self
+
+
+class CasoAyudaPublicContractResponse(BaseModel):
+    public_id: str
+    title: str
+    description: str
+    category: HelpCaseCategory
+    subject_type: HelpCaseSubjectType
+    aid_modes: List[HelpCaseAidMode]
+    state: HelpCaseState
+    primary_photo_url: str
+    goal_amount: Optional[Decimal] = None
+    goal_currency: Optional[Literal["VES", "USD", "EUR"]] = None
+    confirmed_amount: Optional[Decimal] = None
+    confirmed_aids: Optional[int] = None
+
+    @model_validator(mode="after")
+    def validate_financial_projection(self):
+        monetary = "monetaria" in self.aid_modes
+        financial_values = (
+            self.goal_amount,
+            self.goal_currency,
+            self.confirmed_amount,
+            self.confirmed_aids,
+        )
+        if monetary and any(value is None for value in financial_values):
+            raise ValueError("El contrato monetario requiere valores financieros completos")
+        if not monetary and any(value is not None for value in financial_values):
+            raise ValueError("Un caso no monetario no expone valores financieros")
+        return self
 
 
 class TransicionCasoAyudaRequest(BaseModel):

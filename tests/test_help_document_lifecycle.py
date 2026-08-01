@@ -74,14 +74,16 @@ def crypto_environment(monkeypatch, tmp_path):
 def create_managed_case(*, suffix="1", state="borrador", visible=True):
     with TestingSessionLocal() as db:
         cipher = HelpDataCipher.from_environment()
+        identity_number = int(hashlib.sha256(str(suffix).encode()).hexdigest()[:8], 16) % 900_000_000 + 100_000_000
+        canonical_identity = f"V-{identity_number}"
         case = create_help_case(
             db,
             actor=actor(),
             organization_id="org-1",
             public_id=f"document-case-{suffix}",
             beneficiary_name_encrypted=cipher.encrypt("Nombre privado", field="beneficiary.name"),
-            beneficiary_identity_hash=cipher.identity_hash(f"V-{suffix}"),
-            beneficiary_identity_encrypted=cipher.encrypt(f"V-{suffix}", field="beneficiary.identity"),
+            beneficiary_identity_hash=cipher.identity_hash(canonical_identity),
+            beneficiary_identity_encrypted=cipher.encrypt(canonical_identity, field="beneficiary.identity"),
             internal_title="Caso de documentos",
             category="medicamentos",
             goal_amount=Decimal("100.00"),

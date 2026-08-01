@@ -2,11 +2,12 @@ import base64
 import hashlib
 import hmac
 import os
-import re
 import secrets
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+from services.help_identity import HelpIdentityError, normalize_venezuelan_identity
 
 
 class HelpDataCryptoError(ValueError):
@@ -106,9 +107,10 @@ class HelpDataCipher:
             raise HelpDataCryptoError("No fue posible autenticar el archivo cifrado") from exc
 
     def identity_hash(self, identity):
-        normalized = re.sub(r"[^A-Z0-9]", "", str(identity or "").upper())
-        if not normalized:
-            raise HelpDataCryptoError("La identidad no puede quedar vacia")
+        try:
+            normalized = normalize_venezuelan_identity(identity)
+        except HelpIdentityError as exc:
+            raise HelpDataCryptoError(str(exc)) from exc
         return hmac.new(self.identity_hash_key, normalized.encode(), hashlib.sha256).hexdigest()
 
     def blind_index(self, value, *, purpose):

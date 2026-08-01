@@ -53,8 +53,10 @@ def test_identity_hmac_normalizes_equivalent_values_without_exposing_identity():
 
     first = cipher.identity_hash("v-12.345.678")
     second = cipher.identity_hash("V12345678")
+    implicit_venezuelan = cipher.identity_hash("12.345.678")
 
     assert first == second
+    assert first == implicit_venezuelan
     assert len(first) == 64
     assert "12345678" not in first
 
