@@ -12,10 +12,11 @@ V2_EXPECTED_RATE_SOURCE ?= DOLARAPI-BCV
 .DEFAULT_GOAL := help
 
 .PHONY: help up down build restart logs ps health notifications \
-	postman-test postman-test-casos-ayuda postman-test-yo-te-ayudo-public postman-test-yo-te-ayudo-protegido postman-test-yo-te-ayudo-donante postman-test-bcv-manual test-no-auth test-solicitudes test-aprobar test-rechazar test-nuevo-centro test-admin-dual
+	postman-test postman-test-casos-ayuda postman-test-yo-te-ayudo-public postman-test-yo-te-ayudo-protegido postman-test-yo-te-ayudo-donante postman-test-bcv-manual test-no-auth test-solicitudes test-aprobar test-rechazar test-nuevo-centro test-admin-dual \
+	backup-help-v2 backup-help-v2-host migrate-dry-run migrate-apply migrate-apply-host postman-test-spec004-fase1
 
 help: ## Muestra esta ayuda
-	@grep -E '^[a-zA-Z_-]+:.*## ' Makefile | sort | awk 'BEGIN {FS = ":.*## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*## ' Makefile | sort | awk 'BEGIN {FS = ":.*## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 ## --- Docker ---
 
@@ -85,6 +86,38 @@ postman-test-yo-te-ayudo-donante: ## Ejecuta reporte y confirmación V2 sobre un
 		--env-var v2_received_amount="$(V2_RECEIVED_AMOUNT)" \
 		--env-var v2_received_currency="$(V2_RECEIVED_CURRENCY)" \
 		--env-var v2_expected_rate_source="$(V2_EXPECTED_RATE_SOURCE)"
+
+## --- Migraciones locales (spec 004 Fase 1, retencion, y futuras) ---
+
+SCRIPT ?= migrate_help_spec004
+
+backup-help-v2: ## Backup cifrado local de Help V2 antes de migrar (requiere HELP_BACKUP_PASSPHRASE en el entorno)
+	@mkdir -p uploads/backups
+	docker compose run --rm rescate-api python -m scripts.help_backup \
+		--output /app/uploads/backups/help-v2-$$(date +%Y%m%d-%H%M%S).backup.enc
+
+backup-help-v2-host: ## Alternativa si backup-help-v2 falla con "Backup requires a local database source": corre fuera de Docker contra LOCAL_DATABASE_URL (host=localhost). Ej: make backup-help-v2-host LOCAL_DATABASE_URL=postgresql://user:pass@localhost:5432/db (requiere pg_dump instalado localmente)
+	@mkdir -p uploads/backups
+	DATABASE_URL="$(LOCAL_DATABASE_URL)" .venv/bin/python -m scripts.help_backup \
+		--output uploads/backups/help-v2-$$(date +%Y%m%d-%H%M%S).backup.enc
+
+migrate-dry-run: ## Dry-run de una migracion, no muta nada: make migrate-dry-run SCRIPT=migrate_help_spec004
+	docker compose run --rm rescate-api python -m scripts.$(SCRIPT)
+
+migrate-apply: ## Aplica una migracion dentro de la red de Docker (destructivo segun el script): make migrate-apply SCRIPT=migrate_help_spec004
+	docker compose run --rm rescate-api python -m scripts.$(SCRIPT) --apply --local-test-marker DISPOSABLE_LOCAL_TEST
+
+migrate-apply-host: ## Alternativa si migrate-apply falla con "requires a local database target": corre fuera de Docker contra LOCAL_DATABASE_URL (host=localhost). Ej: make migrate-apply-host SCRIPT=migrate_help_spec004 LOCAL_DATABASE_URL=postgresql://user:pass@localhost:5432/db
+	DATABASE_URL="$(LOCAL_DATABASE_URL)" .venv/bin/python -m scripts.$(SCRIPT) --apply --local-test-marker DISPOSABLE_LOCAL_TEST
+
+postman-test-spec004-fase1: ## Ejecuta borradores idempotentes y coincidencias de cedula de la Fase 1 (spec 004)
+	@npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \
+		--folder "08 - Spec 004 Fase 1 (borradores y coincidencias)" \
+		--env-var base_url=$(BASE) \
+		--env-var api_key="$(API_KEY)" \
+		--env-var actor_signing_secret="$(ACTOR_SIGNING_SECRET)" \
+		--env-var v2_organization_id="$(V2_ORGANIZATION_ID)" \
+		--env-var v2_actor_email="$(V2_ACTOR_EMAIL)"
 
 postman-test-bcv-manual: ## Registra una tasa manual de contingencia como super_admin
 	@npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \

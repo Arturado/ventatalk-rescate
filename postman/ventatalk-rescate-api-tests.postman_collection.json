@@ -25,138 +25,981 @@
   "item": [
     {
       "name": "06 - Yo te ayudo V2 donante y confirmacion",
-      "event": [{
-        "listen": "prerequest",
-        "script": {
-          "type": "text/javascript",
-          "exec": [
-            "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
-            "const publicId = pm.variables.replaceIn('{{v2_public_id}}');",
-            "if (!secret || !publicId) { pm.execution.skipRequest(); return; }",
-            "const cryptoJs = require('crypto-js');",
-            "const timestamp = Math.floor(Date.now() / 1000).toString();",
-            "const hmac = (message) => cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex);",
-            "const donorEmail = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
-            "const donorUid = pm.variables.replaceIn('{{v2_donor_uid}}');",
-            "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
-            "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
-            "pm.collectionVariables.set('v2_donor_signature', hmac(`|donor|${donorEmail}|${donorUid}|${ipHash}|${timestamp}`));",
-            "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
-            "const actorEmail = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
-            "const actorUid = pm.variables.replaceIn('{{v2_actor_uid}}');",
-            "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
-            "pm.collectionVariables.set('v2_actor_signature', hmac(`${organization}|coordinador|${actorEmail}|${actorUid}|${ipHash}|${timestamp}`));",
-            "if (!pm.collectionVariables.get('v2_report_key')) pm.collectionVariables.set('v2_report_key', `help:${pm.variables.replaceIn('{{$guid}}')}`);",
-            "if (!pm.collectionVariables.get('v2_problem_report_key')) pm.collectionVariables.set('v2_problem_report_key', `help:${pm.variables.replaceIn('{{$guid}}')}`);",
-            "if (!pm.collectionVariables.get('v2_confirm_key')) pm.collectionVariables.set('v2_confirm_key', `confirm:${pm.variables.replaceIn('{{$guid}}')}`);",
-            "pm.collectionVariables.set('v2_transfer_date', new Date().toISOString().slice(0, 10));"
-          ]
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+              "const publicId = pm.variables.replaceIn('{{v2_public_id}}');",
+              "if (!secret || !publicId) { pm.execution.skipRequest(); return; }",
+              "const cryptoJs = require('crypto-js');",
+              "const timestamp = Math.floor(Date.now() / 1000).toString();",
+              "const hmac = (message) => cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex);",
+              "const donorEmail = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+              "const donorUid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+              "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+              "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+              "pm.collectionVariables.set('v2_donor_signature', hmac(`|donor|${donorEmail}|${donorUid}|${ipHash}|${timestamp}`));",
+              "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+              "const actorEmail = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+              "const actorUid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+              "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+              "pm.collectionVariables.set('v2_actor_signature', hmac(`${organization}|coordinador|${actorEmail}|${actorUid}|${ipHash}|${timestamp}`));",
+              "if (!pm.collectionVariables.get('v2_report_key')) pm.collectionVariables.set('v2_report_key', `help:${pm.variables.replaceIn('{{$guid}}')}`);",
+              "if (!pm.collectionVariables.get('v2_problem_report_key')) pm.collectionVariables.set('v2_problem_report_key', `help:${pm.variables.replaceIn('{{$guid}}')}`);",
+              "if (!pm.collectionVariables.get('v2_confirm_key')) pm.collectionVariables.set('v2_confirm_key', `confirm:${pm.variables.replaceIn('{{$guid}}')}`);",
+              "pm.collectionVariables.set('v2_transfer_date', new Date().toISOString().slice(0, 10));"
+            ]
+          }
         }
-      }],
+      ],
       "item": [
         {
           "name": "Consultar equivalencias actuales de la meta",
-          "request": {"method":"GET","url":"{{base_url}}/api/v2/public/casos-ayuda/{{v2_public_id}}/equivalencias"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('equivalencias responde 200', () => pm.response.to.have.status(200));","pm.test('incluye VES USD y EUR como referencia', () => { const body = pm.response.json(); pm.expect(body.referential).to.eql(true); pm.expect(body.equivalents).to.have.all.keys('VES', 'USD', 'EUR'); pm.expect(body.transport_source).to.eql('DolarApi'); pm.expect(body.upstream_source).to.eql('BCV'); });"],"type":"text/javascript"}}]
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v2/public/casos-ayuda/{{v2_public_id}}/equivalencias"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('equivalencias responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('incluye VES USD y EUR como referencia', () => { const body = pm.response.json(); pm.expect(body.referential).to.eql(true); pm.expect(body.equivalents).to.have.all.keys('VES', 'USD', 'EUR'); pm.expect(body.transport_source).to.eql('DolarApi'); pm.expect(body.upstream_source).to.eql('BCV'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Consultar terminos del donante",
-          "request": {"method":"GET","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"url":"{{base_url}}/api/v2/donante/terminos"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('terminos responde 200', () => pm.response.to.have.status(200));","pm.test('informa version requerida', () => pm.expect(pm.response.json().required_version).to.eql('donor-v1'));"],"type":"text/javascript"}}]
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": ""
+              },
+              {
+                "key": "x-actor-role",
+                "value": "donor"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_donor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_donor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_donor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_donor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_donor_signature}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/donante/terminos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('terminos responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('informa version requerida', () => pm.expect(pm.response.json().required_version).to.eql('donor-v1'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Aceptar terminos del donante",
-          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"body":{"mode":"raw","raw":"{\"terms_version\":\"donor-v1\"}"},"url":"{{base_url}}/api/v2/donante/terminos/aceptar"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('acepta terminos', () => pm.response.to.have.status(200));","pm.test('queda aceptado', () => pm.expect(pm.response.json().accepted).to.eql(true));"],"type":"text/javascript"}}]
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "content-type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": ""
+              },
+              {
+                "key": "x-actor-role",
+                "value": "donor"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_donor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_donor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_donor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_donor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_donor_signature}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"terms_version\":\"donor-v1\"}"
+            },
+            "url": "{{base_url}}/api/v2/donante/terminos/aceptar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('acepta terminos', () => pm.response.to.have.status(200));",
+                  "pm.test('queda aceptado', () => pm.expect(pm.response.json().accepted).to.eql(true));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Consultar cuentas aprobadas",
-          "request": {"method":"GET","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"url":"{{base_url}}/api/v2/donante/casos-ayuda/{{v2_public_id}}/cuentas"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('cuentas responde 200', () => pm.response.to.have.status(200));","pm.test('devuelve cuentas', () => pm.expect(pm.response.json().accounts).to.be.an('array').that.is.not.empty);","if (pm.response.code === 200 && pm.response.json().accounts.length) pm.collectionVariables.set('v2_donor_account_id', pm.response.json().accounts[0].id);"],"type":"text/javascript"}}]
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": ""
+              },
+              {
+                "key": "x-actor-role",
+                "value": "donor"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_donor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_donor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_donor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_donor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_donor_signature}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/donante/casos-ayuda/{{v2_public_id}}/cuentas"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('cuentas responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve cuentas', () => pm.expect(pm.response.json().accounts).to.be.an('array').that.is.not.empty);",
+                  "if (pm.response.code === 200 && pm.response.json().accounts.length) pm.collectionVariables.set('v2_donor_account_id', pm.response.json().accounts[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Reportar ayuda monetaria",
-          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"Idempotency-Key","value":"{{v2_report_key}}"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"body":{"mode":"raw","raw":"{\"account_id\":{{v2_donor_account_id}},\"amount\":\"{{v2_help_amount}}\",\"currency\":\"{{v2_help_currency}}\",\"transfer_date\":\"{{v2_transfer_date}}\",\"reference\":\"REF-DEMO-001\",\"comment\":\"Prueba local Postman\"}"},"url":"{{base_url}}/api/v2/donante/casos-ayuda/{{v2_public_id}}/ayudas"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('reporta ayuda', () => pm.response.to.have.status(201));","pm.test('queda pendiente', () => pm.expect(pm.response.json().status).to.eql('pendiente_confirmacion'));","if (pm.response.code === 201) pm.collectionVariables.set('v2_aid_id', pm.response.json().id);"],"type":"text/javascript"}}]
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "content-type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{v2_report_key}}"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": ""
+              },
+              {
+                "key": "x-actor-role",
+                "value": "donor"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_donor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_donor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_donor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_donor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_donor_signature}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"account_id\":{{v2_donor_account_id}},\"amount\":\"{{v2_help_amount}}\",\"currency\":\"{{v2_help_currency}}\",\"transfer_date\":\"{{v2_transfer_date}}\",\"reference\":\"REF-DEMO-001\",\"comment\":\"Prueba local Postman\"}"
+            },
+            "url": "{{base_url}}/api/v2/donante/casos-ayuda/{{v2_public_id}}/ayudas"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('reporta ayuda', () => pm.response.to.have.status(201));",
+                  "pm.test('queda pendiente', () => pm.expect(pm.response.json().status).to.eql('pendiente_confirmacion'));",
+                  "if (pm.response.code === 201) pm.collectionVariables.set('v2_aid_id', pm.response.json().id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Listar mis ayudas",
-          "request": {"method":"GET","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"url":"{{base_url}}/api/v2/donante/ayudas"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('mis ayudas responde 200', () => pm.response.to.have.status(200));","pm.test('incluye ayuda creada', () => pm.expect(pm.response.json().some(item => String(item.id) === String(pm.collectionVariables.get('v2_aid_id')))).to.eql(true));"],"type":"text/javascript"}}]
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": ""
+              },
+              {
+                "key": "x-actor-role",
+                "value": "donor"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_donor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_donor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_donor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_donor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_donor_signature}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/donante/ayudas"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('mis ayudas responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('incluye ayuda creada', () => pm.expect(pm.response.json().some(item => String(item.id) === String(pm.collectionVariables.get('v2_aid_id')))).to.eql(true));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Pasar ayuda a revision",
-          "request": {"method":"POST","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/en-revision"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('pasa a revision', () => pm.response.to.have.status(200));","pm.test('estado en revision', () => pm.expect(pm.response.json().status).to.eql('en_revision'));"],"type":"text/javascript"}}]
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "coordinador"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/en-revision"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('pasa a revision', () => pm.response.to.have.status(200));",
+                  "pm.test('estado en revision', () => pm.expect(pm.response.json().status).to.eql('en_revision'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Confirmar recepcion",
-          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"Idempotency-Key","value":"{{v2_confirm_key}}"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"received_amount\":\"{{v2_received_amount}}\",\"received_currency\":\"{{v2_received_currency}}\",\"effective_date\":\"{{v2_transfer_date}}\",\"comment\":\"Confirmación local Postman\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/confirmar"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('confirma recepcion', () => pm.response.to.have.status(200));","const body = pm.response.json();","pm.test('ayuda confirmada', () => pm.expect(body.status).to.eql('confirmada'));","pm.test('incrementa contador', () => pm.expect(body.confirmed_help_count).to.be.above(0));","pm.test('conserva equivalente positivo en moneda meta', () => pm.expect(Number(body.goal_equivalent_amount)).to.be.above(0));","const sameCurrency = pm.variables.replaceIn('{{v2_received_currency}}') === pm.variables.replaceIn('{{v2_help_currency}}');","pm.test('aplica tasa solo al convertir moneda', () => { if (sameCurrency) pm.expect(body.applied_rate).to.eql(null); else { pm.expect(Number(body.applied_rate)).to.be.above(0); pm.expect(body.rate_source).to.eql(pm.variables.replaceIn('{{v2_expected_rate_source}}')); } });","pm.collectionVariables.set('v2_confirmed_help_count', body.confirmed_help_count);","pm.collectionVariables.set('v2_goal_equivalent_amount', body.goal_equivalent_amount);"],"type":"text/javascript"}}]
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "content-type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{v2_confirm_key}}"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "coordinador"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"received_amount\":\"{{v2_received_amount}}\",\"received_currency\":\"{{v2_received_currency}}\",\"effective_date\":\"{{v2_transfer_date}}\",\"comment\":\"Confirmación local Postman\"}"
+            },
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/confirmar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('confirma recepcion', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('ayuda confirmada', () => pm.expect(body.status).to.eql('confirmada'));",
+                  "pm.test('incrementa contador', () => pm.expect(body.confirmed_help_count).to.be.above(0));",
+                  "pm.test('conserva equivalente positivo en moneda meta', () => pm.expect(Number(body.goal_equivalent_amount)).to.be.above(0));",
+                  "const sameCurrency = pm.variables.replaceIn('{{v2_received_currency}}') === pm.variables.replaceIn('{{v2_help_currency}}');",
+                  "pm.test('aplica tasa solo al convertir moneda', () => { if (sameCurrency) pm.expect(body.applied_rate).to.eql(null); else { pm.expect(Number(body.applied_rate)).to.be.above(0); pm.expect(body.rate_source).to.eql(pm.variables.replaceIn('{{v2_expected_rate_source}}')); } });",
+                  "pm.collectionVariables.set('v2_confirmed_help_count', body.confirmed_help_count);",
+                  "pm.collectionVariables.set('v2_goal_equivalent_amount', body.goal_equivalent_amount);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Reintentar confirmacion idempotente",
-          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"Idempotency-Key","value":"{{v2_confirm_key}}"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"received_amount\":\"{{v2_received_amount}}\",\"received_currency\":\"{{v2_received_currency}}\",\"effective_date\":\"{{v2_transfer_date}}\",\"comment\":\"Confirmación local Postman\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/confirmar"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('reintento responde 200', () => pm.response.to.have.status(200));","const body = pm.response.json();","pm.test('reintento no incrementa progreso', () => { pm.expect(body.confirmed_help_count).to.eql(Number(pm.collectionVariables.get('v2_confirmed_help_count'))); pm.expect(body.goal_equivalent_amount).to.eql(pm.collectionVariables.get('v2_goal_equivalent_amount')); });"],"type":"text/javascript"}}]
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "content-type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{v2_confirm_key}}"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "coordinador"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"received_amount\":\"{{v2_received_amount}}\",\"received_currency\":\"{{v2_received_currency}}\",\"effective_date\":\"{{v2_transfer_date}}\",\"comment\":\"Confirmación local Postman\"}"
+            },
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/confirmar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('reintento responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('reintento no incrementa progreso', () => { pm.expect(body.confirmed_help_count).to.eql(Number(pm.collectionVariables.get('v2_confirmed_help_count'))); pm.expect(body.goal_equivalent_amount).to.eql(pm.collectionVariables.get('v2_goal_equivalent_amount')); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Reportar segunda ayuda para incidencia",
-          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"Idempotency-Key","value":"{{v2_problem_report_key}}"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"donor"},{"key":"x-actor-email","value":"{{v2_donor_email}}"},{"key":"x-actor-uid","value":"{{v2_donor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_donor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_donor_signature}}"}],"body":{"mode":"raw","raw":"{\"account_id\":{{v2_donor_account_id}},\"amount\":\"{{v2_help_amount}}\",\"currency\":\"{{v2_help_currency}}\",\"transfer_date\":\"{{v2_transfer_date}}\",\"reference\":\"REF-DEMO-002\",\"comment\":\"Prueba local de incidencia\"}"},"url":"{{base_url}}/api/v2/donante/casos-ayuda/{{v2_public_id}}/ayudas"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('reporta segunda ayuda', () => pm.response.to.have.status(201));","if (pm.response.code === 201) pm.collectionVariables.set('v2_problem_aid_id', pm.response.json().id);"],"type":"text/javascript"}}]
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "content-type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{v2_problem_report_key}}"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": ""
+              },
+              {
+                "key": "x-actor-role",
+                "value": "donor"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_donor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_donor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_donor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_donor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_donor_signature}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"account_id\":{{v2_donor_account_id}},\"amount\":\"{{v2_help_amount}}\",\"currency\":\"{{v2_help_currency}}\",\"transfer_date\":\"{{v2_transfer_date}}\",\"reference\":\"REF-DEMO-002\",\"comment\":\"Prueba local de incidencia\"}"
+            },
+            "url": "{{base_url}}/api/v2/donante/casos-ayuda/{{v2_public_id}}/ayudas"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('reporta segunda ayuda', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.collectionVariables.set('v2_problem_aid_id', pm.response.json().id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Reportar problema de ayuda",
-          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"problem_type\":\"transferencia_no_recibida\",\"detail\":\"Incidencia ficticia creada por Postman\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_problem_aid_id}}/problema"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('reporta problema', () => pm.response.to.have.status(200));","pm.test('estado problema reportado', () => pm.expect(pm.response.json().status).to.eql('problema_reportado'));"],"type":"text/javascript"}}]
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "content-type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "coordinador"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"problem_type\":\"transferencia_no_recibida\",\"detail\":\"Incidencia ficticia creada por Postman\"}"
+            },
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_problem_aid_id}}/problema"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('reporta problema', () => pm.response.to.have.status(200));",
+                  "pm.test('estado problema reportado', () => pm.expect(pm.response.json().status).to.eql('problema_reportado'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Pasar incidencia a revision",
-          "request": {"method":"POST","header":[{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_problem_aid_id}}/en-revision"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('incidencia pasa a revision', () => pm.response.to.have.status(200));","pm.test('incidencia en revision', () => pm.expect(pm.response.json().status).to.eql('en_revision'));"],"type":"text/javascript"}}]
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "coordinador"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_problem_aid_id}}/en-revision"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('incidencia pasa a revision', () => pm.response.to.have.status(200));",
+                  "pm.test('incidencia en revision', () => pm.expect(pm.response.json().status).to.eql('en_revision'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Rechazar incidencia",
-          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"reason\":\"No fue posible verificar la transferencia ficticia\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_problem_aid_id}}/rechazar"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('rechaza incidencia', () => pm.response.to.have.status(200));","pm.test('incidencia rechazada', () => pm.expect(pm.response.json().status).to.eql('rechazada'));"],"type":"text/javascript"}}]
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "content-type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "coordinador"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"reason\":\"No fue posible verificar la transferencia ficticia\"}"
+            },
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_problem_aid_id}}/rechazar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('rechaza incidencia', () => pm.response.to.have.status(200));",
+                  "pm.test('incidencia rechazada', () => pm.expect(pm.response.json().status).to.eql('rechazada'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     },
     {
       "name": "07 - Contingencia manual BCV",
-      "event": [{
-        "listen": "prerequest",
-        "script": {
-          "type": "text/javascript",
-          "exec": [
-            "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
-            "const value = pm.variables.replaceIn('{{v2_manual_rate_value}}');",
-            "if (!secret || !value) { pm.execution.skipRequest(); return; }",
-            "const cryptoJs = require('crypto-js');",
-            "const timestamp = Math.floor(Date.now() / 1000).toString();",
-            "const email = pm.variables.replaceIn('{{v2_super_admin_email}}').toLowerCase();",
-            "const uid = pm.variables.replaceIn('{{v2_super_admin_uid}}');",
-            "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
-            "const signature = cryptoJs.HmacSHA256(`|super_admin|${email}|${uid}|${ipHash}|${timestamp}`, secret).toString(cryptoJs.enc.Hex);",
-            "pm.collectionVariables.set('v2_super_admin_timestamp', timestamp);",
-            "pm.collectionVariables.set('v2_super_admin_signature', signature);",
-            "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
-            "const actorEmail = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
-            "const actorUid = pm.variables.replaceIn('{{v2_actor_uid}}');",
-            "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
-            "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(`${organization}|coordinador|${actorEmail}|${actorUid}|${ipHash}|${timestamp}`, secret).toString(cryptoJs.enc.Hex));"
-          ]
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+              "const value = pm.variables.replaceIn('{{v2_manual_rate_value}}');",
+              "if (!secret || !value) { pm.execution.skipRequest(); return; }",
+              "const cryptoJs = require('crypto-js');",
+              "const timestamp = Math.floor(Date.now() / 1000).toString();",
+              "const email = pm.variables.replaceIn('{{v2_super_admin_email}}').toLowerCase();",
+              "const uid = pm.variables.replaceIn('{{v2_super_admin_uid}}');",
+              "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+              "const signature = cryptoJs.HmacSHA256(`|super_admin|${email}|${uid}|${ipHash}|${timestamp}`, secret).toString(cryptoJs.enc.Hex);",
+              "pm.collectionVariables.set('v2_super_admin_timestamp', timestamp);",
+              "pm.collectionVariables.set('v2_super_admin_signature', signature);",
+              "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+              "const actorEmail = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+              "const actorUid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+              "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+              "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(`${organization}|coordinador|${actorEmail}|${actorUid}|${ipHash}|${timestamp}`, secret).toString(cryptoJs.enc.Hex));"
+            ]
+          }
         }
-      }],
+      ],
       "item": [
         {
           "name": "Rechazar tasa manual de coordinador",
-          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":"{{v2_organization_id}}"},{"key":"x-actor-role","value":"coordinador"},{"key":"x-actor-email","value":"{{v2_actor_email}}"},{"key":"x-actor-uid","value":"{{v2_actor_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_actor_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_actor_signature}}"}],"body":{"mode":"raw","raw":"{\"rate_date\":\"{{v2_manual_rate_date}}\",\"source_currency\":\"{{v2_manual_rate_source_currency}}\",\"target_currency\":\"{{v2_manual_rate_target_currency}}\",\"value\":\"{{v2_manual_rate_value}}\",\"source_reference\":\"{{v2_manual_rate_reference}}\",\"reason\":\"{{v2_manual_rate_reason}}\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/tasas/manual"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('coordinador recibe 403', () => pm.response.to.have.status(403));"],"type":"text/javascript"}}]
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "content-type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "coordinador"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"rate_date\":\"{{v2_manual_rate_date}}\",\"source_currency\":\"{{v2_manual_rate_source_currency}}\",\"target_currency\":\"{{v2_manual_rate_target_currency}}\",\"value\":\"{{v2_manual_rate_value}}\",\"source_reference\":\"{{v2_manual_rate_reference}}\",\"reason\":\"{{v2_manual_rate_reason}}\"}"
+            },
+            "url": "{{base_url}}/api/v2/casos-ayuda/tasas/manual"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('coordinador recibe 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Registrar tasa manual BCV",
-          "request": {"method":"POST","header":[{"key":"content-type","value":"application/json"},{"key":"x-api-key","value":"{{api_key}}"},{"key":"x-actor-org-id","value":""},{"key":"x-actor-role","value":"super_admin"},{"key":"x-actor-email","value":"{{v2_super_admin_email}}"},{"key":"x-actor-uid","value":"{{v2_super_admin_uid}}"},{"key":"x-actor-ip-hash","value":"{{v2_actor_ip_hash}}"},{"key":"x-actor-org-timestamp","value":"{{v2_super_admin_timestamp}}"},{"key":"x-actor-org-signature","value":"{{v2_super_admin_signature}}"}],"body":{"mode":"raw","raw":"{\"rate_date\":\"{{v2_manual_rate_date}}\",\"source_currency\":\"{{v2_manual_rate_source_currency}}\",\"target_currency\":\"{{v2_manual_rate_target_currency}}\",\"value\":\"{{v2_manual_rate_value}}\",\"source_reference\":\"{{v2_manual_rate_reference}}\",\"reason\":\"{{v2_manual_rate_reason}}\"}"},"url":"{{base_url}}/api/v2/casos-ayuda/tasas/manual"},
-          "event":[{"listen":"test","script":{"exec":["pm.test('registra tasa manual', () => pm.response.to.have.status(201));","pm.test('marca fuente manual', () => pm.expect(pm.response.json().source).to.eql('BCV-MANUAL'));"],"type":"text/javascript"}}]
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "content-type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": ""
+              },
+              {
+                "key": "x-actor-role",
+                "value": "super_admin"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_super_admin_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_super_admin_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_super_admin_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_super_admin_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_super_admin_signature}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"rate_date\":\"{{v2_manual_rate_date}}\",\"source_currency\":\"{{v2_manual_rate_source_currency}}\",\"target_currency\":\"{{v2_manual_rate_target_currency}}\",\"value\":\"{{v2_manual_rate_value}}\",\"source_reference\":\"{{v2_manual_rate_reference}}\",\"reason\":\"{{v2_manual_rate_reason}}\"}"
+            },
+            "url": "{{base_url}}/api/v2/casos-ayuda/tasas/manual"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('registra tasa manual', () => pm.response.to.have.status(201));",
+                  "pm.test('marca fuente manual', () => pm.expect(pm.response.json().source).to.eql('BCV-MANUAL'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     },
@@ -210,7 +1053,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
             ],
             "url": "{{base_url}}/api/personas/count"
           },
@@ -239,16 +1085,56 @@
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "nombres_apellidos", "value": "Persona Postman {{run_id}}", "type": "text" },
-                { "key": "cedula", "value": "{{test_cedula}}", "type": "text" },
-                { "key": "ultima_ubicacion", "value": "Zona prueba {{run_id}}", "type": "text" },
-                { "key": "descripcion", "value": "Creado por pruebas Postman", "type": "text" },
-                { "key": "numero_contacto", "value": "04121234567", "type": "text" },
-                { "key": "tipo_reporte", "value": "desaparecido", "type": "text" },
-                { "key": "tipo_reportante", "value": "integracion", "type": "text" },
-                { "key": "sexo", "value": "no_determinado", "type": "text" },
-                { "key": "edad_aproximada", "value": "adulto", "type": "text" },
-                { "key": "sin_documentos", "value": "false", "type": "text" }
+                {
+                  "key": "nombres_apellidos",
+                  "value": "Persona Postman {{run_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "cedula",
+                  "value": "{{test_cedula}}",
+                  "type": "text"
+                },
+                {
+                  "key": "ultima_ubicacion",
+                  "value": "Zona prueba {{run_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "descripcion",
+                  "value": "Creado por pruebas Postman",
+                  "type": "text"
+                },
+                {
+                  "key": "numero_contacto",
+                  "value": "04121234567",
+                  "type": "text"
+                },
+                {
+                  "key": "tipo_reporte",
+                  "value": "desaparecido",
+                  "type": "text"
+                },
+                {
+                  "key": "tipo_reportante",
+                  "value": "integracion",
+                  "type": "text"
+                },
+                {
+                  "key": "sexo",
+                  "value": "no_determinado",
+                  "type": "text"
+                },
+                {
+                  "key": "edad_aproximada",
+                  "value": "adulto",
+                  "type": "text"
+                },
+                {
+                  "key": "sin_documentos",
+                  "value": "false",
+                  "type": "text"
+                }
               ]
             },
             "url": "{{base_url}}/api/reportes/"
@@ -300,7 +1186,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
             ],
             "url": "{{base_url}}/api/personas/{{persona_id}}"
           },
@@ -326,8 +1215,14 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -357,8 +1252,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -384,7 +1285,10 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
             ],
             "url": "{{base_url}}/api/personas/{{persona_id}}"
           },
@@ -406,7 +1310,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
             ],
             "url": "{{base_url}}/api/personas/{{persona_id}}"
           },
@@ -474,16 +1381,56 @@
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "nombres_apellidos", "value": "Paciente Postman {{run_id}}", "type": "text" },
-                { "key": "hospital_id", "value": "{{hospital_id}}", "type": "text" },
-                { "key": "nombre_hospital", "value": "Hospital de prueba", "type": "text" },
-                { "key": "edad", "value": "35", "type": "text" },
-                { "key": "sexo", "value": "no_determinado", "type": "text" },
-                { "key": "cedula", "value": "{{test_cedula}}", "type": "text" },
-                { "key": "procedencia", "value": "Integracion", "type": "text" },
-                { "key": "estado_paciente", "value": "ingresado", "type": "text" },
-                { "key": "reportado_por", "value": "Postman", "type": "text" },
-                { "key": "necesita_ayuda", "value": "false", "type": "text" }
+                {
+                  "key": "nombres_apellidos",
+                  "value": "Paciente Postman {{run_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "hospital_id",
+                  "value": "{{hospital_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "nombre_hospital",
+                  "value": "Hospital de prueba",
+                  "type": "text"
+                },
+                {
+                  "key": "edad",
+                  "value": "35",
+                  "type": "text"
+                },
+                {
+                  "key": "sexo",
+                  "value": "no_determinado",
+                  "type": "text"
+                },
+                {
+                  "key": "cedula",
+                  "value": "{{test_cedula}}",
+                  "type": "text"
+                },
+                {
+                  "key": "procedencia",
+                  "value": "Integracion",
+                  "type": "text"
+                },
+                {
+                  "key": "estado_paciente",
+                  "value": "ingresado",
+                  "type": "text"
+                },
+                {
+                  "key": "reportado_por",
+                  "value": "Postman",
+                  "type": "text"
+                },
+                {
+                  "key": "necesita_ayuda",
+                  "value": "false",
+                  "type": "text"
+                }
               ]
             },
             "url": "{{base_url}}/api/pacientes/"
@@ -531,7 +1478,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
             ],
             "url": "{{base_url}}/api/pacientes/?nombre={{run_id}}&limit=10"
           },
@@ -553,8 +1503,14 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -585,7 +1541,10 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
             ],
             "url": "{{base_url}}/api/pacientes/{{paciente_id}}"
           },
@@ -612,8 +1571,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -663,7 +1628,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "invalid-postman-key" }
+              {
+                "key": "x-api-key",
+                "value": "invalid-postman-key"
+              }
             ],
             "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/contacto"
           },
@@ -685,7 +1653,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
             ],
             "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/contacto"
           },
@@ -707,7 +1678,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
             ],
             "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}"
           },
@@ -733,8 +1707,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -760,8 +1740,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -809,8 +1795,14 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" },
-              { "key": "x-actor-id", "value": "postman-{{run_id}}@example.test" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-id",
+                "value": "postman-{{run_id}}@example.test"
+              }
             ],
             "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/contacto"
           },
@@ -836,7 +1828,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
             ],
             "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/historial"
           },
@@ -863,8 +1858,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -890,8 +1891,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -917,7 +1924,10 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
             ],
             "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}"
           },
@@ -939,7 +1949,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
             ],
             "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}"
           },
@@ -1049,7 +2062,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
             ],
             "url": "{{base_url}}/api/v2/casos-ayuda?organizacion_id={{v2_organization_id}}"
           },
@@ -1071,14 +2087,42 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "{{api_key}}" },
-              { "key": "x-actor-org-id", "value": "{{v2_organization_id}}" },
-              { "key": "x-actor-role", "value": "{{v2_actor_role}}" },
-              { "key": "x-actor-email", "value": "{{v2_actor_email}}" },
-              { "key": "x-actor-uid", "value": "" },
-              { "key": "x-actor-ip-hash", "value": "" },
-              { "key": "x-actor-org-timestamp", "value": "{{v2_actor_timestamp}}" },
-              { "key": "x-actor-org-signature", "value": "{{v2_actor_signature}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": ""
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": ""
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              }
             ],
             "url": "{{base_url}}/api/v2/casos-ayuda?organizacion_id={{v2_organization_id}}"
           },
@@ -1114,47 +2158,754 @@
           ]
         }
       ]
+    },
+    {
+      "name": "08 - Spec 004 Fase 1 (borradores y coincidencias)",
+      "item": [
+        {
+          "name": "Genera Idempotency-Key de borrador",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('v2_draft_idempotency_key', 'postman-draft-' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear borrador persona Salud (Fase 1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{v2_draft_idempotency_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/borradores",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"organizacion_id\": \"{{v2_organization_id}}\", \"category\": \"salud\", \"subject_type\": \"persona\", \"aid_modes\": [\"monetaria\"], \"beneficiary_name\": \"Beneficiario Postman\", \"beneficiary_identity\": \"{{v2_cedula_identity}}\", \"title\": \"Necesidad de prueba Postman\", \"story\": \"Historia clinica resumida generada desde la coleccion de Postman para pruebas locales.\", \"goal_amount\": 150.0, \"goal_currency\": \"USD\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('categoria salud y sujeto persona', () => {",
+                  "  pm.expect(body.category).to.eql('salud');",
+                  "  pm.expect(body.subject_type).to.eql('persona');",
+                  "  pm.expect(body.aid_modes).to.eql(['monetaria']);",
+                  "});",
+                  "pm.collectionVariables.set('v2_draft_public_id', body.public_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reintentar borrador con la misma Idempotency-Key (replay)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{v2_draft_idempotency_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/borradores",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"organizacion_id\": \"{{v2_organization_id}}\", \"category\": \"salud\", \"subject_type\": \"persona\", \"aid_modes\": [\"monetaria\"], \"beneficiary_name\": \"Beneficiario Postman\", \"beneficiary_identity\": \"{{v2_cedula_identity}}\", \"title\": \"Necesidad de prueba Postman\", \"story\": \"Historia clinica resumida generada desde la coleccion de Postman para pruebas locales.\", \"goal_amount\": 150.0, \"goal_currency\": \"USD\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 201 (idempotente, no duplica)', () => pm.response.to.have.status(201));",
+                  "pm.test('devuelve el mismo caso', () => pm.expect(pm.response.json().public_id).to.eql(pm.collectionVariables.get('v2_draft_public_id')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rechaza Idempotency-Key reutilizada con payload distinto",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{v2_draft_idempotency_key}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/borradores",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"organizacion_id\": \"{{v2_organization_id}}\", \"category\": \"salud\", \"subject_type\": \"persona\", \"aid_modes\": [\"monetaria\"], \"beneficiary_name\": \"Beneficiario Postman\", \"beneficiary_identity\": \"{{v2_cedula_identity}}\", \"title\": \"Un titulo completamente distinto al original\", \"story\": \"Historia clinica resumida generada desde la coleccion de Postman para pruebas locales.\", \"goal_amount\": 150.0, \"goal_currency\": \"USD\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear borrador campana Insumo/Recurso directa (Fase 1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "postman-draft-campana-{{$timestamp}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/borradores",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"organizacion_id\": \"{{v2_organization_id}}\", \"category\": \"insumo_recurso\", \"subject_type\": \"campana_organizacion\", \"aid_modes\": [\"directa\"], \"title\": \"Colecta de colchones Postman\", \"story\": \"Necesitamos colchones para un centro de refugio, coleccion de pruebas Postman.\", \"direct_request\": \"Colchones individuales nuevos o en buen estado\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('campana sin campos financieros', () => {",
+                  "  pm.expect(body.subject_type).to.eql('campana_organizacion');",
+                  "  pm.expect(body.aid_modes).to.eql(['directa']);",
+                  "  pm.expect(body.goal_amount).to.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar coincidencias de cedula (organizacion propia)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/coincidencias-cedula?identity={{v2_cedula_identity}}"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('reporta el caso propio con resumen interno', () => {",
+                  "  pm.expect(body.own_organization_matches.length).to.be.above(0);",
+                  "  pm.expect(body.own_organization_matches[0]).to.have.property('internal_title');",
+                  "});",
+                  "pm.test('no hay señal de coincidencia privada externa todavia', () => pm.expect(body.other_private_matches_present).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar coincidencias de cedula (otra organizacion, solo señal)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id_other}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email_other}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp_other}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature_other}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature_other}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/coincidencias-cedula?identity={{v2_cedula_identity}}"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id_other}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email_other}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp_other', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature_other', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('no revela detalle del caso de la otra organizacion', () => {",
+                  "  pm.expect(body.own_organization_matches).to.eql([]);",
+                  "  pm.expect(body.external_public_matches).to.eql([]);",
+                  "  pm.expect(body.other_private_matches_present).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
-    { "key": "base_url", "value": "http://localhost:8010" },
-    { "key": "api_key", "value": "" },
-    { "key": "run_id", "value": "" },
-    { "key": "test_cedula", "value": "" },
-    { "key": "persona_id", "value": "" },
-    { "key": "hospital_id", "value": "" },
-    { "key": "paciente_id", "value": "" },
-    { "key": "caso_id", "value": "" },
-    { "key": "v2_public_id", "value": "" },
-    { "key": "v2_organization_id", "value": "org-prueba" },
-    { "key": "v2_actor_role", "value": "coordinador" },
-    { "key": "v2_actor_email", "value": "coordinador1@example.test" },
-    { "key": "actor_signing_secret", "value": "" },
-    { "key": "v2_actor_timestamp", "value": "" },
-    { "key": "v2_actor_signature", "value": "" }
-    ,{ "key": "v2_case_id", "value": "" }
-    ,{ "key": "v2_actor_uid", "value": "postman-coordinator-uid" }
-    ,{ "key": "v2_donor_email", "value": "donante.demo@example.test" }
-    ,{ "key": "v2_donor_uid", "value": "postman-donor-uid" }
-    ,{ "key": "v2_actor_ip_hash", "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
-    ,{ "key": "v2_donor_timestamp", "value": "" }
-    ,{ "key": "v2_donor_signature", "value": "" }
-    ,{ "key": "v2_donor_account_id", "value": "" }
-    ,{ "key": "v2_aid_id", "value": "" }
-    ,{ "key": "v2_report_key", "value": "" }
-    ,{ "key": "v2_confirm_key", "value": "" }
-    ,{ "key": "v2_transfer_date", "value": "" }
-    ,{ "key": "v2_help_amount", "value": "10.00" }
-    ,{ "key": "v2_help_currency", "value": "USD" }
-    ,{ "key": "v2_super_admin_email", "value": "" }
-    ,{ "key": "v2_super_admin_uid", "value": "" }
-    ,{ "key": "v2_super_admin_timestamp", "value": "" }
-    ,{ "key": "v2_super_admin_signature", "value": "" }
-    ,{ "key": "v2_manual_rate_date", "value": "" }
-    ,{ "key": "v2_manual_rate_source_currency", "value": "USD" }
-    ,{ "key": "v2_manual_rate_target_currency", "value": "EUR" }
-    ,{ "key": "v2_manual_rate_value", "value": "" }
-    ,{ "key": "v2_manual_rate_reference", "value": "" }
-    ,{ "key": "v2_manual_rate_reason", "value": "" }
+    {
+      "key": "base_url",
+      "value": "http://localhost:8010"
+    },
+    {
+      "key": "api_key",
+      "value": ""
+    },
+    {
+      "key": "run_id",
+      "value": ""
+    },
+    {
+      "key": "test_cedula",
+      "value": ""
+    },
+    {
+      "key": "persona_id",
+      "value": ""
+    },
+    {
+      "key": "hospital_id",
+      "value": ""
+    },
+    {
+      "key": "paciente_id",
+      "value": ""
+    },
+    {
+      "key": "caso_id",
+      "value": ""
+    },
+    {
+      "key": "v2_public_id",
+      "value": ""
+    },
+    {
+      "key": "v2_organization_id",
+      "value": "org-prueba"
+    },
+    {
+      "key": "v2_actor_role",
+      "value": "coordinador"
+    },
+    {
+      "key": "v2_actor_email",
+      "value": "coordinador1@example.test"
+    },
+    {
+      "key": "actor_signing_secret",
+      "value": ""
+    },
+    {
+      "key": "v2_actor_timestamp",
+      "value": ""
+    },
+    {
+      "key": "v2_actor_signature",
+      "value": ""
+    },
+    {
+      "key": "v2_case_id",
+      "value": ""
+    },
+    {
+      "key": "v2_actor_uid",
+      "value": "postman-coordinator-uid"
+    },
+    {
+      "key": "v2_donor_email",
+      "value": "donante.demo@example.test"
+    },
+    {
+      "key": "v2_donor_uid",
+      "value": "postman-donor-uid"
+    },
+    {
+      "key": "v2_actor_ip_hash",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "key": "v2_donor_timestamp",
+      "value": ""
+    },
+    {
+      "key": "v2_donor_signature",
+      "value": ""
+    },
+    {
+      "key": "v2_donor_account_id",
+      "value": ""
+    },
+    {
+      "key": "v2_aid_id",
+      "value": ""
+    },
+    {
+      "key": "v2_report_key",
+      "value": ""
+    },
+    {
+      "key": "v2_confirm_key",
+      "value": ""
+    },
+    {
+      "key": "v2_transfer_date",
+      "value": ""
+    },
+    {
+      "key": "v2_help_amount",
+      "value": "10.00"
+    },
+    {
+      "key": "v2_help_currency",
+      "value": "USD"
+    },
+    {
+      "key": "v2_super_admin_email",
+      "value": ""
+    },
+    {
+      "key": "v2_super_admin_uid",
+      "value": ""
+    },
+    {
+      "key": "v2_super_admin_timestamp",
+      "value": ""
+    },
+    {
+      "key": "v2_super_admin_signature",
+      "value": ""
+    },
+    {
+      "key": "v2_manual_rate_date",
+      "value": ""
+    },
+    {
+      "key": "v2_manual_rate_source_currency",
+      "value": "USD"
+    },
+    {
+      "key": "v2_manual_rate_target_currency",
+      "value": "EUR"
+    },
+    {
+      "key": "v2_manual_rate_value",
+      "value": ""
+    },
+    {
+      "key": "v2_manual_rate_reference",
+      "value": ""
+    },
+    {
+      "key": "v2_manual_rate_reason",
+      "value": ""
+    },
+    {
+      "key": "v2_draft_idempotency_key",
+      "value": ""
+    },
+    {
+      "key": "v2_draft_public_id",
+      "value": ""
+    },
+    {
+      "key": "v2_cedula_identity",
+      "value": "V-30111222"
+    },
+    {
+      "key": "v2_organization_id_other",
+      "value": "org-demo"
+    },
+    {
+      "key": "v2_actor_email_other",
+      "value": "coordinador2@example.test"
+    },
+    {
+      "key": "v2_actor_timestamp_other",
+      "value": ""
+    },
+    {
+      "key": "v2_actor_signature_other",
+      "value": ""
+    }
   ]
 }

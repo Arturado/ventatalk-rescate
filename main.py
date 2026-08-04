@@ -33,6 +33,7 @@ from sqlalchemy import inspect
 from services.shelter_centers import DEFAULT_ORGANIZACION_ID
 from services.help_config import donor_limit_config
 from services.help_retention_schema import ensure_retention_schema
+from services.help_spec004_schema import is_help_spec004_ready
 from observability import install_observability, router as observability_router
 
 templates = Jinja2Templates(directory="templates")
@@ -362,6 +363,11 @@ async def lifespan(app: FastAPI):
     ensure_help_aid_state_schema()
     ensure_optional_columns()
     ensure_retention_schema(engine)
+    if not is_help_spec004_ready(engine):
+        print(
+            "help-spec004: schema not ready yet - run "
+            "'python -m scripts.migrate_help_spec004 --apply' against a disposable database"
+        )
     db = SessionLocal()
     try:
         seed_admin_users(db)
@@ -538,4 +544,8 @@ async def casos_ayuda_page(request: Request):
 
 @app.get("/health", tags=["sistema"])
 def health():
-    return {"status": "ok", "service": "ventatalk-rescate"}
+    return {
+        "status": "ok",
+        "service": "ventatalk-rescate",
+        "help_spec004_ready": is_help_spec004_ready(engine),
+    }

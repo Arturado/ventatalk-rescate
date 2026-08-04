@@ -42,6 +42,13 @@ from services.help_cases import (
     transition_help_case,
     update_help_case,
 )
+from services.help_beneficiaries import (
+    BeneficiaryDomainError,
+    CedulaMatchRateLimitError,
+    find_cedula_matches,
+)
+from services.help_case_drafts import DraftIdempotencyConflictError, create_help_case_draft
+from services.help_identity import HelpIdentityError, normalize_venezuelan_identity
 from services.help_crypto import HelpDataCipher, HelpDataCryptoError
 from services.help_files import (
     decode_help_document,
@@ -498,6 +505,101 @@ def create_organization_help_case(
     except HelpCaseDomainError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/borradores", response_model=schemas.CasoAyudaV2ContractSummaryResponse, status_code=201)
+def create_organization_help_case_draft(
+    payload: schemas.CasoAyudaV2DraftCreateRequest,
+    idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    organization_id = str(payload.organizacion_id or actor.organizacion_id or "").strip()
+    normalized_key = normalize_idempotency_key(idempotency_key)
+    try:
+        cipher = HelpDataCipher.from_environment()
+        summary, _created = create_help_case_draft(
+            db,
+            actor=actor,
+            organization_id=organization_id,
+            public_id=f"ayuda-{uuid4().hex}",
+            payload=payload,
+            idempotency_key=normalized_key,
+            cipher=cipher,
+        )
+        db.commit()
+        return summary
+    except OrganizationAccessError as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except DraftIdempotencyConflictError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except HelpDataCryptoError as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="El cifrado de datos no esta configurado") from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="El caso o beneficiario ya existe") from exc
+    except HelpCaseDomainError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/coincidencias-cedula")
+def get_organization_cedula_matches(
+    identity: str = Query(..., min_length=4, max_length=30),
+    organizacion_id: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        canonical_identity = normalize_venezuelan_identity(identity)
+        cipher = HelpDataCipher.from_environment()
+        result = find_cedula_matches(
+            db,
+            actor=actor,
+            identity_hash=cipher.identity_hash(canonical_identity),
+            organization_id=organizacion_id,
+        )
+        db.commit()
+        return {
+            "own_organization_matches": [
+                {
+                    "id": match.id,
+                    "public_id": match.public_id,
+                    "internal_title": match.internal_title,
+                    "category": match.category,
+                    "state": match.state,
+                    "created_at": match.created_at,
+                }
+                for match in result.own_organization_matches
+            ],
+            "external_public_matches": [
+                {
+                    "public_id": match.public_id,
+                    "title": match.title,
+                    "category": match.category,
+                    "state": match.state,
+                }
+                for match in result.external_public_matches
+            ],
+            "other_private_matches_present": result.other_private_matches_present,
+        }
+    except OrganizationAccessError as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except CedulaMatchRateLimitError as exc:
+        db.rollback()
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except (BeneficiaryDomainError, HelpIdentityError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except HelpDataCryptoError as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="El cifrado de datos no esta configurado") from exc
 
 
 @router.get("/{case_id}", response_model=schemas.CasoAyudaV2DetalleResponse)

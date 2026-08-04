@@ -204,6 +204,144 @@ def test_document_versions_are_unique_and_use_closed_states():
             db.commit()
 
 
+def test_case_defaults_to_persona_subject_with_monetary_modality():
+    with TestingSessionLocal() as db:
+        beneficiary = create_beneficiary(db)
+        case = create_case(db, beneficiary)
+        db.commit()
+        db.refresh(case)
+
+        assert case.tipo_sujeto == "persona"
+        assert case.acepta_ayuda_monetaria is True
+        assert case.acepta_ayuda_directa is False
+
+
+def test_campana_case_allows_null_beneficiary_and_directa_without_meta():
+    with TestingSessionLocal() as db:
+        case = models.CasoAyudaV2(
+            public_id="case-campana-1",
+            organizacion_id="org-1",
+            beneficiario_id=None,
+            tipo_sujeto="campana_organizacion",
+            titulo_interno="Campana de insumos",
+            categoria="insumo_recurso",
+            acepta_ayuda_monetaria=False,
+            acepta_ayuda_directa=True,
+            meta_monto=None,
+            meta_moneda=None,
+            creado_por="coordinador@example.com",
+        )
+        db.add(case)
+        db.commit()
+        db.refresh(case)
+
+        assert case.beneficiario_id is None
+        assert case.meta_monto is None
+
+
+def test_persona_case_requires_beneficiary():
+    with TestingSessionLocal() as db:
+        case = models.CasoAyudaV2(
+            public_id="case-sin-beneficiario",
+            organizacion_id="org-1",
+            beneficiario_id=None,
+            tipo_sujeto="persona",
+            titulo_interno="Caso sin beneficiario",
+            categoria="salud",
+            meta_monto=Decimal("10.00"),
+            meta_moneda="USD",
+            creado_por="coordinador@example.com",
+        )
+        db.add(case)
+
+        with pytest.raises(IntegrityError):
+            db.commit()
+
+
+def test_monetary_modality_requires_goal_and_currency():
+    with TestingSessionLocal() as db:
+        beneficiary = create_beneficiary(db)
+        case = models.CasoAyudaV2(
+            public_id="case-monetaria-sin-meta",
+            organizacion_id=beneficiary.organizacion_id,
+            beneficiario_id=beneficiary.id,
+            tipo_sujeto="persona",
+            titulo_interno="Caso monetario sin meta",
+            categoria="salud",
+            acepta_ayuda_monetaria=True,
+            acepta_ayuda_directa=False,
+            meta_monto=None,
+            meta_moneda=None,
+            creado_por="coordinador@example.com",
+        )
+        db.add(case)
+
+        with pytest.raises(IntegrityError):
+            db.commit()
+
+
+def test_case_requires_at_least_one_modality_unless_empleo():
+    with TestingSessionLocal() as db:
+        beneficiary = create_beneficiary(db)
+        case = models.CasoAyudaV2(
+            public_id="case-sin-modalidad",
+            organizacion_id=beneficiary.organizacion_id,
+            beneficiario_id=beneficiary.id,
+            tipo_sujeto="persona",
+            titulo_interno="Caso sin modalidad",
+            categoria="insumo_recurso",
+            acepta_ayuda_monetaria=False,
+            acepta_ayuda_directa=False,
+            meta_monto=None,
+            meta_moneda=None,
+            creado_por="coordinador@example.com",
+        )
+        db.add(case)
+
+        with pytest.raises(IntegrityError):
+            db.commit()
+
+
+def test_empleo_case_must_have_no_monetary_or_directa_modality():
+    with TestingSessionLocal() as db:
+        beneficiary = create_beneficiary(db)
+        case = models.CasoAyudaV2(
+            public_id="case-empleo-invalido",
+            organizacion_id=beneficiary.organizacion_id,
+            beneficiario_id=beneficiary.id,
+            tipo_sujeto="persona",
+            titulo_interno="Busco empleo",
+            categoria="empleo",
+            acepta_ayuda_monetaria=True,
+            acepta_ayuda_directa=False,
+            meta_monto=Decimal("10.00"),
+            meta_moneda="USD",
+            creado_por="coordinador@example.com",
+        )
+        db.add(case)
+
+        with pytest.raises(IntegrityError):
+            db.commit()
+
+
+def test_case_stores_encrypted_conditional_detail_with_schema_version():
+    with TestingSessionLocal() as db:
+        beneficiary = create_beneficiary(db)
+        case_id = create_case(db, beneficiary).id
+        db.commit()
+
+    with TestingSessionLocal() as db:
+        case = db.query(models.CasoAyudaV2).filter_by(id=case_id).one()
+        case.detalle_condicional_cifrado = "enc:1:payload"
+        case.detalle_condicional_version = 1
+        db.commit()
+
+    with TestingSessionLocal() as db:
+        reloaded = db.query(models.CasoAyudaV2).filter_by(id=case_id).one()
+        assert reloaded.detalle_condicional_cifrado == "enc:1:payload"
+        assert reloaded.detalle_condicional_version == 1
+
+
 def test_document_rejects_invalid_classification():
     with TestingSessionLocal() as db:
         beneficiary = create_beneficiary(db)

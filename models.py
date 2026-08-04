@@ -349,17 +349,45 @@ class CasoAyudaV2(Base):
         ),
         CheckConstraint("monto_confirmado >= 0", name="ck_casos_ayuda_v2_confirmado"),
         CheckConstraint("ayudas_confirmadas >= 0", name="ck_casos_ayuda_v2_contador"),
+        CheckConstraint(
+            "tipo_sujeto IN ('persona', 'campana_organizacion')",
+            name="ck_casos_ayuda_v2_tipo_sujeto",
+        ),
+        CheckConstraint(
+            "(tipo_sujeto = 'persona' AND beneficiario_id IS NOT NULL) OR "
+            "(tipo_sujeto = 'campana_organizacion' AND beneficiario_id IS NULL)",
+            name="ck_casos_ayuda_v2_sujeto_beneficiario",
+        ),
+        CheckConstraint(
+            "(NOT acepta_ayuda_monetaria AND meta_monto IS NULL AND meta_moneda IS NULL) OR "
+            "(acepta_ayuda_monetaria AND meta_monto IS NOT NULL AND meta_moneda IS NOT NULL)",
+            name="ck_casos_ayuda_v2_modalidad_monetaria_meta",
+        ),
+        CheckConstraint(
+            "categoria = 'empleo' OR acepta_ayuda_monetaria OR acepta_ayuda_directa",
+            name="ck_casos_ayuda_v2_modalidades_no_vacias",
+        ),
+        CheckConstraint(
+            "categoria <> 'empleo' OR "
+            "(tipo_sujeto = 'persona' AND NOT acepta_ayuda_monetaria AND NOT acepta_ayuda_directa)",
+            name="ck_casos_ayuda_v2_empleo_coherente",
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     public_id = Column(String(100), nullable=False, unique=True, index=True)
     organizacion_id = Column(String(100), nullable=False, index=True)
-    beneficiario_id = Column(Integer, nullable=False, index=True)
+    beneficiario_id = Column(Integer, nullable=True, index=True)
+    tipo_sujeto = Column(String(30), nullable=False, default="persona", server_default="persona", index=True)
     titulo_interno = Column(String(250), nullable=False)
     relato_privado_cifrado = Column(Text, nullable=True)
     categoria = Column(String(80), nullable=False, index=True)
-    meta_monto = Column(Numeric(18, 2), nullable=False)
-    meta_moneda = Column(String(3), nullable=False)
+    acepta_ayuda_monetaria = Column(Boolean, nullable=False, default=True, server_default="true")
+    acepta_ayuda_directa = Column(Boolean, nullable=False, default=False, server_default="false")
+    detalle_condicional_cifrado = Column(Text, nullable=True)
+    detalle_condicional_version = Column(Integer, nullable=True)
+    meta_monto = Column(Numeric(18, 2), nullable=True)
+    meta_moneda = Column(String(3), nullable=True)
     monto_confirmado = Column(Numeric(18, 2), nullable=False, default=0, server_default="0")
     ayudas_confirmadas = Column(Integer, nullable=False, default=0, server_default="0")
     estado = Column(String(30), nullable=False, default="borrador", server_default="borrador", index=True)
