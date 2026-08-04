@@ -358,18 +358,24 @@ def _detail_response(db, case_id, actor):
             "version": publication.version,
             "activa": publication.activa,
         }
-    beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id)
+    beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id) if case.beneficiario_id else None
     cipher = HelpDataCipher.from_environment()
-    beneficiary_name = cipher.decrypt(
-        beneficiary.nombres_apellidos_cifrado,
-        field="beneficiary.name",
-    )
-    beneficiary_identity = cipher.decrypt(
-        beneficiary.cedula_cifrada,
-        field="beneficiary.identity",
-    )
-    identity_digits = "".join(character for character in beneficiary_identity if character.isdigit())
-    masked_identity = "*" * max(len(identity_digits) - 3, 3) + identity_digits[-3:]
+    beneficiary_summary = None
+    if beneficiary is not None:
+        beneficiary_name = cipher.decrypt(
+            beneficiary.nombres_apellidos_cifrado,
+            field="beneficiary.name",
+        )
+        beneficiary_identity = cipher.decrypt(
+            beneficiary.cedula_cifrada,
+            field="beneficiary.identity",
+        )
+        identity_digits = "".join(character for character in beneficiary_identity if character.isdigit())
+        masked_identity = "*" * max(len(identity_digits) - 3, 3) + identity_digits[-3:]
+        beneficiary_summary = {
+            "nombre_legal": beneficiary_name,
+            "cedula_enmascarada": masked_identity,
+        }
     account_data = []
     for account in accounts:
         identifier = cipher.decrypt(account.identificador_cifrado, field="account.identifier")
@@ -422,10 +428,7 @@ def _detail_response(db, case_id, actor):
             "evidencia_adjunta": bool(consent and consent.evidencia_documento_id),
             "vigente": bool(consent and consent.vigente),
         },
-        "beneficiario": {
-            "nombre_legal": beneficiary_name,
-            "cedula_enmascarada": masked_identity,
-        },
+        "beneficiario": beneficiary_summary,
         "documentos": documents,
     }
 

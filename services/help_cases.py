@@ -411,7 +411,9 @@ def register_beneficiary_verification(
     ):
         raise HelpCaseDomainError("La representacion requiere identidad, relacion y autoridad verificadas")
 
-    beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id)
+    beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id) if case.beneficiario_id else None
+    if beneficiary is None:
+        raise HelpCaseDomainError("La verificacion de beneficiario solo aplica a casos de persona")
     beneficiary.datos_verificacion_cifrado = verification_data_encrypted
     beneficiary.es_menor = bool(is_minor)
     beneficiary.representante_nombre_cifrado = (
@@ -587,7 +589,9 @@ def register_help_case_consent(
     signer_type = _require_text(signer_type, "signer_type")
     if signer_type not in {"beneficiario", "representante"}:
         raise HelpCaseDomainError("signer_type no soportado")
-    beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id)
+    beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id) if case.beneficiario_id else None
+    if beneficiary is None:
+        raise HelpCaseDomainError("El consentimiento de beneficiario/representante solo aplica a casos de persona")
     if signer_type == "representante" and not (
         beneficiary.representante_nombre_cifrado
         and beneficiary.representante_relacion
@@ -949,7 +953,7 @@ def _latest_by_key(records, key_name, version_name="version"):
 
 def _readiness_blockers(db, case):
     blockers = []
-    beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id)
+    beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id) if case.beneficiario_id else None
     if not beneficiary or not beneficiary.datos_verificacion_cifrado:
         blockers.append("identidad_no_verificada")
     if beneficiary and (beneficiary.es_menor or beneficiary.representante_nombre_cifrado):

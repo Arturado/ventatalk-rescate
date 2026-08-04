@@ -442,8 +442,8 @@ class CasoAyudaV2ResumenResponse(BaseModel):
     organizacion_id: str
     titulo_interno: str
     categoria: str
-    meta_monto: Decimal
-    meta_moneda: str
+    meta_monto: Optional[Decimal] = None
+    meta_moneda: Optional[str] = None
     monto_confirmado: Decimal
     ayudas_confirmadas: int
     estado: str
@@ -745,7 +745,7 @@ class CasoAyudaV2DetalleResponse(CasoAyudaV2ResumenResponse):
     publicacion: Optional[PublicacionCasoAyudaResumenResponse] = None
     verificacion: VerificacionCasoAyudaResumenResponse
     consentimiento: ConsentimientoCasoAyudaResumenResponse
-    beneficiario: BeneficiarioCasoAyudaResumenResponse
+    beneficiario: Optional[BeneficiarioCasoAyudaResumenResponse] = None
     documentos: List[DocumentoCasoAyudaResumenResponse] = []
 
 

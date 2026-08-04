@@ -84,6 +84,46 @@ def persona_payload(**overrides):
     return data
 
 
+def campana_payload(**overrides):
+    data = dict(
+        category="insumo_recurso",
+        subject_type="campana_organizacion",
+        aid_modes=["directa"],
+        title="Colecta de colchones",
+        story="Necesitamos colchones para el centro de refugio" * 2,
+        direct_request="Colchones individuales",
+    )
+    data.update(overrides)
+    return data
+
+
+def test_get_campaign_draft_detail_returns_null_beneficiary_not_500():
+    headers = {"Idempotency-Key": "router-test-key-campana-detail"}
+    created = client.post(
+        "/api/v2/casos-ayuda/borradores", json=campana_payload(), headers=headers,
+    ).json()
+
+    response = client.get(f"/api/v2/casos-ayuda/{created['id']}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["beneficiario"] is None
+
+
+def test_list_organization_cases_includes_non_monetary_draft_without_500():
+    headers = {"Idempotency-Key": "router-test-key-campana-list"}
+    client.post("/api/v2/casos-ayuda/borradores", json=campana_payload(), headers=headers)
+
+    response = client.get("/api/v2/casos-ayuda", params={"organizacion_id": "org-1"})
+
+    assert response.status_code == 200
+    body = response.json()
+    non_monetary = [item for item in body if item["categoria"] == "insumo_recurso"]
+    assert len(non_monetary) == 1
+    assert non_monetary[0]["meta_monto"] is None
+    assert non_monetary[0]["meta_moneda"] is None
+
+
 def test_create_draft_requires_idempotency_key_header():
     response = client.post("/api/v2/casos-ayuda/borradores", json=persona_payload())
 

@@ -12,6 +12,11 @@ from dependencies import ActorOrgContext
 import models
 import schemas
 from services.help_case_drafts import DraftIdempotencyConflictError, create_help_case_draft
+from services.help_cases import (
+    HelpCaseDomainError,
+    register_beneficiary_verification,
+    register_help_case_consent,
+)
 from services.help_crypto import HelpDataCipher
 
 
@@ -158,3 +163,34 @@ def test_same_idempotency_key_with_different_payload_conflicts():
 
         with pytest.raises(DraftIdempotencyConflictError):
             create(db, persona_payload(title="Titulo completamente distinto"), key="draft-key-0000004")
+
+
+def test_beneficiary_verification_on_campaign_case_fails_closed_not_crash():
+    with TestingSessionLocal() as db:
+        summary, _created = create(db, campana_payload(), key="draft-key-0000005")
+        db.commit()
+
+        with pytest.raises(HelpCaseDomainError):
+            register_beneficiary_verification(
+                db,
+                case_id=summary["id"],
+                actor=actor(),
+                verification_data_encrypted="enc:v1:whatever",
+            )
+
+
+def test_register_consent_on_campaign_case_fails_closed_not_crash():
+    with TestingSessionLocal() as db:
+        summary, _created = create(db, campana_payload(), key="draft-key-0000006")
+        db.commit()
+
+        with pytest.raises(HelpCaseDomainError):
+            register_help_case_consent(
+                db,
+                case_id=summary["id"],
+                actor=actor(),
+                text_version="v1",
+                scope_json="{}",
+                signer_name_encrypted="enc:v1:whatever",
+                signer_type="beneficiario",
+            )
