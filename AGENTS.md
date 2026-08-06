@@ -55,14 +55,14 @@ Estas áreas son las que, si tienen un bug, exponen datos o rompen el aislamient
 - Cualquier rename o cambio de esquema en la base de datos (tablas, columnas, foreign keys).
 - **Instalar cualquier skill externo** (por ejemplo vía `npx skills add <repo>` de skills.sh, o `/plugin install` de un marketplace de Claude Code) que no sea ya parte del repo. Antes de instalarlo: confirmar que la fuente es confiable, leer el `SKILL.md` completo (y cualquier script que traiga) antes de habilitarlo, y fijar una versión/commit específico en vez de apuntar a la rama principal del repositorio del skill — para que una actualización futura del skill no cambie el comportamiento del proyecto sin que se decida explícitamente. La instalación del skill va en su propia rama/commit, separada de cualquier trabajo que lo use.
 
-## Pruebas — no hay suite automatizada todavía
+## Pruebas
 
-No existe una malla de tests automatizados en ninguno de los dos repos. Mientras eso no cambie:
+`ventatalk-rescate` sí tiene una suite de tests automatizados: 33 archivos en `tests/`, cubriendo principalmente el módulo "Yo te ayudo" (`test_help_v2_*`, `test_help_confirmations.py`, `test_help_donor_*`, `test_help_temporary_access*`, `test_help_exchange*`, `test_help_backup*`, `test_help_retention*`, con variantes SQLite y Postgres para varias áreas). **No hay cobertura automatizada equivalente para el scoping por organización de albergues** (`Centro`/`CentroResponsable`) ni para `venezuela-rescate` — para esas áreas sigue aplicando el régimen manual de abajo.
 
-- Después de cada tarea, corre y reporta el resultado de: `python3 -m compileall .` en el backend; `npm run build` y `npm run lint` en el frontend.
-- Además de esos comandos, describe qué probaste manualmente y cómo (qué pantalla, qué endpoint, con qué usuario/rol) — "compiló y no dio error" no es lo mismo que "lo probé y funciona".
-- Para cambios en scoping por organización o roles, la prueba manual debe incluir al menos dos casos: un usuario que SÍ debería tener acceso y uno que NO debería tenerlo, mostrando explícitamente que el segundo caso fue bloqueado.
-- Si detectas que hace falta una suite de tests automatizados para un área específica (por ejemplo, la lógica de scoping), dilo como hallazgo aparte — no la construyas sin que se acuerde explícitamente, porque es un esfuerzo aparte del que se está pidiendo.
+- Después de cada tarea, corre y reporta el resultado de: `python3 -m compileall .` en el backend; `npm run build` y `npm run lint` en el frontend; y si la tarea tocó algo bajo `tests/`, corre la suite relevante (`pytest`) y reporta el resultado.
+- Además de esos comandos, describe qué probaste manualmente y cómo (qué pantalla, qué endpoint, con qué usuario/rol) — "compiló y no dio error" ni "los tests pasaron" son lo mismo que "lo probé y funciona" para flujos que no tienen test que los cubra.
+- Para cambios en scoping por organización o roles que no estén cubiertos por un test automatizado (hoy: todo lo de albergues/`Centro`, y todo `venezuela-rescate`), la prueba manual debe incluir al menos dos casos: un usuario que SÍ debería tener acceso y uno que NO debería tenerlo, mostrando explícitamente que el segundo caso fue bloqueado.
+- Si detectas que hace falta cobertura automatizada para un área específica que no la tiene (por ejemplo, el scoping de albergues), dilo como hallazgo aparte — no la construyas sin que se acuerde explícitamente, porque es un esfuerzo aparte del que se está pidiendo.
 
 ## Formato de resumen al terminar cualquier tarea o sesión
 
