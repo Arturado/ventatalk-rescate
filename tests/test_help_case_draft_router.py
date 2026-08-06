@@ -91,10 +91,53 @@ def campana_payload(**overrides):
         aid_modes=["directa"],
         title="Colecta de colchones",
         story="Necesitamos colchones para el centro de refugio" * 2,
-        direct_request="Colchones individuales",
     )
     data.update(overrides)
     return data
+
+
+def empleo_payload(**overrides):
+    data = dict(
+        category="empleo",
+        subject_type="persona",
+        aid_modes=["oferta_laboral"],
+        beneficiary_name="Jose Ramirez",
+        beneficiary_identity="V-22222222",
+        title="Busco empleo de carpintero",
+        story="Cuento con experiencia en carpinteria y pintura" * 2,
+        profession="Carpintero",
+        beneficiary_access_email="jose@example.com",
+    )
+    data.update(overrides)
+    return data
+
+
+def test_get_employment_draft_detail_exposes_profession():
+    headers = {"Idempotency-Key": "router-test-key-empleo-detail"}
+    created = client.post(
+        "/api/v2/casos-ayuda/borradores", json=empleo_payload(), headers=headers,
+    ).json()
+
+    response = client.get(f"/api/v2/casos-ayuda/{created['id']}")
+
+    assert response.status_code == 200
+    assert response.json()["profesion"] == "Carpintero"
+
+
+def test_creating_a_draft_auto_configures_publication_from_title_and_story():
+    headers = {"Idempotency-Key": "router-test-key-persona-autopub"}
+    created = client.post(
+        "/api/v2/casos-ayuda/borradores", json=persona_payload(), headers=headers,
+    ).json()
+
+    response = client.get(f"/api/v2/casos-ayuda/{created['id']}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "publicacion_no_configurada" not in body["readiness_blockers"]
+    assert body["publicacion"]["titulo_publico"] == "Necesita tratamiento"
+    assert body["publicacion"]["descripcion_publica"].startswith("Historia clinica resumida")
+    assert body["publicacion"]["nombre_publico"] == "Ana Perez"
 
 
 def test_get_campaign_draft_detail_returns_null_beneficiary_not_500():

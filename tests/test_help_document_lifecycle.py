@@ -158,11 +158,11 @@ def test_upload_encrypts_real_bytes_and_returns_only_safe_document_summary(crypt
         "version": 1,
         "tipo": "informe_medico",
         "clasificacion": "publico",
-        "estado_revision": "pendiente",
+        "estado_revision": "aprobado",
         "content_type": "application/pdf",
         "size_bytes": len(plaintext),
         "cargado_por": "uploader@example.com",
-        "revisado_por": None,
+        "revisado_por": "uploader@example.com",
     }
     assert "storage" not in response.text
     assert "checksum" not in response.text
@@ -208,24 +208,28 @@ def test_upload_rejects_unsupported_mismatched_or_oversized_content(content_type
         assert db.query(models.DocumentoCasoAyuda).count() == 0
 
 
-def test_public_medical_review_denies_uploader_then_allows_distinct_actor():
+def test_document_upload_auto_approves_without_a_separate_review_step():
+    case_id, _ = create_managed_case()
+
+    uploaded = upload_document(case_id).json()
+
+    assert uploaded["estado_revision"] == "aprobado"
+    assert uploaded["revisado_por"] == "uploader@example.com"
+
+
+def test_rejecting_an_already_approved_document_retracts_it():
     case_id, _ = create_managed_case()
     uploaded = upload_document(case_id).json()
 
-    denied = review_document(case_id, uploaded["id"], email="uploader@example.com")
-    approved = review_document(case_id, uploaded["id"])
+    rejected = review_document(case_id, uploaded["id"], approve=False)
 
-    assert denied.status_code == 400
-    assert approved.status_code == 200
-    assert approved.json()["id"] == uploaded["id"]
-    assert approved.json()["estado_revision"] == "aprobado"
-    assert approved.json()["revisado_por"] == "reviewer@example.com"
+    assert rejected.status_code == 200
+    assert rejected.json()["estado_revision"] == "rechazado"
 
 
 def test_management_detail_exposes_safe_document_summaries_and_replacement_versions():
     case_id, _ = create_managed_case()
     first = upload_document(case_id).json()
-    review_document(case_id, first["id"])
 
     second_plaintext = b"%PDF-1.7 REPLACEMENT-CONTENT"
     second = upload_document(case_id, payload=second_plaintext).json()
@@ -270,7 +274,17 @@ def test_public_download_returns_not_found_for_noncanonical_document_variants(va
     case_id, public_id = create_managed_case()
     classification = "privado" if variant == "private" else "publico"
     document = upload_document(case_id, classification=classification).json()
-    if variant not in {"pending", "private"}:
+    if variant == "pending":
+        # Documents auto-approve on upload; simulate a never-reviewed row directly
+        # (e.g. a pre-auto-approval data remnant) to prove the public endpoint still
+        # fails closed for it.
+        with TestingSessionLocal() as db:
+            stored = db.query(models.DocumentoCasoAyuda).filter_by(id=document["id"]).one()
+            stored.estado_revision = "pendiente"
+            stored.revisado_por = None
+            stored.revisado_at = None
+            db.commit()
+    elif variant != "private":
         review_document(case_id, document["id"], approve=variant != "rejected")
     if variant == "superseded":
         upload_document(case_id)

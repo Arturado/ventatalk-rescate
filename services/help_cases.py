@@ -348,6 +348,7 @@ def update_help_case(
     goal_amount=None,
     goal_currency=None,
     private_story_encrypted=None,
+    profession=None,
 ):
     case = _require_editable_case(db, case_id, actor)
     changed_fields = []
@@ -372,6 +373,20 @@ def update_help_case(
     if private_story_encrypted is not None:
         case.relato_privado_cifrado = _require_text(private_story_encrypted, "private_story_encrypted")
         changed_fields.append("relato_privado_cifrado")
+    if profession is not None:
+        cipher = HelpDataCipher.from_environment()
+        current_detail = (
+            json.loads(cipher.decrypt(case.detalle_condicional_cifrado, field="case.conditional_detail"))
+            if case.detalle_condicional_cifrado
+            else {}
+        )
+        current_detail["profession"] = _require_text(profession, "profession")
+        case.detalle_condicional_cifrado = cipher.encrypt(
+            json.dumps(current_detail, sort_keys=True, separators=(",", ":")),
+            field="case.conditional_detail",
+        )
+        case.detalle_condicional_version = (case.detalle_condicional_version or 0) + 1
+        changed_fields.append("detalle_condicional_cifrado")
     if not changed_fields:
         raise HelpCaseDomainError("Debe indicar al menos un campo para actualizar")
     _add_audit_event(
@@ -392,18 +407,13 @@ def register_beneficiary_verification(
     *,
     case_id: int,
     actor: ActorOrgContext,
-    verification_data_encrypted: str,
     is_minor: bool = False,
     representative_name_encrypted=None,
     representative_relationship=None,
     representative_authority_verified: bool = False,
 ):
     case = _require_editable_case(db, case_id, actor)
-    verification_data_encrypted = _require_text(
-        verification_data_encrypted,
-        "verification_data_encrypted",
-    )
-    has_representative = bool(representative_name_encrypted or representative_relationship or is_minor)
+    has_representative = bool(is_minor)
     if has_representative and not (
         representative_name_encrypted
         and representative_relationship
@@ -414,7 +424,6 @@ def register_beneficiary_verification(
     beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id) if case.beneficiario_id else None
     if beneficiary is None:
         raise HelpCaseDomainError("La verificacion de beneficiario solo aplica a casos de persona")
-    beneficiary.datos_verificacion_cifrado = verification_data_encrypted
     beneficiary.es_menor = bool(is_minor)
     beneficiary.representante_nombre_cifrado = (
         _require_text(representative_name_encrypted, "representative_name_encrypted")
@@ -448,9 +457,9 @@ def configure_help_case_publication(
     *,
     case_id: int,
     actor: ActorOrgContext,
-    public_name: str,
     public_title: str,
     public_description: str,
+    public_name: str | None = None,
     general_location=None,
     social_networks_json=None,
     within_current_consent_scope=None,
@@ -489,8 +498,10 @@ def configure_help_case_publication(
                 configurado_por=publication.configurado_por or actor.email,
             ))
         publication.version += 1
-    publication.nombre_publico = _require_text(public_name, "public_name")
     publication.titulo_publico = _require_text(public_title, "public_title")
+    publication.nombre_publico = (
+        _require_text(public_name, "public_name") if public_name else publication.titulo_publico
+    )
     publication.descripcion_publica = _require_text(public_description, "public_description")
     publication.localidad_general = str(general_location).strip() if general_location is not None else None
     publication.redes_sociales_json = (
@@ -589,16 +600,19 @@ def register_help_case_consent(
     signer_type = _require_text(signer_type, "signer_type")
     if signer_type not in {"beneficiario", "representante"}:
         raise HelpCaseDomainError("signer_type no soportado")
-    beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id) if case.beneficiario_id else None
-    if beneficiary is None:
-        raise HelpCaseDomainError("El consentimiento de beneficiario/representante solo aplica a casos de persona")
-    if signer_type == "representante" and not (
-        beneficiary.representante_nombre_cifrado
-        and beneficiary.representante_relacion
-        and beneficiary.representante_autoridad_verificada_en
-        and beneficiary.representante_autoridad_verificada_por
-    ):
-        raise HelpCaseDomainError("El representante no tiene autoridad verificada")
+    if case.tipo_sujeto == "persona":
+        beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id) if case.beneficiario_id else None
+        if beneficiary is None:
+            raise HelpCaseDomainError("El consentimiento de beneficiario/representante solo aplica a casos de persona")
+        if signer_type == "representante" and not (
+            beneficiary.representante_nombre_cifrado
+            and beneficiary.representante_relacion
+            and beneficiary.representante_autoridad_verificada_en
+            and beneficiary.representante_autoridad_verificada_por
+        ):
+            raise HelpCaseDomainError("El representante no tiene autoridad verificada")
+    elif signer_type != "representante":
+        raise HelpCaseDomainError("Una campana solo admite consentimiento firmado como representante de la organizacion")
     evidence = db.get(models.DocumentoCasoAyuda, evidence_document_id) if evidence_document_id else None
     if evidence_document_id and (not evidence or (
         evidence.caso_id != case.id
@@ -633,6 +647,13 @@ def register_help_case_consent(
     )
     db.add(consent)
     db.flush()
+    uncovered_documents = (
+        db.query(models.DocumentoCasoAyuda)
+        .filter_by(caso_id=case.id, consentimiento_version=None)
+        .all()
+    )
+    for document in uncovered_documents:
+        document.consentimiento_version = consent.version
     _add_audit_event(
         db,
         case=case,
@@ -691,7 +712,10 @@ def register_case_document(
 
     consent_version = None
     if classification == "publico":
-        consent_version = _current_consent(db, case.id).version
+        current_consent = db.query(models.ConsentimientoCasoAyuda).filter_by(
+            caso_id=case.id, vigente=True,
+        ).order_by(models.ConsentimientoCasoAyuda.version.desc()).first()
+        consent_version = current_consent.version if current_consent else None
     latest = (
         db.query(models.DocumentoCasoAyuda)
         .filter_by(caso_id=case.id, document_key=document_key)
@@ -711,6 +735,9 @@ def register_case_document(
         checksum_sha256=checksum_sha256,
         consentimiento_version=consent_version,
         cargado_por=actor.email,
+        estado_revision="aprobado",
+        revisado_por=actor.email,
+        revisado_at=datetime.now(timezone.utc),
     )
     db.add(document)
     db.flush()
@@ -743,21 +770,12 @@ def review_case_document(
     if document is None:
         raise CaseNotFoundError("Documento no encontrado")
     case = _require_editable_case(db, document.caso_id, actor)
-    if document.estado_revision != "pendiente":
-        raise CaseStateError("El documento ya fue revisado")
+    if document.estado_revision == "rechazado":
+        raise CaseStateError("El documento ya fue rechazado")
+    if approve and document.estado_revision == "aprobado":
+        raise CaseStateError("El documento ya esta aprobado")
     if not approve and not str(reason or "").strip():
         raise HelpCaseDomainError("El rechazo requiere un motivo")
-    if document.clasificacion == "publico":
-        consent = _current_consent(db, case.id)
-        if document.consentimiento_version != consent.version:
-            raise HelpCaseDomainError("El documento no corresponde al consentimiento vigente")
-    if (
-        approve
-        and document.clasificacion == "publico"
-        and document.tipo == "informe_medico"
-        and document.cargado_por == actor.email
-    ):
-        raise HelpCaseDomainError("El informe medico requiere un revisor distinto")
 
     document.estado_revision = "aprobado" if approve else "rechazado"
     document.revisado_por = actor.email
@@ -953,17 +971,17 @@ def _latest_by_key(records, key_name, version_name="version"):
 
 def _readiness_blockers(db, case):
     blockers = []
-    beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id) if case.beneficiario_id else None
-    if not beneficiary or not beneficiary.datos_verificacion_cifrado:
-        blockers.append("identidad_no_verificada")
-    if beneficiary and (beneficiary.es_menor or beneficiary.representante_nombre_cifrado):
-        if not (
-            beneficiary.representante_nombre_cifrado
-            and beneficiary.representante_relacion
-            and beneficiary.representante_autoridad_verificada_en
-            and beneficiary.representante_autoridad_verificada_por
-        ):
-            blockers.append("autoridad_representante_no_verificada")
+
+    if case.tipo_sujeto == "persona":
+        beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id) if case.beneficiario_id else None
+        if beneficiary and beneficiary.es_menor:
+            if not (
+                beneficiary.representante_nombre_cifrado
+                and beneficiary.representante_relacion
+                and beneficiary.representante_autoridad_verificada_en
+                and beneficiary.representante_autoridad_verificada_por
+            ):
+                blockers.append("autoridad_representante_no_verificada")
 
     publication = db.query(models.PublicacionCasoAyuda).filter_by(caso_id=case.id).one_or_none()
     if publication is None:
@@ -983,14 +1001,15 @@ def _readiness_blockers(db, case):
         if evidence is None or evidence.caso_id != case.id or evidence.clasificacion != "privado":
             blockers.append("evidencia_consentimiento_faltante")
 
-    accounts = db.query(models.CuentaCasoAyuda).filter_by(caso_id=case.id).all()
-    latest_accounts = _latest_by_key(accounts, "account_key")
-    has_approved_account = bool(consent) and any(
-        account.estado == "aprobada" and account.consentimiento_version == consent.version
-        for account in latest_accounts
-    )
-    if not has_approved_account:
-        blockers.append("cuenta_aprobada_faltante")
+    if case.acepta_ayuda_monetaria:
+        accounts = db.query(models.CuentaCasoAyuda).filter_by(caso_id=case.id).all()
+        latest_accounts = _latest_by_key(accounts, "account_key")
+        has_approved_account = bool(consent) and any(
+            account.estado == "aprobada" and account.consentimiento_version == consent.version
+            for account in latest_accounts
+        )
+        if not has_approved_account:
+            blockers.append("cuenta_aprobada_faltante")
 
     documents = db.query(models.DocumentoCasoAyuda).filter_by(caso_id=case.id).all()
     latest_documents = _latest_by_key(documents, "document_key")
@@ -999,13 +1018,19 @@ def _readiness_blockers(db, case):
         document.estado_revision != "aprobado"
         or not consent
         or document.consentimiento_version != consent.version
-        or (
-            document.tipo == "informe_medico"
-            and (not document.revisado_por or document.revisado_por == document.cargado_por)
-        )
         for document in public_documents
     ):
-        blockers.append("documento_publico_sin_aprobacion_reforzada")
+        blockers.append("documento_publico_sin_aprobacion")
+
+    has_approved_primary_photo = bool(consent) and any(
+        document.tipo == "foto_principal"
+        and document.estado_revision == "aprobado"
+        and document.consentimiento_version == consent.version
+        for document in public_documents
+    )
+    if not has_approved_primary_photo:
+        blockers.append("foto_principal_faltante")
+
     return blockers
 
 
@@ -1101,10 +1126,13 @@ def get_current_public_case_document(db: Session, *, case_id: int, document_id: 
     )
 
 
+PUBLISHABLE_STATES = {"borrador", "pendiente_validacion", "listo_publicar"}
+
+
 def publish_help_case(db: Session, *, case_id: int, actor: ActorOrgContext):
     case = _get_managed_case(db, case_id, actor)
-    if case.estado != "listo_publicar":
-        raise CaseStateError("Solo un caso listo para publicar puede publicarse")
+    if case.estado not in PUBLISHABLE_STATES:
+        raise CaseStateError("Solo un caso en borrador, pendiente de validacion o listo para publicar puede publicarse")
     blockers = _readiness_blockers(db, case)
     if blockers:
         raise CaseReadinessError(blockers)

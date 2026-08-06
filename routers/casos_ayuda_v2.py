@@ -409,13 +409,24 @@ def _detail_response(db, case_id, actor):
         .order_by(models.DocumentoCasoAyuda.document_key, models.DocumentoCasoAyuda.version.desc())
         .all()
     )
+    relato_privado = (
+        cipher.decrypt(case.relato_privado_cifrado, field="case.story")
+        if case.relato_privado_cifrado
+        else None
+    )
+    conditional_detail = (
+        json.loads(cipher.decrypt(case.detalle_condicional_cifrado, field="case.conditional_detail"))
+        if case.detalle_condicional_cifrado
+        else {}
+    )
     return {
         **schemas.CasoAyudaV2ResumenResponse.model_validate(case).model_dump(),
         "readiness_blockers": blockers,
         "accounts": account_data,
+        "relato_privado": relato_privado,
+        "profesion": conditional_detail.get("profession"),
         "publicacion": publication_data,
         "verificacion": {
-            "registrada": bool(beneficiary and beneficiary.datos_verificacion_cifrado),
             "es_menor": bool(beneficiary and beneficiary.es_menor),
             "tiene_representante": bool(beneficiary and beneficiary.representante_relacion),
             "relacion_representante": beneficiary.representante_relacion if beneficiary and beneficiary.representante_relacion else None,
@@ -747,7 +758,7 @@ def update_organization_help_case(
         if payload.private_story is not None:
             private_story_encrypted = HelpDataCipher.from_environment().encrypt(
                 payload.private_story,
-                field="case.private_story",
+                field="case.story",
             )
         case = update_help_case(
             db,
@@ -758,6 +769,7 @@ def update_organization_help_case(
             goal_amount=payload.goal_amount,
             goal_currency=payload.goal_currency,
             private_story_encrypted=private_story_encrypted,
+            profession=payload.profession,
         )
         db.commit()
         db.refresh(case)
@@ -784,10 +796,6 @@ def verify_organization_help_case_beneficiary(
             db,
             case_id=case_id,
             actor=actor,
-            verification_data_encrypted=cipher.encrypt(
-                payload.verification_data,
-                field="beneficiary.verification",
-            ),
             is_minor=payload.is_minor,
             representative_name_encrypted=(
                 cipher.encrypt(payload.representative_name, field="beneficiary.representative_name")

@@ -442,6 +442,9 @@ class CasoAyudaV2ResumenResponse(BaseModel):
     organizacion_id: str
     titulo_interno: str
     categoria: str
+    tipo_sujeto: str
+    acepta_ayuda_monetaria: bool
+    acepta_ayuda_directa: bool
     meta_monto: Optional[Decimal] = None
     meta_moneda: Optional[str] = None
     monto_confirmado: Decimal
@@ -470,6 +473,7 @@ class CasoAyudaV2UpdateRequest(BaseModel):
     goal_amount: Optional[Decimal] = Field(default=None, gt=0, max_digits=18, decimal_places=2)
     goal_currency: Optional[Literal["VES", "USD", "EUR"]] = None
     private_story: Optional[str] = Field(default=None, min_length=2, max_length=10000)
+    profession: Optional[str] = Field(default=None, min_length=2, max_length=250)
 
 
 HelpCaseCategory = Literal["salud", "empleo", "insumo_recurso"]
@@ -502,7 +506,6 @@ class CasoAyudaV2DraftCreateRequest(BaseModel):
     story: str = Field(min_length=10, max_length=10000)
     goal_amount: Optional[Decimal] = Field(default=None, gt=0, max_digits=18, decimal_places=2)
     goal_currency: Optional[Literal["VES", "USD", "EUR"]] = None
-    direct_request: Optional[str] = Field(default=None, min_length=2, max_length=5000)
     profession: Optional[str] = Field(default=None, min_length=2, max_length=250)
     beneficiary_access_email: Optional[str] = Field(default=None, min_length=5, max_length=320)
 
@@ -553,7 +556,7 @@ class CasoAyudaV2DraftCreateRequest(BaseModel):
                 or modes != {"oferta_laboral"}
                 or not self.profession
                 or not self.beneficiary_access_email
-                or any((self.goal_amount, self.goal_currency, self.direct_request))
+                or any((self.goal_amount, self.goal_currency))
             ):
                 raise ValueError("El contrato de Empleo no es valido")
             return self
@@ -563,9 +566,6 @@ class CasoAyudaV2DraftCreateRequest(BaseModel):
         has_money = "monetaria" in modes
         if has_money != (self.goal_amount is not None and self.goal_currency is not None):
             raise ValueError("La modalidad monetaria requiere meta y moneda")
-        has_direct = "directa" in modes
-        if has_direct != (self.direct_request is not None):
-            raise ValueError("La modalidad directa requiere la ayuda solicitada")
         if self.profession or self.beneficiary_access_email:
             raise ValueError("Los campos laborales solo aplican a Empleo")
         return self
@@ -576,7 +576,6 @@ class CasoAyudaV2DraftUpdateRequest(BaseModel):
     story: Optional[str] = Field(default=None, min_length=10, max_length=10000)
     goal_amount: Optional[Decimal] = Field(default=None, gt=0, max_digits=18, decimal_places=2)
     goal_currency: Optional[Literal["VES", "USD", "EUR"]] = None
-    direct_request: Optional[str] = Field(default=None, min_length=2, max_length=5000)
     profession: Optional[str] = Field(default=None, min_length=2, max_length=250)
     beneficiary_access_email: Optional[str] = Field(default=None, min_length=5, max_length=320)
 
@@ -704,7 +703,6 @@ class PublicacionCasoAyudaResumenResponse(BaseModel):
 
 
 class VerificacionCasoAyudaResumenResponse(BaseModel):
-    registrada: bool
     es_menor: bool
     tiene_representante: bool
     relacion_representante: Optional[str] = None
@@ -742,6 +740,8 @@ class DocumentoCasoAyudaResumenResponse(BaseModel):
 class CasoAyudaV2DetalleResponse(CasoAyudaV2ResumenResponse):
     readiness_blockers: List[str]
     accounts: List[CuentaCasoAyudaResumenResponse] = []
+    relato_privado: Optional[str] = None
+    profesion: Optional[str] = None
     publicacion: Optional[PublicacionCasoAyudaResumenResponse] = None
     verificacion: VerificacionCasoAyudaResumenResponse
     consentimiento: ConsentimientoCasoAyudaResumenResponse
@@ -750,7 +750,6 @@ class CasoAyudaV2DetalleResponse(CasoAyudaV2ResumenResponse):
 
 
 class BeneficiarioAyudaVerificacionRequest(BaseModel):
-    verification_data: str = Field(min_length=2, max_length=10000)
     is_minor: bool = False
     representative_name: Optional[str] = Field(default=None, min_length=2, max_length=500)
     representative_relationship: Optional[str] = Field(default=None, min_length=2, max_length=100)
@@ -758,7 +757,7 @@ class BeneficiarioAyudaVerificacionRequest(BaseModel):
 
 
 class PublicacionCasoAyudaRequest(BaseModel):
-    public_name: str = Field(min_length=1, max_length=200)
+    public_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     public_title: str = Field(min_length=3, max_length=250)
     public_description: str = Field(min_length=10, max_length=10000)
     general_location: Optional[str] = Field(default=None, max_length=200)

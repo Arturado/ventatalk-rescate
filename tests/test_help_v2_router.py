@@ -104,6 +104,9 @@ def test_list_endpoint_returns_only_safe_fields_from_actor_organization():
         "organizacion_id",
         "titulo_interno",
         "categoria",
+        "tipo_sujeto",
+        "acepta_ayuda_monetaria",
+        "acepta_ayuda_directa",
         "meta_monto",
         "meta_moneda",
         "monto_confirmado",
@@ -218,10 +221,10 @@ def test_detail_endpoint_returns_protected_beneficiary_summary_and_readiness(cry
     assert response.status_code == 200
     assert response.json()["id"] == created["id"]
     assert set(response.json()["readiness_blockers"]) == {
-        "identidad_no_verificada",
         "publicacion_no_configurada",
         "consentimiento_vigente_faltante",
         "cuenta_aprobada_faltante",
+        "foto_principal_faltante",
     }
     assert response.json()["beneficiario"] == {
         "nombre_legal": "Nombre privado",
@@ -248,13 +251,38 @@ def test_update_endpoint_encrypts_private_story_and_audits_fields(crypto_environ
 
     assert response.status_code == 200
     assert response.json()["titulo_interno"] == "Tratamiento actualizado"
-    assert marker not in response.text
+    assert response.json()["relato_privado"] == marker
     with TestingSessionLocal() as db:
         case = db.get(models.CasoAyudaV2, created["id"])
         assert case.relato_privado_cifrado.startswith("enc:v1:")
         assert marker not in case.relato_privado_cifrado
         audit = db.query(models.AuditoriaCasoAyuda).filter_by(accion="caso_actualizado").one()
         assert marker not in audit.metadata_json
+
+
+def test_update_endpoint_encrypts_profession_inside_conditional_detail(crypto_environment):
+    created = client.post("/api/v2/casos-ayuda", json={
+        "beneficiary_name": "Nombre privado",
+        "beneficiary_identity": "V-13579246",
+        "internal_title": "Tratamiento inicial",
+        "category": "medicamentos",
+        "goal_amount": "250.00",
+        "goal_currency": "USD",
+    }).json()
+    marker = "PROFESION-PRIVADA-MARKER"
+
+    response = client.patch(f"/api/v2/casos-ayuda/{created['id']}", json={"profession": marker})
+
+    assert response.status_code == 200
+    assert response.json()["profesion"] == marker
+    with TestingSessionLocal() as db:
+        case = db.get(models.CasoAyudaV2, created["id"])
+        assert case.detalle_condicional_cifrado.startswith("enc:v1:")
+        assert marker not in case.detalle_condicional_cifrado
+
+    updated_marker = "PROFESION-ACTUALIZADA-MARKER"
+    second_response = client.patch(f"/api/v2/casos-ayuda/{created['id']}", json={"profession": updated_marker})
+    assert second_response.json()["profesion"] == updated_marker
 
 
 def test_submit_and_ready_endpoints_expose_only_blocker_codes(crypto_environment):
@@ -286,11 +314,9 @@ def test_verification_endpoint_encrypts_private_data_and_updates_blockers(crypto
         "goal_amount": "250.00",
         "goal_currency": "USD",
     }).json()
-    verification_marker = "VERIFICACION-PRIVADA-MARKER"
     representative_marker = "REPRESENTANTE-PRIVADO-MARKER"
 
     response = client.post(f"/api/v2/casos-ayuda/{created['id']}/verificacion", json={
-        "verification_data": verification_marker,
         "is_minor": True,
         "representative_name": representative_marker,
         "representative_relationship": "madre",
@@ -298,15 +324,11 @@ def test_verification_endpoint_encrypts_private_data_and_updates_blockers(crypto
     })
 
     assert response.status_code == 200
-    assert "identidad_no_verificada" not in response.json()["readiness_blockers"]
     assert "autoridad_representante_no_verificada" not in response.json()["readiness_blockers"]
-    assert verification_marker not in response.text
     assert representative_marker not in response.text
     with TestingSessionLocal() as db:
         beneficiary = db.query(models.BeneficiarioAyuda).one()
-        assert beneficiary.datos_verificacion_cifrado.startswith("enc:v1:")
         assert beneficiary.representante_nombre_cifrado.startswith("enc:v1:")
-        assert verification_marker not in beneficiary.datos_verificacion_cifrado
         assert representative_marker not in beneficiary.representante_nombre_cifrado
 
 
@@ -615,8 +637,6 @@ def test_exceptional_account_is_pending_and_creator_cannot_approve(crypto_enviro
 
 def make_publishable_case(db, case_id):
     case = db.get(models.CasoAyudaV2, case_id)
-    beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id)
-    beneficiary.datos_verificacion_cifrado = "enc:v1:verification"
     evidence = models.DocumentoCasoAyuda(
         caso_id=case.id,
         document_key=f"consent-publish-{case.id}",
@@ -667,6 +687,21 @@ def make_publishable_case(db, case_id):
         estado="aprobada",
         creado_por="coordinador@example.com",
         aprobado_por="coordinador@example.com",
+    ))
+    db.add(models.DocumentoCasoAyuda(
+        caso_id=case.id,
+        document_key=f"foto-principal-{case.id}",
+        version=1,
+        tipo="foto_principal",
+        clasificacion="publico",
+        estado_revision="aprobado",
+        storage_path=f"public/casos-ayuda/{case.id}/photo.enc",
+        content_type="image/jpeg",
+        size_bytes=100,
+        checksum_sha256="p" * 64,
+        consentimiento_version=1,
+        cargado_por="coordinador@example.com",
+        revisado_por="coordinador@example.com",
     ))
     db.flush()
     case.estado = "listo_publicar"

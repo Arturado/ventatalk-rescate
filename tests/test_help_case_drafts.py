@@ -79,7 +79,6 @@ def campana_payload(**overrides):
         aid_modes=["directa"],
         title="Colecta de colchones",
         story="Necesitamos colchones para el centro de refugio" * 2,
-        direct_request="Colchones individuales",
     )
     data.update(overrides)
     return schemas.CasoAyudaV2DraftCreateRequest(**data)
@@ -129,7 +128,7 @@ def test_creates_campana_draft_without_beneficiary_and_no_financial_fields():
 
         case = db.query(models.CasoAyudaV2).filter_by(public_id=summary["public_id"]).one()
         assert case.beneficiario_id is None
-        assert case.detalle_condicional_cifrado is not None
+        assert case.detalle_condicional_cifrado is None
 
 
 def test_reused_identity_reuses_beneficiary_across_two_drafts_same_organization():
@@ -175,7 +174,10 @@ def test_beneficiary_verification_on_campaign_case_fails_closed_not_crash():
                 db,
                 case_id=summary["id"],
                 actor=actor(),
-                verification_data_encrypted="enc:v1:whatever",
+                is_minor=True,
+                representative_name_encrypted="enc:v1:whatever",
+                representative_relationship="madre",
+                representative_authority_verified=True,
             )
 
 

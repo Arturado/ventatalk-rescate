@@ -154,7 +154,7 @@ def test_document_registration_preserves_versions_and_private_paths():
         assert db.query(models.DocumentoCasoAyuda).count() == 2
 
 
-def test_public_document_requires_current_consent_and_public_path():
+def test_public_document_without_consent_uploads_with_null_consent_version():
     with TestingSessionLocal() as db:
         case = create_draft(db)
         document_data = {
@@ -168,20 +168,42 @@ def test_public_document_requires_current_consent_and_public_path():
             "size_bytes": 100,
             "checksum_sha256": "a" * 64,
         }
+        document = register_case_document(db, **document_data)
+        assert document.consentimiento_version is None
+
+        mismatched = {**document_data, "storage_path": "private/cases/report.pdf"}
         with pytest.raises(HelpCaseDomainError):
-            register_case_document(db, **document_data)
+            register_case_document(db, **mismatched)
 
         consent = add_consent(db, case)
-        document_data["storage_path"] = "private/cases/report.pdf"
-        with pytest.raises(HelpCaseDomainError):
-            register_case_document(db, **document_data)
+        covered = register_case_document(db, **{**document_data, "storage_path": "public/cases/report-v2.pdf"})
+        assert covered.consentimiento_version == consent.version
 
-        document_data["storage_path"] = "public/cases/report.pdf"
-        document = register_case_document(db, **document_data)
+
+def test_registering_consent_retroactively_covers_documents_uploaded_before_it():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        document = register_case_document(
+            db,
+            case_id=case.id,
+            actor=actor(),
+            document_key="medical-report",
+            document_type="informe_medico",
+            classification="publico",
+            storage_path="public/cases/report.pdf",
+            content_type="application/pdf",
+            size_bytes=100,
+            checksum_sha256="a" * 64,
+        )
+        assert document.consentimiento_version is None
+
+        consent = add_consent(db, case)
+
+        db.refresh(document)
         assert document.consentimiento_version == consent.version
 
 
-def test_public_medical_document_requires_distinct_reviewer():
+def test_public_medical_document_auto_approves_on_upload():
     with TestingSessionLocal() as db:
         case = create_draft(db)
         add_consent(db, case)
@@ -198,17 +220,17 @@ def test_public_medical_document_requires_distinct_reviewer():
             checksum_sha256="a" * 64,
         )
 
-        with pytest.raises(HelpCaseDomainError):
-            review_case_document(db, document_id=document.id, actor=actor(), approve=True)
+        assert document.estado_revision == "aprobado"
+        assert document.revisado_por == "coordinador@example.com"
 
-        reviewed = review_case_document(
+        rejected = review_case_document(
             db,
             document_id=document.id,
-            actor=actor(email="revisor@example.com"),
-            approve=True,
+            actor=actor(),
+            approve=False,
+            reason="Version incorrecta",
         )
-        assert reviewed.estado_revision == "aprobado"
-        assert reviewed.revisado_por == "revisor@example.com"
+        assert rejected.estado_revision == "rechazado"
 
 
 def test_document_review_hides_document_from_another_organization():

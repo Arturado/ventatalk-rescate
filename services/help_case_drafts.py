@@ -11,6 +11,7 @@ from services.help_cases import (
     HelpCaseDomainError,
     _add_audit_event,
     _require_organization_access,
+    configure_help_case_publication,
 )
 from services.help_crypto import HelpDataCipher
 from services.help_idempotency import hash_idempotency_payload
@@ -31,7 +32,6 @@ def _conditional_detail_json(payload):
     detail = {
         "profession": payload.profession,
         "beneficiary_access_email": payload.beneficiary_access_email,
-        "direct_request": payload.direct_request,
     }
     return {key: value for key, value in detail.items() if value is not None}
 
@@ -141,6 +141,15 @@ def create_help_case_draft(
     )
     db.add(case)
     db.flush()
+
+    configure_help_case_publication(
+        db,
+        case_id=case.id,
+        actor=actor,
+        public_title=payload.title,
+        public_description=payload.story,
+        public_name=payload.beneficiary_name if payload.subject_type == "persona" else None,
+    )
 
     if beneficiary is not None and beneficiary_created:
         _add_audit_event(

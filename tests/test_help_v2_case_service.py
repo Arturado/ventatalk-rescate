@@ -1,3 +1,4 @@
+import base64
 from decimal import Decimal
 
 import pytest
@@ -8,6 +9,8 @@ from sqlalchemy.pool import StaticPool
 from database import Base
 from dependencies import ActorOrgContext
 import models
+import schemas
+from services.help_case_drafts import create_help_case_draft
 from services.help_cases import (
     CaseNotFoundError,
     CaseLifecycleAccessError,
@@ -27,6 +30,7 @@ from services.help_cases import (
     transition_help_case,
     update_help_case,
 )
+from services.help_crypto import HelpDataCipher
 
 
 engine = create_engine(
@@ -54,6 +58,32 @@ def isolated_database():
     Base.metadata.drop_all(bind=engine)
 
 
+@pytest.fixture(autouse=True)
+def cipher_env(monkeypatch):
+    monkeypatch.setenv("HELP_DATA_ENCRYPTION_KEY_V1", base64.b64encode(b"0" * 32).decode())
+    monkeypatch.setenv("HELP_DATA_ACTIVE_KEY_VERSION", "v1")
+    monkeypatch.setenv("HELP_IDENTITY_HASH_KEY", base64.b64encode(b"1" * 32).decode())
+
+
+def create_campaign_draft(db, *, organization_id="org-1"):
+    summary, _created = create_help_case_draft(
+        db,
+        actor=actor(organization_id=organization_id),
+        organization_id=organization_id,
+        public_id="service-campaign-1",
+        payload=schemas.CasoAyudaV2DraftCreateRequest(
+            category="insumo_recurso",
+            subject_type="campana_organizacion",
+            aid_modes=["directa"],
+            title="Colecta de colchones",
+            story="Necesitamos colchones para el centro de refugio de la zona.",
+        ),
+        idempotency_key="service-campaign-key-0000001",
+        cipher=HelpDataCipher.from_environment(),
+    )
+    return db.query(models.CasoAyudaV2).filter_by(id=summary["id"]).one()
+
+
 def actor(*, organization_id="org-1", role="coordinador"):
     return ActorOrgContext(
         organizacion_id=organization_id,
@@ -79,8 +109,6 @@ def create_draft(db, *, suffix="1", organization_id="org-1", actor_context=None)
 
 
 def add_complete_publication_requirements(db, case, *, account_version=1):
-    beneficiary = db.get(models.BeneficiarioAyuda, case.beneficiario_id)
-    beneficiary.datos_verificacion_cifrado = "encrypted-verification"
     evidence = models.DocumentoCasoAyuda(
         caso_id=case.id,
         document_key="consent-evidence",
@@ -132,7 +160,22 @@ def add_complete_publication_requirements(db, case, *, account_version=1):
         creado_por="coordinador@example.com",
         aprobado_por="coordinador@example.com",
     )
-    db.add_all([consent, publication, account])
+    photo = models.DocumentoCasoAyuda(
+        caso_id=case.id,
+        document_key="foto_principal",
+        version=1,
+        tipo="foto_principal",
+        clasificacion="publico",
+        estado_revision="aprobado",
+        storage_path=f"public/cases/{case.id}/photo.jpg",
+        content_type="image/jpeg",
+        size_bytes=2048,
+        checksum_sha256="f" * 64,
+        consentimiento_version=1,
+        cargado_por="coordinador@example.com",
+        revisado_por="coordinador@example.com",
+    )
+    db.add_all([consent, publication, account, photo])
     db.flush()
     return consent, account
 
@@ -192,10 +235,10 @@ def test_readiness_reports_missing_requirements_without_changing_state():
             mark_help_case_ready(db, case_id=case.id, actor=actor())
 
         assert set(error.value.blockers) == {
-            "identidad_no_verificada",
             "publicacion_no_configurada",
             "consentimiento_vigente_faltante",
             "cuenta_aprobada_faltante",
+            "foto_principal_faltante",
         }
         assert case.estado == "pendiente_validacion"
 
@@ -245,7 +288,7 @@ def test_latest_account_version_must_be_approved_and_covered_by_consent():
         assert error.value.blockers == ["cuenta_aprobada_faltante"]
 
 
-def test_public_medical_document_requires_distinct_approval_for_current_consent():
+def test_self_approved_public_medical_document_no_longer_blocks_readiness():
     with TestingSessionLocal() as db:
         case = create_draft(db)
         add_complete_publication_requirements(db, case)
@@ -266,10 +309,82 @@ def test_public_medical_document_requires_distinct_approval_for_current_consent(
         ))
         submit_help_case_for_validation(db, case_id=case.id, actor=actor())
 
+        ready = mark_help_case_ready(db, case_id=case.id, actor=actor())
+
+        assert ready.estado == "listo_publicar"
+
+
+def test_pending_public_document_still_blocks_readiness():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        add_complete_publication_requirements(db, case)
+        db.add(models.DocumentoCasoAyuda(
+            caso_id=case.id,
+            document_key="medical-report",
+            version=1,
+            tipo="informe_medico",
+            clasificacion="publico",
+            estado_revision="pendiente",
+            storage_path=f"public/cases/{case.id}/report.pdf",
+            content_type="application/pdf",
+            size_bytes=1024,
+            checksum_sha256="m" * 64,
+            consentimiento_version=1,
+            cargado_por="coordinador@example.com",
+        ))
+        submit_help_case_for_validation(db, case_id=case.id, actor=actor())
+
         with pytest.raises(CaseReadinessError) as error:
             mark_help_case_ready(db, case_id=case.id, actor=actor())
 
-        assert error.value.blockers == ["documento_publico_sin_aprobacion_reforzada"]
+        assert error.value.blockers == ["documento_publico_sin_aprobacion"]
+
+
+def test_case_without_primary_photo_is_blocked():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        publication = models.PublicacionCasoAyuda(
+            caso_id=case.id,
+            nombre_publico="Ana",
+            titulo_publico="Ayuda para tratamiento",
+            descripcion_publica="Descripcion autorizada",
+            version=1,
+            configurado_por="coordinador@example.com",
+        )
+        consent = models.ConsentimientoCasoAyuda(
+            caso_id=case.id,
+            version=1,
+            texto_version="mvp1-v1",
+            alcance_json="{}",
+            firmante_nombre_cifrado="encrypted-signer",
+            registrado_por="coordinador@example.com",
+        )
+        account = models.CuentaCasoAyuda(
+            caso_id=case.id,
+            account_key="account-1",
+            version=1,
+            tipo_titular="beneficiario",
+            titular_nombre_cifrado="encrypted-holder",
+            relacion_beneficiario="propia",
+            medio="banco_venezolano",
+            moneda="USD",
+            identificador_cifrado="encrypted-account",
+            responsable_nombre_cifrado="encrypted-responsible",
+            responsable_email_hash="b" * 64,
+            responsable_email_cifrado="encrypted-email",
+            consentimiento_version=1,
+            estado="aprobada",
+            creado_por="coordinador@example.com",
+            aprobado_por="coordinador@example.com",
+        )
+        db.add_all([publication, consent, account])
+        db.flush()
+        submit_help_case_for_validation(db, case_id=case.id, actor=actor())
+
+        with pytest.raises(CaseReadinessError) as error:
+            mark_help_case_ready(db, case_id=case.id, actor=actor())
+
+        assert error.value.blockers == ["foto_principal_faltante"]
 
 
 def test_complete_case_becomes_ready_and_records_audit_event():
@@ -498,7 +613,6 @@ def test_minor_verification_requires_complete_representative_authority():
                 db,
                 case_id=case.id,
                 actor=actor(),
-                verification_data_encrypted="encrypted-verification",
                 is_minor=True,
             )
 
@@ -506,7 +620,6 @@ def test_minor_verification_requires_complete_representative_authority():
             db,
             case_id=case.id,
             actor=actor(),
-            verification_data_encrypted="encrypted-verification",
             is_minor=True,
             representative_name_encrypted="encrypted-representative",
             representative_relationship="madre",
@@ -544,6 +657,20 @@ def test_publication_configuration_is_upserted_with_increasing_version():
         assert second.version == 2
         assert db.query(models.PublicacionCasoAyuda).count() == 1
         assert db.query(models.AuditoriaCasoAyuda).filter_by(accion="publicacion_configurada").count() == 2
+
+
+def test_publication_defaults_public_name_to_public_title_when_omitted():
+    with TestingSessionLocal() as db:
+        case = create_draft(db)
+        publication = configure_help_case_publication(
+            db,
+            case_id=case.id,
+            actor=actor(),
+            public_title="Esmeril para busqueda y rescate",
+            public_description="Necesitamos esmeril para seguir ayudando",
+        )
+
+        assert publication.nombre_publico == "Esmeril para busqueda y rescate"
 
 
 @pytest.mark.parametrize("role", ["admin", "super_admin"])
@@ -711,4 +838,65 @@ def test_representative_cannot_sign_without_verified_authority():
                 signer_name_encrypted="encrypted-representative",
                 signer_type="representante",
                 evidence_document_id=evidence.id,
+            )
+
+
+def test_campaign_case_without_consent_is_blocked_by_generic_consent_check():
+    with TestingSessionLocal() as db:
+        case = create_campaign_draft(db)
+        db.add(models.DocumentoCasoAyuda(
+            caso_id=case.id,
+            document_key="foto_principal",
+            version=1,
+            tipo="foto_principal",
+            clasificacion="publico",
+            estado_revision="aprobado",
+            storage_path=f"public/cases/{case.id}/photo.jpg",
+            content_type="image/jpeg",
+            size_bytes=2048,
+            checksum_sha256="c" * 64,
+            consentimiento_version=1,
+            cargado_por="coordinador@example.com",
+            revisado_por="coordinador@example.com",
+        ))
+        db.flush()
+        submit_help_case_for_validation(db, case_id=case.id, actor=actor())
+
+        with pytest.raises(CaseReadinessError) as error:
+            mark_help_case_ready(db, case_id=case.id, actor=actor())
+
+        assert "consentimiento_vigente_faltante" in error.value.blockers
+
+
+def test_campaign_case_can_register_consent_without_beneficiary():
+    with TestingSessionLocal() as db:
+        case = create_campaign_draft(db)
+
+        consent = register_help_case_consent(
+            db,
+            case_id=case.id,
+            actor=actor(),
+            text_version="mvp1-v1",
+            scope_json="{}",
+            signer_name_encrypted="encrypted-org-representative",
+            signer_type="representante",
+        )
+
+        assert consent.caso_id == case.id
+        assert consent.firmante_tipo == "representante"
+
+
+def test_campaign_case_rejects_beneficiario_signer_type():
+    with TestingSessionLocal() as db:
+        case = create_campaign_draft(db)
+
+        with pytest.raises(HelpCaseDomainError):
+            register_help_case_consent(
+                db,
+                case_id=case.id,
+                actor=actor(),
+                text_version="mvp1-v1",
+                scope_json="{}",
+                signer_name_encrypted="encrypted-org-representative",
+                signer_type="beneficiario",
             )

@@ -22,7 +22,6 @@ def test_person_health_draft_accepts_money_and_direct_aid():
         story="Necesita apoyo para completar su tratamiento.",
         goal_amount="250.50",
         goal_currency="USD",
-        direct_request="Insumos medicos",
     )
 
     assert request.beneficiary_identity == "V-11111111"
@@ -37,7 +36,6 @@ def test_organization_campaign_does_not_require_a_beneficiary():
         aid_modes=["directa"],
         title="Colchones para el refugio",
         story="Campana para equipar el area de descanso.",
-        direct_request="Colchones individuales",
     )
 
     assert request.beneficiary_name is None
@@ -90,7 +88,6 @@ def test_employment_requires_person_profession_and_access_email_without_financia
             "beneficiary_name": "Dato prohibido",
             "title": "Campana de insumos",
             "story": "Descripcion publica suficientemente extensa.",
-            "direct_request": "Colchones",
         },
         {
             "category": "salud",
@@ -101,15 +98,6 @@ def test_employment_requires_person_profession_and_access_email_without_financia
             "title": "Tratamiento medico",
             "story": "Descripcion publica suficientemente extensa.",
             "goal_amount": "10",
-        },
-        {
-            "category": "salud",
-            "subject_type": "persona",
-            "aid_modes": ["directa"],
-            "beneficiary_name": "Ana Perez",
-            "beneficiary_identity": "V-11111111",
-            "title": "Tratamiento medico",
-            "story": "Descripcion publica suficientemente extensa.",
         },
     ],
 )
