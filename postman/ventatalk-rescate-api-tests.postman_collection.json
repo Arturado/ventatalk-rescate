@@ -2514,7 +2514,7 @@
             "url": "{{base_url}}/api/v2/casos-ayuda/borradores",
             "body": {
               "mode": "raw",
-              "raw": "{\"organizacion_id\": \"{{v2_organization_id}}\", \"category\": \"insumo_recurso\", \"subject_type\": \"campana_organizacion\", \"aid_modes\": [\"directa\"], \"title\": \"Colecta de colchones Postman\", \"story\": \"Necesitamos colchones para un centro de refugio, coleccion de pruebas Postman.\", \"direct_request\": \"Colchones individuales nuevos o en buen estado\"}"
+              "raw": "{\"organizacion_id\": \"{{v2_organization_id}}\", \"category\": \"insumo_recurso\", \"subject_type\": \"campana_organizacion\", \"aid_modes\": [\"directa\"], \"title\": \"Colecta de colchones Postman\", \"story\": \"Necesitamos colchones para un centro de refugio, coleccion de pruebas Postman.\"}"
             }
           },
           "event": [
@@ -2720,6 +2720,2148 @@
           ]
         }
       ]
+    },
+    {
+      "name": "09 - Spec 004 Fase 2 (persona salud - ciclo completo)",
+      "item": [
+        {
+          "name": "01 - Crear borrador persona Salud monetaria",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{v2_fase2_salud_idempotency_key}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/borradores",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"organizacion_id\": \"{{v2_organization_id}}\", \"category\": \"salud\", \"subject_type\": \"persona\", \"aid_modes\": [\"monetaria\"], \"beneficiary_name\": \"Beneficiario Fase2 Salud\", \"beneficiary_identity\": \"{{v2_fase2_salud_identity}}\", \"title\": \"Necesidad de prueba Fase 2 Salud\", \"story\": \"Historia clinica resumida generada desde Postman para validar el ciclo completo de Fase 2.\", \"goal_amount\": 250.0, \"goal_currency\": \"USD\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('v2_fase2_salud_idempotency_key', 'postman-fase2-salud-' + Date.now());",
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('v2_fase2_salud_case_id', String(body.id));",
+                  "pm.collectionVariables.set('v2_fase2_salud_public_id', body.public_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 - Detalle confirma auto-publicacion y sin blockers de identidad",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_salud_case_id}}"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('tipo_sujeto y modalidad monetaria expuestos', () => {",
+                  "  pm.expect(body.tipo_sujeto).to.eql('persona');",
+                  "  pm.expect(body.acepta_ayuda_monetaria).to.eql(true);",
+                  "  pm.expect(body.acepta_ayuda_directa).to.eql(false);",
+                  "});",
+                  "pm.test('publicacion ya quedo auto-configurada al crear el borrador', () => {",
+                  "  pm.expect(body.publicacion).to.not.be.null;",
+                  "  pm.expect(body.publicacion.titulo_publico).to.eql('Necesidad de prueba Fase 2 Salud');",
+                  "  pm.expect(body.publicacion.nombre_publico).to.eql('Beneficiario Fase2 Salud');",
+                  "});",
+                  "pm.test('no exige verificacion de identidad (paso eliminado)', () => {",
+                  "  pm.expect(body.readiness_blockers).to.not.include('identidad_no_verificada');",
+                  "  pm.expect(body.readiness_blockers).to.not.include('publicacion_no_configurada');",
+                  "});",
+                  "pm.test('relato queda disponible para el propio formulario', () => {",
+                  "  pm.expect(body.relato_privado).to.include('Historia clinica resumida');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 - Subir informe medico ANTES del consentimiento (sin cobertura)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_salud_case_id}}/documentos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"document_key\": \"informe-medico-fase2\", \"document_type\": \"informe_medico\", \"classification\": \"publico\", \"file_name\": \"informe.pdf\", \"content_type\": \"application/pdf\", \"content_base64\": \"JVBERi0xLjQgSW5mb3JtZSBtZWRpY28gUG9zdG1hbiBGYXNlMg==\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('se aprueba automaticamente sin paso de revision manual', () => {",
+                  "  pm.expect(body.estado_revision).to.eql('aprobado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 - Subir foto principal ANTES del consentimiento (sin cobertura)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_salud_case_id}}/documentos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"document_key\": \"foto-principal-fase2\", \"document_type\": \"foto_principal\", \"classification\": \"publico\", \"file_name\": \"foto.png\", \"content_type\": \"image/png\", \"content_base64\": \"iVBORw0KGgpQT1NUTUFOLUZPVE8tUFJJTkNJUEFMLUZBU0Uy\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 - Detalle ANTES del consentimiento sigue bloqueado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_salud_case_id}}"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('sin consentimiento vigente, los documentos publicos no cuentan como aprobados para publicar', () => {",
+                  "  pm.expect(body.readiness_blockers).to.include('documento_publico_sin_aprobacion');",
+                  "  pm.expect(body.readiness_blockers).to.include('foto_principal_faltante');",
+                  "  pm.expect(body.readiness_blockers).to.include('consentimiento_vigente_faltante');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 - Registrar consentimiento del propio beneficiario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_salud_case_id}}/consentimiento",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"text_version\": \"mvp1-v1\", \"scope\": {\"publicacion\": true, \"cuentas\": true}, \"signer_name\": \"Beneficiario Fase2 Salud\", \"signer_type\": \"beneficiario\", \"evidence_file_name\": \"consentimiento.pdf\", \"evidence_content_type\": \"application/pdf\", \"evidence_base64\": \"JVBERi0xLjQgQ29uc2VudGltaWVudG8gUG9zdG1hbiBGYXNlMg==\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('consentimiento queda registrado y vigente', () => {",
+                  "  pm.expect(body.consentimiento.registrado).to.eql(true);",
+                  "  pm.expect(body.consentimiento.vigente).to.eql(true);",
+                  "  pm.expect(body.consentimiento.tipo_firmante).to.eql('beneficiario');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 - Detalle confirma cobertura retroactiva de los documentos previos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_salud_case_id}}"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('los mismos documentos ya quedan cubiertos, sin volver a subirlos', () => {",
+                  "  pm.expect(body.readiness_blockers).to.not.include('documento_publico_sin_aprobacion');",
+                  "  pm.expect(body.readiness_blockers).to.not.include('foto_principal_faltante');",
+                  "});",
+                  "pm.test('solo falta la cuenta receptora', () => {",
+                  "  pm.expect(body.readiness_blockers).to.eql(['cuenta_aprobada_faltante']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 - Registrar cuenta receptora del beneficiario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_salud_case_id}}/cuentas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"account_key\": \"principal\", \"owner_type\": \"beneficiario\", \"holder_name\": \"Beneficiario Fase2 Salud\", \"beneficiary_relationship\": \"propia\", \"medium\": \"banco_venezolano\", \"currency\": \"USD\", \"identifier\": \"0102-0000-00-0000000000\", \"responsible_name\": \"Beneficiario Fase2 Salud\", \"responsible_email\": \"beneficiario.fase2@example.test\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('la cuenta queda aprobada de inmediato (no excepcional)', () => {",
+                  "  pm.expect(body.accounts[0].estado).to.eql('aprobada');",
+                  "});",
+                  "pm.test('ya no quedan requisitos pendientes para publicar', () => {",
+                  "  pm.expect(body.readiness_blockers).to.eql([]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09 - Publicar caso directamente desde borrador (flujo nuevo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_salud_case_id}}/publicar"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.estado).to.eql('publicado');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10 - Consultar detalle publico ya visible",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v2/public/casos-ayuda/{{v2_fase2_salud_public_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('titulo y nombre publicos coinciden con lo cargado al crear el borrador', () => {",
+                  "  pm.expect(body.titulo_publico).to.eql('Necesidad de prueba Fase 2 Salud');",
+                  "  pm.expect(body.nombre_publico).to.eql('Beneficiario Fase2 Salud');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 - Spec 004 Fase 2 (persona empleo - ciclo completo)",
+      "item": [
+        {
+          "name": "01 - Crear borrador persona Empleo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{v2_fase2_empleo_idempotency_key}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/borradores",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"organizacion_id\": \"{{v2_organization_id}}\", \"category\": \"empleo\", \"subject_type\": \"persona\", \"aid_modes\": [\"oferta_laboral\"], \"beneficiary_name\": \"Beneficiario Fase2 Empleo\", \"beneficiary_identity\": \"{{v2_fase2_empleo_identity}}\", \"title\": \"Busco empleo de carpintero Fase 2\", \"story\": \"Cuento con experiencia en carpinteria y pintura generada desde Postman para Fase 2.\", \"profession\": \"Carpintero\", \"beneficiary_access_email\": \"carpintero.fase2@example.test\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('v2_fase2_empleo_idempotency_key', 'postman-fase2-empleo-' + Date.now());",
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('aid_modes se fija a oferta_laboral', () => pm.expect(body.aid_modes).to.eql(['oferta_laboral']));",
+                  "pm.collectionVariables.set('v2_fase2_empleo_case_id', String(body.id));",
+                  "pm.collectionVariables.set('v2_fase2_empleo_public_id', body.public_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 - Detalle expone la profesion y sin campos monetarios",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_empleo_case_id}}"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('la profesion queda disponible para el formulario (antes era escribir sin leer)', () => {",
+                  "  pm.expect(body.profesion).to.eql('Carpintero');",
+                  "});",
+                  "pm.test('empleo no acepta modalidad monetaria ni directa', () => {",
+                  "  pm.expect(body.acepta_ayuda_monetaria).to.eql(false);",
+                  "  pm.expect(body.acepta_ayuda_directa).to.eql(false);",
+                  "  pm.expect(body.meta_monto).to.be.null;",
+                  "});",
+                  "pm.test('publicacion auto-configurada desde la creacion', () => {",
+                  "  pm.expect(body.readiness_blockers).to.not.include('publicacion_no_configurada');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 - Editar la profesion desde el formulario del caso",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_empleo_case_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"profession\": \"Carpintero y pintor\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.profesion).to.eql('Carpintero y pintor');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 - Subir CV (tipo de documento permitido para empleo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_empleo_case_id}}/documentos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"document_key\": \"cv-fase2\", \"document_type\": \"cv\", \"classification\": \"publico\", \"file_name\": \"cv.pdf\", \"content_type\": \"application/pdf\", \"content_base64\": \"JVBERi0xLjQgQ1YgUG9zdG1hbiBGYXNlMiBDYXJwaW50ZXJv\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 201', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().estado_revision).to.eql('aprobado');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 - Subir foto principal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_empleo_case_id}}/documentos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"document_key\": \"foto-principal-fase2-empleo\", \"document_type\": \"foto_principal\", \"classification\": \"publico\", \"file_name\": \"foto.png\", \"content_type\": \"image/png\", \"content_base64\": \"iVBORw0KGgpQT1NUTUFOLUZPVE8tUFJJTkNJUEFMLUZBU0Uy\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 - Registrar consentimiento del propio beneficiario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_empleo_case_id}}/consentimiento",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"text_version\": \"mvp1-v1\", \"scope\": {\"publicacion\": true}, \"signer_name\": \"Beneficiario Fase2 Empleo\", \"signer_type\": \"beneficiario\", \"evidence_file_name\": \"consentimiento.pdf\", \"evidence_content_type\": \"application/pdf\", \"evidence_base64\": \"JVBERi0xLjQgQ29uc2VudGltaWVudG8gUG9zdG1hbiBGYXNlMg==\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 - Detalle sin requisitos pendientes (no requiere cuenta receptora)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_empleo_case_id}}"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('empleo no exige cuenta receptora para publicar', () => {",
+                  "  pm.expect(body.readiness_blockers).to.eql([]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 - Publicar caso de empleo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_empleo_case_id}}/publicar"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().estado).to.eql('publicado');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11 - Spec 004 Fase 2 (campana organizacion - ciclo completo)",
+      "item": [
+        {
+          "name": "01 - Crear borrador campana Insumo/Recurso",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{v2_fase2_campana_idempotency_key}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/borradores",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"organizacion_id\": \"{{v2_organization_id}}\", \"category\": \"insumo_recurso\", \"subject_type\": \"campana_organizacion\", \"aid_modes\": [\"directa\"], \"title\": \"Colecta de colchones Fase 2\", \"story\": \"Necesitamos colchones para el centro de refugio, prueba Postman de Fase 2 sin beneficiario individual.\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('v2_fase2_campana_idempotency_key', 'postman-fase2-campana-' + Date.now());",
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('campana sin campo de ayuda solicitada (retirado por no usarse)', () => {",
+                  "  pm.expect(body).to.not.have.property('direct_request');",
+                  "});",
+                  "pm.collectionVariables.set('v2_fase2_campana_case_id', String(body.id));",
+                  "pm.collectionVariables.set('v2_fase2_campana_public_id', body.public_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 - Detalle sin beneficiario ni nombre mostrado propio",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_campana_case_id}}"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('campana no tiene beneficiario', () => {",
+                  "  pm.expect(body.tipo_sujeto).to.eql('campana_organizacion');",
+                  "  pm.expect(body.beneficiario).to.be.null;",
+                  "});",
+                  "pm.test('nombre mostrado se autocompleta con el titulo (no hay campo aparte)', () => {",
+                  "  pm.expect(body.publicacion.nombre_publico).to.eql(body.publicacion.titulo_publico);",
+                  "});",
+                  "pm.test('no exige verificacion de identidad, no aplica a campanas', () => {",
+                  "  pm.expect(body.readiness_blockers).to.not.include('identidad_no_verificada');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 - Subir foto principal de la campana",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_campana_case_id}}/documentos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"document_key\": \"foto-principal-fase2-campana\", \"document_type\": \"foto_principal\", \"classification\": \"publico\", \"file_name\": \"foto.png\", \"content_type\": \"image/png\", \"content_base64\": \"iVBORw0KGgpQT1NUTUFOLUZPVE8tUFJJTkNJUEFMLUZBU0Uy\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 - Registrar consentimiento como representante (sin selector beneficiario)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_campana_case_id}}/consentimiento",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"text_version\": \"mvp1-v1\", \"scope\": {\"publicacion\": true}, \"signer_name\": \"Representante de la organizacion\", \"signer_type\": \"representante\", \"evidence_file_name\": \"autorizacion.pdf\", \"evidence_content_type\": \"application/pdf\", \"evidence_base64\": \"JVBERi0xLjQgQ29uc2VudGltaWVudG8gUG9zdG1hbiBGYXNlMg==\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('el consentimiento y evidencia privada bastan, sin panel de autoridad aparte', () => {",
+                  "  pm.expect(body.consentimiento.tipo_firmante).to.eql('representante');",
+                  "  pm.expect(body.consentimiento.vigente).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 - Rechaza consentimiento como beneficiario en una campana",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_campana_case_id}}/consentimiento",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"text_version\": \"mvp1-v1\", \"scope\": {\"publicacion\": true}, \"signer_name\": \"Alguien sin autoridad\", \"signer_type\": \"beneficiario\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 400, una campana solo admite representante', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 - Detalle sin requisitos pendientes (directa no exige cuenta)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_campana_case_id}}"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.readiness_blockers).to.eql([]);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 - Publicar campana",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              },
+              {
+                "key": "x-actor-org-id",
+                "value": "{{v2_organization_id}}"
+              },
+              {
+                "key": "x-actor-role",
+                "value": "{{v2_actor_role}}"
+              },
+              {
+                "key": "x-actor-email",
+                "value": "{{v2_actor_email}}"
+              },
+              {
+                "key": "x-actor-uid",
+                "value": "{{v2_actor_uid}}"
+              },
+              {
+                "key": "x-actor-ip-hash",
+                "value": "{{v2_actor_ip_hash}}"
+              },
+              {
+                "key": "x-actor-org-timestamp",
+                "value": "{{v2_actor_timestamp}}"
+              },
+              {
+                "key": "x-actor-org-signature",
+                "value": "{{v2_actor_signature}}"
+              },
+              {
+                "key": "x-actor-org-signature-v2",
+                "value": "{{v2_actor_signature}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_fase2_campana_case_id}}/publicar"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().estado).to.eql('publicado');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 - Consultar detalle publico de la campana",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v2/public/casos-ayuda/{{v2_fase2_campana_public_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.titulo_publico).to.eql('Colecta de colchones Fase 2');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -2905,6 +5047,50 @@
     },
     {
       "key": "v2_actor_signature_other",
+      "value": ""
+    },
+    {
+      "key": "v2_fase2_salud_idempotency_key",
+      "value": ""
+    },
+    {
+      "key": "v2_fase2_salud_identity",
+      "value": "V-40111222"
+    },
+    {
+      "key": "v2_fase2_salud_case_id",
+      "value": ""
+    },
+    {
+      "key": "v2_fase2_salud_public_id",
+      "value": ""
+    },
+    {
+      "key": "v2_fase2_empleo_idempotency_key",
+      "value": ""
+    },
+    {
+      "key": "v2_fase2_empleo_identity",
+      "value": "V-40111333"
+    },
+    {
+      "key": "v2_fase2_empleo_case_id",
+      "value": ""
+    },
+    {
+      "key": "v2_fase2_empleo_public_id",
+      "value": ""
+    },
+    {
+      "key": "v2_fase2_campana_idempotency_key",
+      "value": ""
+    },
+    {
+      "key": "v2_fase2_campana_case_id",
+      "value": ""
+    },
+    {
+      "key": "v2_fase2_campana_public_id",
       "value": ""
     }
   ]

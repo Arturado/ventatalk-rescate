@@ -112,6 +112,8 @@ def get_public_help_case_equivalents_endpoint(
     if result is None:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
     case, _publication = result
+    if case.meta_monto is None or case.meta_moneda is None:
+        raise HTTPException(status_code=404, detail="El caso no tiene una meta monetaria")
     try:
         equivalents = get_current_currency_equivalents(
             amount=case.meta_monto,

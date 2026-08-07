@@ -733,6 +733,42 @@ def test_publish_endpoint_requires_ready_case_and_public_api_excludes_private_fi
     assert "identificador" not in public_list.text.lower()
 
 
+def test_public_endpoints_do_not_500_for_a_published_non_monetary_case(crypto_environment):
+    with TestingSessionLocal() as db:
+        case = models.CasoAyudaV2(
+            public_id="public-non-monetary-1",
+            organizacion_id="org-1",
+            tipo_sujeto="campana_organizacion",
+            titulo_interno="Campana sin meta monetaria",
+            categoria="insumo_recurso",
+            acepta_ayuda_monetaria=False,
+            acepta_ayuda_directa=True,
+            estado="publicado",
+            creado_por="coordinador@example.com",
+        )
+        db.add(case)
+        db.flush()
+        db.add(models.PublicacionCasoAyuda(
+            caso_id=case.id,
+            nombre_publico="Campana sin meta monetaria",
+            titulo_publico="Campana sin meta monetaria",
+            descripcion_publica="Descripcion publica de una campana sin monto ni moneda.",
+            version=1,
+            activa=True,
+            configurado_por="coordinador@example.com",
+        ))
+        db.commit()
+        public_id = case.public_id
+
+    detail = client.get(f"/api/v2/public/casos-ayuda/{public_id}")
+    listing = client.get("/api/v2/public/casos-ayuda")
+
+    assert detail.status_code == 200
+    assert detail.json()["meta_monto"] is None
+    assert detail.json()["meta_moneda"] is None
+    assert listing.status_code == 200
+
+
 def test_preview_matches_public_detail_after_publication_except_lifecycle_fields(crypto_environment):
     created = client.post("/api/v2/casos-ayuda", json={
         "beneficiary_name": "Nombre privado",

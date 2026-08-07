@@ -13,7 +13,8 @@ V2_EXPECTED_RATE_SOURCE ?= DOLARAPI-BCV
 
 .PHONY: help up down build restart logs ps health notifications \
 	postman-test postman-test-casos-ayuda postman-test-yo-te-ayudo-public postman-test-yo-te-ayudo-protegido postman-test-yo-te-ayudo-donante postman-test-bcv-manual test-no-auth test-solicitudes test-aprobar test-rechazar test-nuevo-centro test-admin-dual \
-	backup-help-v2 backup-help-v2-host migrate-dry-run migrate-apply migrate-apply-host postman-test-spec004-fase1
+	backup-help-v2 backup-help-v2-host migrate-dry-run migrate-apply migrate-apply-host postman-test-spec004-fase1 \
+	postman-test-spec004-fase2-salud postman-test-spec004-fase2-empleo postman-test-spec004-fase2-campana
 
 help: ## Muestra esta ayuda
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' Makefile | sort | awk 'BEGIN {FS = ":.*## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
@@ -113,6 +114,33 @@ migrate-apply-host: ## Alternativa si migrate-apply falla con "requires a local 
 postman-test-spec004-fase1: ## Ejecuta borradores idempotentes y coincidencias de cedula de la Fase 1 (spec 004)
 	@npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \
 		--folder "08 - Spec 004 Fase 1 (borradores y coincidencias)" \
+		--env-var base_url=$(BASE) \
+		--env-var api_key="$(API_KEY)" \
+		--env-var actor_signing_secret="$(ACTOR_SIGNING_SECRET)" \
+		--env-var v2_organization_id="$(V2_ORGANIZATION_ID)" \
+		--env-var v2_actor_email="$(V2_ACTOR_EMAIL)"
+
+postman-test-spec004-fase2-salud: ## Ciclo completo persona/salud de la Fase 2 (spec 004)
+	@npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \
+		--folder "09 - Spec 004 Fase 2 (persona salud - ciclo completo)" \
+		--env-var base_url=$(BASE) \
+		--env-var api_key="$(API_KEY)" \
+		--env-var actor_signing_secret="$(ACTOR_SIGNING_SECRET)" \
+		--env-var v2_organization_id="$(V2_ORGANIZATION_ID)" \
+		--env-var v2_actor_email="$(V2_ACTOR_EMAIL)"
+
+postman-test-spec004-fase2-empleo: ## Ciclo completo persona/empleo de la Fase 2 (spec 004)
+	@npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \
+		--folder "10 - Spec 004 Fase 2 (persona empleo - ciclo completo)" \
+		--env-var base_url=$(BASE) \
+		--env-var api_key="$(API_KEY)" \
+		--env-var actor_signing_secret="$(ACTOR_SIGNING_SECRET)" \
+		--env-var v2_organization_id="$(V2_ORGANIZATION_ID)" \
+		--env-var v2_actor_email="$(V2_ACTOR_EMAIL)"
+
+postman-test-spec004-fase2-campana: ## Ciclo completo campana de organizacion de la Fase 2 (spec 004)
+	@npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \
+		--folder "11 - Spec 004 Fase 2 (campana organizacion - ciclo completo)" \
 		--env-var base_url=$(BASE) \
 		--env-var api_key="$(API_KEY)" \
 		--env-var actor_signing_secret="$(ACTOR_SIGNING_SECRET)" \

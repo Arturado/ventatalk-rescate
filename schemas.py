@@ -811,8 +811,8 @@ class CasoAyudaPublicoResponse(BaseModel):
     descripcion_publica: str
     categoria: str
     localidad_general: Optional[str] = None
-    meta_monto: Decimal
-    meta_moneda: str
+    meta_monto: Optional[Decimal] = None
+    meta_moneda: Optional[str] = None
     monto_confirmado: Decimal
     ayudas_confirmadas: int
     estado: str

@@ -623,6 +623,38 @@ def test_public_case_exposes_current_referential_equivalents():
     }
 
 
+def test_public_equivalents_endpoint_returns_404_for_a_case_without_monetary_goal():
+    with TestingSessionLocal() as db:
+        case = models.CasoAyudaV2(
+            public_id="public-non-monetary-equivalents",
+            organizacion_id="org-1",
+            tipo_sujeto="campana_organizacion",
+            titulo_interno="Campana sin meta",
+            categoria="insumo_recurso",
+            acepta_ayuda_monetaria=False,
+            acepta_ayuda_directa=True,
+            estado="publicado",
+            creado_por="coordinador@example.com",
+        )
+        db.add(case)
+        db.flush()
+        db.add(models.PublicacionCasoAyuda(
+            caso_id=case.id,
+            nombre_publico="Campana sin meta",
+            titulo_publico="Campana sin meta",
+            descripcion_publica="Descripcion publica de una campana sin monto ni moneda.",
+            version=1,
+            activa=True,
+            configurado_por="coordinador@example.com",
+        ))
+        db.commit()
+        public_id = case.public_id
+
+    response = client.get(f"/api/v2/public/casos-ayuda/{public_id}/equivalencias")
+
+    assert response.status_code == 404
+
+
 def test_manual_bcv_rate_endpoint_requires_super_admin_and_returns_audited_snapshot():
     payload = {
         "rate_date": "2026-07-22",
