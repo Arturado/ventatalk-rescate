@@ -23,7 +23,6 @@ from routers.stats import router as stats_router, public_router as stats_public_
 from routers.hospitales import router as hospitales_router, pacientes_router
 from routers.bomberos import router as bomberos_router
 from routers.albergues import router as albergues_router
-from routers.casos_ayuda import router as casos_ayuda_router
 from routers.casos_ayuda_publicos import router as casos_ayuda_publicos_router
 from routers.casos_ayuda_v2 import router as casos_ayuda_v2_router
 from routers.casos_ayuda_donantes import router as casos_ayuda_donantes_router
@@ -473,7 +472,6 @@ app.include_router(hospitales_router)
 app.include_router(pacientes_router)
 app.include_router(bomberos_router)
 app.include_router(albergues_router)
-app.include_router(casos_ayuda_router)
 app.include_router(casos_ayuda_v2_router)
 app.include_router(casos_ayuda_publicos_router)
 app.include_router(casos_ayuda_donantes_router)
@@ -534,12 +532,6 @@ async def albergues_directorio_page(request: Request):
 async def persona_ficha_page(persona_id: int, request: Request):
     return templates.TemplateResponse("persona_ficha.html",
         {"request": request, "persona_id": persona_id})
-
-
-@app.get("/casos-ayuda")
-async def casos_ayuda_page(request: Request):
-    return templates.TemplateResponse("casos_ayuda.html",
-        {"request": request})
 
 
 @app.get("/health", tags=["sistema"])

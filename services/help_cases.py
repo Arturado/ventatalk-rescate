@@ -58,7 +58,7 @@ CASE_STATES = {
 CASE_LIFECYCLE_TRANSITIONS = {
     "pausar": ({"publicado"}, "pausado", "caso_pausado"),
     "reanudar": ({"pausado"}, "publicado", "caso_reanudado"),
-    "cerrar": ({"meta_alcanzada"}, "cerrado", "caso_cerrado"),
+    "cerrar": ({"meta_alcanzada", "publicado", "pausado"}, "cerrado", "caso_cerrado"),
     "rechazar": ({"borrador", "pendiente_validacion", "listo_publicar"}, "rechazado", "caso_rechazado"),
     "suspender": ({"publicado", "pausado", "meta_alcanzada"}, "suspendido", "caso_suspendido"),
     "archivar": ({"rechazado", "cerrado"}, "archivado", "caso_archivado"),
@@ -129,6 +129,8 @@ def transition_help_case(db: Session, *, case_id: int, actor: ActorOrgContext, a
         allowed_statuses, next_status, audit_action = transition
         if case.estado not in allowed_statuses:
             raise CaseStateError("La transicion no esta permitida para el estado actual")
+        if normalized_action == "cerrar" and case.estado != "meta_alcanzada" and case.acepta_ayuda_monetaria:
+            raise CaseStateError("Un caso con modalidad monetaria debe alcanzar la meta antes de cerrar")
         allowed_reasons = CASE_LIFECYCLE_REASON_CODES.get(normalized_action)
         normalized_reason = str(reason_code or "").strip().lower()
         if allowed_reasons is not None and normalized_reason not in allowed_reasons:
@@ -297,24 +299,6 @@ def create_help_case(
         entity_type="caso",
         entity_id=case.id,
         metadata={"estado": "borrador"},
-    )
-    db.flush()
-    return case
-
-
-def submit_help_case_for_validation(db: Session, *, case_id: int, actor: ActorOrgContext):
-    case = _get_managed_case(db, case_id, actor)
-    if case.estado != "borrador":
-        raise CaseStateError("Solo un caso en borrador puede enviarse a validacion")
-    case.estado = "pendiente_validacion"
-    _add_audit_event(
-        db,
-        case=case,
-        actor=actor,
-        action="caso_enviado_validacion",
-        entity_type="caso",
-        entity_id=case.id,
-        metadata={"estado_anterior": "borrador", "estado_nuevo": "pendiente_validacion"},
     )
     db.flush()
     return case
@@ -834,6 +818,8 @@ def create_account_version(
     case = _get_managed_case(db, case_id, actor, lock=True)
     if case.estado not in ACCOUNT_MANAGEMENT_STATES:
         raise CaseStateError("El caso no admite cambios de cuentas durante este estado")
+    if not case.acepta_ayuda_monetaria:
+        raise HelpCaseDomainError("El caso no acepta ayuda monetaria")
     consent = _current_consent(db, case.id)
     account_key = _require_text(account_key, "account_key")
     owner_type = _require_text(owner_type, "owner_type")
@@ -1032,27 +1018,6 @@ def _readiness_blockers(db, case):
         blockers.append("foto_principal_faltante")
 
     return blockers
-
-
-def mark_help_case_ready(db: Session, *, case_id: int, actor: ActorOrgContext):
-    case = _get_managed_case(db, case_id, actor)
-    if case.estado != "pendiente_validacion":
-        raise CaseStateError("Solo un caso pendiente de validacion puede quedar listo")
-    blockers = _readiness_blockers(db, case)
-    if blockers:
-        raise CaseReadinessError(blockers)
-    case.estado = "listo_publicar"
-    _add_audit_event(
-        db,
-        case=case,
-        actor=actor,
-        action="caso_listo_publicar",
-        entity_type="caso",
-        entity_id=case.id,
-        metadata={"estado_anterior": "pendiente_validacion", "estado_nuevo": "listo_publicar"},
-    )
-    db.flush()
-    return case
 
 
 def get_help_case_detail(db: Session, *, case_id: int, actor: ActorOrgContext):

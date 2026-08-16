@@ -11,12 +11,11 @@
       "script": {
         "type": "text/javascript",
         "exec": [
-          "if (pm.info.requestName === 'Health' || pm.info.requestName === 'Crear caso de ayuda') {",
+          "if (pm.info.requestName === 'Health') {",
           "  const runId = pm.variables.replaceIn('{{$guid}}');",
           "  pm.collectionVariables.set('run_id', runId);",
           "  pm.collectionVariables.set('test_cedula', String(Date.now()).slice(-8));",
-          "  const keys = pm.info.requestName === 'Health' ? ['persona_id', 'hospital_id', 'paciente_id', 'caso_id'] : ['caso_id'];",
-          "  keys.forEach((key) => pm.collectionVariables.unset(key));",
+          "  ['persona_id', 'hospital_id', 'paciente_id'].forEach((key) => pm.collectionVariables.unset(key));",
           "}"
         ]
       }
@@ -121,6 +120,26 @@
           },
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = '';",
+                  "const role = 'donor';",
+                  "const email = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_donor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -186,6 +205,26 @@
           },
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = '';",
+                  "const role = 'donor';",
+                  "const email = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_donor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -242,6 +281,26 @@
             "url": "{{base_url}}/api/v2/donante/casos-ayuda/{{v2_public_id}}/cuentas"
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = '';",
+                  "const role = 'donor';",
+                  "const email = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_donor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -313,6 +372,26 @@
           },
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = '';",
+                  "const role = 'donor';",
+                  "const email = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_donor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -371,6 +450,26 @@
           },
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = '';",
+                  "const role = 'donor';",
+                  "const email = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_donor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -427,6 +526,26 @@
             "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/en-revision"
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = '';",
+                  "const role = 'donor';",
+                  "const email = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_donor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -496,6 +615,26 @@
             "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_aid_id}}/confirmar"
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = '';",
+                  "const role = 'donor';",
+                  "const email = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_donor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -573,6 +712,26 @@
           },
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = '';",
+                  "const role = 'donor';",
+                  "const email = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_donor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -643,6 +802,26 @@
           },
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = '';",
+                  "const role = 'donor';",
+                  "const email = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_donor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -708,6 +887,26 @@
           },
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = '';",
+                  "const role = 'donor';",
+                  "const email = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_donor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -764,6 +963,26 @@
             "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_problem_aid_id}}/en-revision"
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = '';",
+                  "const role = 'donor';",
+                  "const email = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_donor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -829,6 +1048,26 @@
             "url": "{{base_url}}/api/v2/casos-ayuda/{{v2_case_id}}/ayudas/{{v2_problem_aid_id}}/rechazar"
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = '';",
+                  "const role = 'donor';",
+                  "const email = pm.variables.replaceIn('{{v2_donor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_donor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_donor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_donor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -926,6 +1165,26 @@
           },
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = pm.variables.replaceIn('{{v2_organization_id}}');",
+                  "const role = pm.variables.replaceIn('{{v2_actor_role}}');",
+                  "const email = pm.variables.replaceIn('{{v2_actor_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_actor_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_actor_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_actor_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -989,6 +1248,26 @@
             "url": "{{base_url}}/api/v2/casos-ayuda/tasas/manual"
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const timestamp = Math.floor(Date.now() / 1000).toString();",
+                  "const organization = '';",
+                  "const role = 'super_admin';",
+                  "const email = pm.variables.replaceIn('{{v2_super_admin_email}}').toLowerCase();",
+                  "const uid = pm.variables.replaceIn('{{v2_super_admin_uid}}');",
+                  "const ipHash = pm.variables.replaceIn('{{v2_actor_ip_hash}}');",
+                  "const secret = pm.variables.replaceIn('{{actor_signing_secret}}');",
+                  "if (!secret) { pm.execution.skipRequest(); return; }",
+                  "const cryptoJs = require('crypto-js');",
+                  "const message = `${organization}|${role}|${email}|${uid}|${ipHash}|${timestamp}`;",
+                  "pm.collectionVariables.set('v2_super_admin_timestamp', timestamp);",
+                  "pm.collectionVariables.set('v2_super_admin_signature', cryptoJs.HmacSHA256(message, secret).toString(cryptoJs.enc.Hex));"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -1556,413 +1835,6 @@
                 "exec": [
                   "pm.test('responde 200', () => pm.response.to.have.status(200));",
                   "pm.test('confirma eliminacion', () => pm.expect(pm.response.json().ok).to.eql(true));"
-                ]
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "03 - Casos de ayuda",
-      "item": [
-        {
-          "name": "Crear caso de ayuda",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "x-api-key",
-                "value": "{{api_key}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"cedula\": \"{{test_cedula}}\",\n  \"nombre\": \"Caso Postman {{run_id}}\",\n  \"relato\": \"Relato automatizado {{run_id}}\",\n  \"condicion_resumen\": \"Condicion de prueba\",\n  \"monto_necesario\": 25.5,\n  \"moneda\": \"USD\",\n  \"consentimiento_publicacion\": true,\n  \"creado_por\": \"postman@example.test\",\n  \"contacto\": {\n    \"telefono\": \"04121234567\",\n    \"metodo_pago\": \"Transferencia\",\n    \"datos_pago\": \"Datos {{run_id}}\",\n    \"contacto_alterno\": \"postman@example.test\"\n  }\n}"
-            },
-            "url": "{{base_url}}/api/casos-ayuda/"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('crea el caso', () => pm.response.to.have.status(201));",
-                  "const responseJson = pm.response.json();",
-                  "pm.collectionVariables.set('caso_id', responseJson.id);",
-                  "pm.test('inicia pendiente de revision', () => {",
-                  "  pm.expect(responseJson.id).to.be.a('number');",
-                  "  pm.expect(responseJson.estado).to.eql('pendiente_revision');",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Contacto rechaza request sin API key",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/contacto"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responde 401', () => pm.response.to.have.status(401));",
-                  "pm.test('no filtra el contacto', () => pm.expect(pm.response.json().detail).to.eql('API Key inválida'));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Contacto rechaza API key invalida",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "x-api-key",
-                "value": "invalid-postman-key"
-              }
-            ],
-            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/contacto"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responde 401', () => pm.response.to.have.status(401));",
-                  "pm.test('no filtra el contacto', () => pm.expect(pm.response.json().detail).to.eql('API Key inválida'));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Contacto oculta caso no publicado",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "x-api-key",
-                "value": "{{api_key}}"
-              }
-            ],
-            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/contacto"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responde 404', () => pm.response.to.have.status(404));",
-                  "pm.test('no filtra el contacto', () => pm.expect(pm.response.json().detail).to.eql('Contacto no disponible'));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Consultar caso protegido",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "x-api-key",
-                "value": "{{api_key}}"
-              }
-            ],
-            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
-                  "const responseJson = pm.response.json();",
-                  "pm.test('devuelve campos privados', () => {",
-                  "  pm.expect(responseJson.id).to.eql(Number(pm.collectionVariables.get('caso_id')));",
-                  "  pm.expect(responseJson.cedula).to.eql(pm.collectionVariables.get('test_cedula'));",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Elevar nivel de verificacion",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "x-api-key",
-                "value": "{{api_key}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"nivel_verificacion\": \"institucional\",\n  \"avalado_por\": \"postman@example.test\",\n  \"notas\": \"Validacion automatizada\"\n}"
-            },
-            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/nivel"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
-                  "pm.test('eleva el nivel', () => pm.expect(pm.response.json().nivel_verificacion).to.eql('institucional'));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Publicar caso",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "x-api-key",
-                "value": "{{api_key}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"estado\": \"publicado\",\n  \"descripcion_cambio\": \"Publicacion automatizada\",\n  \"cambiado_por\": \"postman@example.test\"\n}"
-            },
-            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/estado"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
-                  "pm.test('publica el caso', () => pm.expect(pm.response.json().estado).to.eql('publicado'));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Listar caso publicamente sin cedula",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/casos-ayuda/?estado=publicado"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
-                  "const responseJson = pm.response.json();",
-                  "const caso = responseJson.find((item) => item.id === Number(pm.collectionVariables.get('caso_id')));",
-                  "pm.test('expone el caso publicado', () => pm.expect(caso).to.be.an('object'));",
-                  "pm.test('protege la cedula', () => pm.expect(caso).not.to.have.property('cedula'));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Consultar contacto y auditar actor",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "x-api-key",
-                "value": "{{api_key}}"
-              },
-              {
-                "key": "x-actor-id",
-                "value": "postman-{{run_id}}@example.test"
-              }
-            ],
-            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/contacto"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
-                  "const responseJson = pm.response.json();",
-                  "pm.test('devuelve el contacto', () => {",
-                  "  pm.expect(responseJson.caso_id).to.eql(Number(pm.collectionVariables.get('caso_id')));",
-                  "  pm.expect(responseJson.telefono).to.eql('04121234567');",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Consultar historial del caso",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "x-api-key",
-                "value": "{{api_key}}"
-              }
-            ],
-            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/historial"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
-                  "const tipos = pm.response.json().map((item) => item.tipo_cambio);",
-                  "pm.test('registra cambios sensibles', () => {",
-                  "  pm.expect(tipos).to.include('nivel');",
-                  "  pm.expect(tipos).to.include('estado');",
-                  "  pm.expect(tipos).to.include('contacto_accedido');",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Resolver caso",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "x-api-key",
-                "value": "{{api_key}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"estado\": \"resuelto\",\n  \"descripcion_cambio\": \"Cierre de prueba\",\n  \"cambiado_por\": \"postman@example.test\"\n}"
-            },
-            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/estado"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
-                  "pm.test('resuelve el caso', () => pm.expect(pm.response.json().estado).to.eql('resuelto'));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Archivar caso",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "x-api-key",
-                "value": "{{api_key}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"estado\": \"archivado\",\n  \"descripcion_cambio\": \"Limpieza de prueba\",\n  \"cambiado_por\": \"postman@example.test\"\n}"
-            },
-            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}/estado"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
-                  "pm.test('archiva el caso', () => pm.expect(pm.response.json().estado).to.eql('archivado'));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Eliminar caso de prueba",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "x-api-key",
-                "value": "{{api_key}}"
-              }
-            ],
-            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
-                  "pm.test('confirma eliminacion', () => pm.expect(pm.response.json().ok).to.eql(true));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Confirmar caso eliminado",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "x-api-key",
-                "value": "{{api_key}}"
-              }
-            ],
-            "url": "{{base_url}}/api/casos-ayuda/{{caso_id}}"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('ya no existe', () => pm.response.to.have.status(404));"
                 ]
               }
             }
@@ -4891,10 +4763,6 @@
     },
     {
       "key": "paciente_id",
-      "value": ""
-    },
-    {
-      "key": "caso_id",
       "value": ""
     },
     {

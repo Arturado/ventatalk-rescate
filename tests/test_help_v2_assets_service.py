@@ -10,6 +10,8 @@ from sqlalchemy.pool import StaticPool
 from database import Base
 from dependencies import ActorOrgContext
 import models
+import schemas
+from services.help_case_drafts import create_help_case_draft
 from services.help_cases import (
     CaseNotFoundError,
     CaseStateError,
@@ -70,6 +72,25 @@ def create_draft(db, *, suffix="1"):
         goal_amount=Decimal("100.00"),
         goal_currency="USD",
     )
+
+
+def create_non_monetary_draft(db, *, suffix="1"):
+    summary, _created = create_help_case_draft(
+        db,
+        actor=actor(),
+        organization_id="org-1",
+        public_id=f"asset-non-monetary-{suffix}",
+        payload=schemas.CasoAyudaV2DraftCreateRequest(
+            category="insumo_recurso",
+            subject_type="campana_organizacion",
+            aid_modes=["directa"],
+            title="Colecta de colchones",
+            story="Necesitamos colchones para el centro de refugio de la zona.",
+        ),
+        idempotency_key=f"asset-non-monetary-key-{suffix}",
+        cipher=HelpDataCipher.from_environment(),
+    )
+    return db.query(models.CasoAyudaV2).filter_by(id=summary["id"]).one()
 
 
 def add_consent(db, case):
@@ -256,6 +277,14 @@ def test_document_review_hides_document_from_another_organization():
                 actor=actor(organization_id="org-2"),
                 approve=True,
             )
+
+
+def test_account_creation_is_rejected_for_a_case_without_monetary_modality():
+    with TestingSessionLocal() as db:
+        case = create_non_monetary_draft(db)
+
+        with pytest.raises(HelpCaseDomainError):
+            create_account_version(db, case_id=case.id, actor=actor(), **account_kwargs())
 
 
 def test_regular_account_is_approved_against_current_consent():

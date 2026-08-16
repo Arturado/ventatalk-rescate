@@ -27,7 +27,6 @@ from services.help_cases import (
     get_help_case_detail,
     get_help_case_preview,
     list_help_cases,
-    mark_help_case_ready,
     publish_help_case,
     configure_help_case_publication,
     approve_exceptional_account,
@@ -38,7 +37,6 @@ from services.help_cases import (
     register_help_case_consent,
     review_case_document,
     require_expanded_publication_consent,
-    submit_help_case_for_validation,
     transition_help_case,
     update_help_case,
 )
@@ -1015,49 +1013,6 @@ def approve_organization_help_case_account(
     except HelpCaseDomainError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post("/{case_id}/enviar-validacion", response_model=schemas.CasoAyudaV2ResumenResponse)
-def submit_organization_help_case(
-    case_id: int,
-    db: Session = Depends(get_db),
-    _api_actor: str = Depends(verify_api_key),
-    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
-):
-    try:
-        case = submit_help_case_for_validation(db, case_id=case_id, actor=actor)
-        db.commit()
-        db.refresh(case)
-        return case
-    except CaseNotFoundError as exc:
-        db.rollback()
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except CaseStateError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-
-@router.post("/{case_id}/marcar-listo", response_model=schemas.CasoAyudaV2ResumenResponse)
-def ready_organization_help_case(
-    case_id: int,
-    db: Session = Depends(get_db),
-    _api_actor: str = Depends(verify_api_key),
-    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
-):
-    try:
-        case = mark_help_case_ready(db, case_id=case_id, actor=actor)
-        db.commit()
-        db.refresh(case)
-        return case
-    except CaseNotFoundError as exc:
-        db.rollback()
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except CaseReadinessError as exc:
-        db.rollback()
-        raise HTTPException(status_code=422, detail={"message": str(exc), "blockers": exc.blockers}) from exc
-    except CaseStateError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/{case_id}/publicar", response_model=schemas.CasoAyudaV2ResumenResponse)

@@ -378,64 +378,6 @@ class CentroEntregaResponse(BaseModel):
 
 CentroOrdenResponse.model_rebuild()
 
-class CasoAyudaResponse(BaseModel):
-    id: int
-    cedula: str
-    nombre: str
-    relato: str
-    condicion_resumen: str
-    monto_necesario: Optional[float] = None
-    moneda: Optional[str] = None
-    estado: str
-    nivel_verificacion: str
-    avalado_por: Optional[str] = None
-    avalado_en: Optional[datetime] = None
-    adjuntos: Optional[List[str]] = []
-    consentimiento_publicacion: bool
-    fecha_ultima_confirmacion: datetime
-    creado_por: str
-    created_at: datetime
-    updated_at: datetime
-
-    @field_serializer('created_at', 'updated_at', 'fecha_ultima_confirmacion')
-    def serialize_dt(self, value: datetime) -> str:
-        from datetime import timezone, timedelta
-        VE_TZ = timezone(timedelta(hours=-4))
-        if value and value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        return value.astimezone(VE_TZ).isoformat() if value else None
-
-    model_config = {"from_attributes": True}
-
-class ContactoCasoAyudaResponse(BaseModel):
-    caso_id: int
-    telefono: Optional[str] = None
-    metodo_pago: Optional[str] = None
-    datos_pago: Optional[str] = None
-    contacto_alterno: Optional[str] = None
-    model_config = {"from_attributes": True}
-
-class CasoAyudaHistorialResponse(BaseModel):
-    id: int
-    caso_id: int
-    tipo_cambio: str
-    valor_anterior: Optional[str] = None
-    valor_nuevo: Optional[str] = None
-    cambiado_por: Optional[str] = None
-    descripcion: Optional[str] = None
-    cambiado_en: datetime
-
-    @field_serializer('cambiado_en')
-    def serialize_dt(self, value: datetime) -> str:
-        from datetime import timezone, timedelta
-        VE_TZ = timezone(timedelta(hours=-4))
-        if value and value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        return value.astimezone(VE_TZ).isoformat() if value else None
-
-    model_config = {"from_attributes": True}
-
-
 class CasoAyudaV2ResumenResponse(BaseModel):
     id: int
     public_id: str

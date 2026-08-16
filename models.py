@@ -4,7 +4,6 @@ from sqlalchemy import (
     Column,
     Date,
     DateTime,
-    Float,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -246,52 +245,11 @@ class CentroEntrega(Base):
     notas_entrega = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-class CasoAyuda(Base):
-    __tablename__ = "casos_ayuda"
-    id = Column(Integer, primary_key=True, index=True)
-    cedula = Column(String(20), nullable=False, index=True)
-    nombre = Column(String(200), nullable=False)
-    relato = Column(Text, nullable=False)
-    condicion_resumen = Column(String(500), nullable=False)
-    monto_necesario = Column(Float, nullable=True)
-    moneda = Column(String(10), nullable=True)
-    estado = Column(String(30), nullable=False, default="pendiente_revision")
-    # Estados: pendiente_revision | publicado | rechazado |
-    # necesita_actualizacion | resuelto | archivado
-    nivel_verificacion = Column(String(20), nullable=False, default="basico")
-    # Niveles: basico | institucional | medico
-    avalado_por = Column(String(200), nullable=True)
-    avalado_en = Column(DateTime(timezone=True), nullable=True)
-    adjuntos = Column(Text, nullable=True)
-    # JSON array de URLs: ["https://...", "https://..."]
-    consentimiento_publicacion = Column(Boolean, nullable=False, default=False, server_default='false')
-    fecha_ultima_confirmacion = Column(DateTime(timezone=True),
-        server_default=func.now())
-    creado_por = Column(String(200), nullable=False, default="anonimo")
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(),
-        onupdate=func.now())
-
-class ContactoCasoAyuda(Base):
-    __tablename__ = "contacto_casos_ayuda"
-    id = Column(Integer, primary_key=True, index=True)
-    caso_id = Column(Integer, nullable=False, unique=True, index=True)
-    telefono = Column(String(30), nullable=True)
-    metodo_pago = Column(String(100), nullable=True)
-    datos_pago = Column(Text, nullable=True)
-    contacto_alterno = Column(String(200), nullable=True)
-
-class CasoAyudaHistorial(Base):
-    __tablename__ = "casos_ayuda_historial"
-    id = Column(Integer, primary_key=True, index=True)
-    caso_id = Column(Integer, nullable=False, index=True)
-    tipo_cambio = Column(String(20), nullable=False)
-    # valores: "estado" | "nivel"
-    valor_anterior = Column(String(50), nullable=True)
-    valor_nuevo = Column(String(50), nullable=True)
-    cambiado_por = Column(String(200), nullable=True)
-    descripcion = Column(Text, nullable=True)
-    cambiado_en = Column(DateTime(timezone=True), server_default=func.now())
+# Nota: los modelos V1 de casos de ayuda (CasoAyuda, ContactoCasoAyuda,
+# CasoAyudaHistorial -> tablas casos_ayuda, contacto_casos_ayuda,
+# casos_ayuda_historial) fueron retirados al eliminar el sistema legacy.
+# Las tablas fisicas quedan huerfanas en cualquier base que las tuviera,
+# mismo criterio ya usado para el rename de centros_acopio (ver STATE.md).
 
 
 class BeneficiarioAyuda(Base):

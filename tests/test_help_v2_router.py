@@ -285,26 +285,6 @@ def test_update_endpoint_encrypts_profession_inside_conditional_detail(crypto_en
     assert second_response.json()["profesion"] == updated_marker
 
 
-def test_submit_and_ready_endpoints_expose_only_blocker_codes(crypto_environment):
-    created = client.post("/api/v2/casos-ayuda", json={
-        "beneficiary_name": "Nombre privado",
-        "beneficiary_identity": "V-11223344",
-        "internal_title": "Tratamiento inicial",
-        "category": "medicamentos",
-        "goal_amount": "250.00",
-        "goal_currency": "USD",
-    }).json()
-
-    submitted = client.post(f"/api/v2/casos-ayuda/{created['id']}/enviar-validacion")
-    ready = client.post(f"/api/v2/casos-ayuda/{created['id']}/marcar-listo")
-
-    assert submitted.status_code == 200
-    assert submitted.json()["estado"] == "pendiente_validacion"
-    assert ready.status_code == 422
-    assert "blockers" in ready.json()["detail"]
-    assert "Nombre privado" not in ready.text
-
-
 def test_verification_endpoint_encrypts_private_data_and_updates_blockers(crypto_environment):
     created = client.post("/api/v2/casos-ayuda", json={
         "beneficiary_name": "Nombre privado",

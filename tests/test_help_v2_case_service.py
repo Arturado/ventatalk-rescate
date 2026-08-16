@@ -23,10 +23,9 @@ from services.help_cases import (
     get_public_help_case,
     list_help_cases,
     list_public_help_cases,
-    mark_help_case_ready,
+    publish_help_case,
     register_beneficiary_verification,
     register_help_case_consent,
-    submit_help_case_for_validation,
     transition_help_case,
     update_help_case,
 )
@@ -212,27 +211,14 @@ def test_super_admin_can_create_case_for_explicit_target_organization():
         assert case.organizacion_id == "org-2"
 
 
-def test_submit_for_validation_requires_same_organization_and_draft_state():
-    with TestingSessionLocal() as db:
-        case = create_draft(db)
-
-        with pytest.raises(CaseNotFoundError):
-            submit_help_case_for_validation(db, case_id=case.id, actor=actor(organization_id="org-2"))
-
-        submitted = submit_help_case_for_validation(db, case_id=case.id, actor=actor())
-        assert submitted.estado == "pendiente_validacion"
-
-        with pytest.raises(CaseStateError):
-            submit_help_case_for_validation(db, case_id=case.id, actor=actor())
-
-
 def test_readiness_reports_missing_requirements_without_changing_state():
     with TestingSessionLocal() as db:
         case = create_draft(db)
-        submit_help_case_for_validation(db, case_id=case.id, actor=actor())
+        case.estado = "pendiente_validacion"
+        db.flush()
 
         with pytest.raises(CaseReadinessError) as error:
-            mark_help_case_ready(db, case_id=case.id, actor=actor())
+            publish_help_case(db, case_id=case.id, actor=actor())
 
         assert set(error.value.blockers) == {
             "publicacion_no_configurada",
@@ -251,10 +237,11 @@ def test_minor_requires_verified_representative_authority():
         beneficiary.representante_nombre_cifrado = "encrypted-representative"
         beneficiary.representante_relacion = "madre"
         add_complete_publication_requirements(db, case)
-        submit_help_case_for_validation(db, case_id=case.id, actor=actor())
+        case.estado = "pendiente_validacion"
+        db.flush()
 
         with pytest.raises(CaseReadinessError) as error:
-            mark_help_case_ready(db, case_id=case.id, actor=actor())
+            publish_help_case(db, case_id=case.id, actor=actor())
 
         assert error.value.blockers == ["autoridad_representante_no_verificada"]
 
@@ -280,10 +267,11 @@ def test_latest_account_version_must_be_approved_and_covered_by_consent():
             estado="pendiente",
             creado_por="coordinador@example.com",
         ))
-        submit_help_case_for_validation(db, case_id=case.id, actor=actor())
+        case.estado = "pendiente_validacion"
+        db.flush()
 
         with pytest.raises(CaseReadinessError) as error:
-            mark_help_case_ready(db, case_id=case.id, actor=actor())
+            publish_help_case(db, case_id=case.id, actor=actor())
 
         assert error.value.blockers == ["cuenta_aprobada_faltante"]
 
@@ -307,11 +295,12 @@ def test_self_approved_public_medical_document_no_longer_blocks_readiness():
             cargado_por="coordinador@example.com",
             revisado_por="coordinador@example.com",
         ))
-        submit_help_case_for_validation(db, case_id=case.id, actor=actor())
+        case.estado = "pendiente_validacion"
+        db.flush()
 
-        ready = mark_help_case_ready(db, case_id=case.id, actor=actor())
+        published = publish_help_case(db, case_id=case.id, actor=actor())
 
-        assert ready.estado == "listo_publicar"
+        assert published.estado == "publicado"
 
 
 def test_pending_public_document_still_blocks_readiness():
@@ -332,10 +321,11 @@ def test_pending_public_document_still_blocks_readiness():
             consentimiento_version=1,
             cargado_por="coordinador@example.com",
         ))
-        submit_help_case_for_validation(db, case_id=case.id, actor=actor())
+        case.estado = "pendiente_validacion"
+        db.flush()
 
         with pytest.raises(CaseReadinessError) as error:
-            mark_help_case_ready(db, case_id=case.id, actor=actor())
+            publish_help_case(db, case_id=case.id, actor=actor())
 
         assert error.value.blockers == ["documento_publico_sin_aprobacion"]
 
@@ -379,24 +369,24 @@ def test_case_without_primary_photo_is_blocked():
         )
         db.add_all([publication, consent, account])
         db.flush()
-        submit_help_case_for_validation(db, case_id=case.id, actor=actor())
+        case.estado = "pendiente_validacion"
+        db.flush()
 
         with pytest.raises(CaseReadinessError) as error:
-            mark_help_case_ready(db, case_id=case.id, actor=actor())
+            publish_help_case(db, case_id=case.id, actor=actor())
 
         assert error.value.blockers == ["foto_principal_faltante"]
 
 
-def test_complete_case_becomes_ready_and_records_audit_event():
+def test_complete_case_publishes_directly_and_records_audit_event():
     with TestingSessionLocal() as db:
         case = create_draft(db)
         add_complete_publication_requirements(db, case)
-        submit_help_case_for_validation(db, case_id=case.id, actor=actor())
 
-        ready = mark_help_case_ready(db, case_id=case.id, actor=actor())
+        published = publish_help_case(db, case_id=case.id, actor=actor())
 
-        assert ready.estado == "listo_publicar"
-        assert db.query(models.AuditoriaCasoAyuda).filter_by(accion="caso_listo_publicar").count() == 1
+        assert published.estado == "publicado"
+        assert db.query(models.AuditoriaCasoAyuda).filter_by(accion="caso_publicado").count() == 1
 
 
 def test_global_case_actors_can_list_all_enabled_organizations():
@@ -426,7 +416,8 @@ def test_list_cases_filters_status_and_applies_bounded_pagination():
     with TestingSessionLocal() as db:
         draft = create_draft(db, suffix="1")
         submitted = create_draft(db, suffix="2")
-        submit_help_case_for_validation(db, case_id=submitted.id, actor=actor())
+        submitted.estado = "pendiente_validacion"
+        db.flush()
 
         results = list_help_cases(
             db,
@@ -466,6 +457,29 @@ def test_case_lifecycle_transitions_are_closed_and_audited():
         ).order_by(models.AuditoriaCasoAyuda.id)] == [
             "caso_pausado", "caso_reanudado", "caso_cerrado", "caso_archivado",
         ]
+
+
+def test_non_monetary_case_can_close_directly_from_published_without_a_goal():
+    with TestingSessionLocal() as db:
+        case = create_campaign_draft(db)
+        case.estado = "publicado"
+        db.flush()
+
+        closed = transition_help_case(db, case_id=case.id, actor=actor(), action="cerrar")
+
+        assert closed.estado == "cerrado"
+        assert closed.cerrado_at is not None
+
+
+def test_non_monetary_case_can_close_directly_from_paused():
+    with TestingSessionLocal() as db:
+        case = create_campaign_draft(db)
+        case.estado = "pausado"
+        db.flush()
+
+        closed = transition_help_case(db, case_id=case.id, actor=actor(), action="cerrar")
+
+        assert closed.estado == "cerrado"
 
 
 def test_reject_only_accepts_prepublication_case_and_bounded_reason():
@@ -595,8 +609,8 @@ def test_guided_mutations_reject_another_organization_or_ready_case():
     with TestingSessionLocal() as db:
         case = create_draft(db)
         add_complete_publication_requirements(db, case)
-        submit_help_case_for_validation(db, case_id=case.id, actor=actor())
-        mark_help_case_ready(db, case_id=case.id, actor=actor())
+        case.estado = "listo_publicar"
+        db.flush()
 
         with pytest.raises(CaseNotFoundError):
             update_help_case(db, case_id=case.id, actor=actor(organization_id="org-2"), category="otra")
@@ -860,10 +874,11 @@ def test_campaign_case_without_consent_is_blocked_by_generic_consent_check():
             revisado_por="coordinador@example.com",
         ))
         db.flush()
-        submit_help_case_for_validation(db, case_id=case.id, actor=actor())
+        case.estado = "pendiente_validacion"
+        db.flush()
 
         with pytest.raises(CaseReadinessError) as error:
-            mark_help_case_ready(db, case_id=case.id, actor=actor())
+            publish_help_case(db, case_id=case.id, actor=actor())
 
         assert "consentimiento_vigente_faltante" in error.value.blockers
 

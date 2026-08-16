@@ -12,7 +12,7 @@ V2_EXPECTED_RATE_SOURCE ?= DOLARAPI-BCV
 .DEFAULT_GOAL := help
 
 .PHONY: help up down build restart logs ps health notifications \
-	postman-test postman-test-casos-ayuda postman-test-yo-te-ayudo-public postman-test-yo-te-ayudo-protegido postman-test-yo-te-ayudo-donante postman-test-bcv-manual test-no-auth test-solicitudes test-aprobar test-rechazar test-nuevo-centro test-admin-dual \
+	postman-test postman-test-yo-te-ayudo-public postman-test-yo-te-ayudo-protegido postman-test-yo-te-ayudo-donante postman-test-bcv-manual test-no-auth test-solicitudes test-aprobar test-rechazar test-nuevo-centro test-admin-dual \
 	backup-help-v2 backup-help-v2-host migrate-dry-run migrate-apply migrate-apply-host postman-test-spec004-fase1 \
 	postman-test-spec004-fase2-salud postman-test-spec004-fase2-empleo postman-test-spec004-fase2-campana
 
@@ -46,12 +46,6 @@ notifications: ## Procesa un lote de la outbox de ayuda mediante Resend
 
 postman-test: ## Ejecuta la suite automatizada de API con Newman
 	@npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \
-		--env-var base_url=$(BASE) \
-		--env-var api_key="$(API_KEY)"
-
-postman-test-casos-ayuda: ## Ejecuta solo la integración de casos de ayuda
-	@npx --yes newman run postman/ventatalk-rescate-api-tests.postman_collection.json \
-		--folder "03 - Casos de ayuda" \
 		--env-var base_url=$(BASE) \
 		--env-var api_key="$(API_KEY)"
 
