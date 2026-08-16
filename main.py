@@ -33,6 +33,7 @@ from services.shelter_centers import DEFAULT_ORGANIZACION_ID
 from services.help_config import donor_limit_config
 from services.help_retention_schema import ensure_retention_schema
 from services.help_spec004_schema import is_help_spec004_ready
+from services.help_offers_schema import is_help_offers_ready
 from observability import install_observability, router as observability_router
 
 templates = Jinja2Templates(directory="templates")
@@ -540,4 +541,5 @@ def health():
         "status": "ok",
         "service": "ventatalk-rescate",
         "help_spec004_ready": is_help_spec004_ready(engine),
+        "help_offers_ready": is_help_offers_ready(engine),
     }

@@ -7,8 +7,10 @@ from fastapi import HTTPException
 
 from dependencies import (
     _actor_org_signature,
+    _delegate_affirmation_signature,
     require_verified_actor_org,
     require_verified_case_organization_actor,
+    require_verified_delegate_affirmation,
 )
 
 
@@ -195,3 +197,113 @@ def test_case_organization_dependency_accepts_global_super_admin(monkeypatch):
     )
 
     assert require_verified_case_organization_actor(actor) is actor
+
+
+def signed_delegate_affirmation(
+    monkeypatch,
+    *,
+    operation="assign_responsible",
+    case_id="42",
+    organization_id="org-1",
+    target_uid="delegate-uid-123",
+    target_email="delegado@example.com",
+    timestamp=None,
+):
+    monkeypatch.setenv("ACTOR_SIGNING_SECRET", SECRET)
+    signed_at = str(timestamp or int(time.time()))
+    normalized_email = target_email.strip().lower()
+    signature = _delegate_affirmation_signature(
+        operation, case_id, organization_id, target_uid, normalized_email, signed_at, SECRET,
+    )
+    return require_verified_delegate_affirmation(
+        x_actor_delegate_operation=operation,
+        x_actor_delegate_case_id=case_id,
+        x_actor_delegate_org_id=organization_id,
+        x_actor_delegate_target_uid=target_uid,
+        x_actor_delegate_target_email=target_email,
+        x_actor_delegate_timestamp=signed_at,
+        x_actor_delegate_signature=signature,
+    )
+
+
+def test_accepts_valid_delegate_affirmation(monkeypatch):
+    affirmation = signed_delegate_affirmation(monkeypatch, target_email="DELEGADO@EXAMPLE.COM")
+
+    assert affirmation.operation == "assign_responsible"
+    assert affirmation.case_id == 42
+    assert affirmation.organization_id == "org-1"
+    assert affirmation.target_uid == "delegate-uid-123"
+    assert affirmation.target_email == "delegado@example.com"
+
+
+def test_accepts_revoke_responsible_operation(monkeypatch):
+    affirmation = signed_delegate_affirmation(monkeypatch, operation="revoke_responsible")
+
+    assert affirmation.operation == "revoke_responsible"
+
+
+def test_rejects_expired_delegate_affirmation(monkeypatch):
+    with pytest.raises(HTTPException) as error:
+        signed_delegate_affirmation(monkeypatch, timestamp=int(time.time()) - 120)
+
+    assert error.value.status_code == 401
+
+
+def test_rejects_invalid_delegate_affirmation_signature(monkeypatch):
+    monkeypatch.setenv("ACTOR_SIGNING_SECRET", SECRET)
+
+    with pytest.raises(HTTPException) as error:
+        require_verified_delegate_affirmation(
+            x_actor_delegate_operation="assign_responsible",
+            x_actor_delegate_case_id="42",
+            x_actor_delegate_org_id="org-1",
+            x_actor_delegate_target_uid="delegate-uid-123",
+            x_actor_delegate_target_email="delegado@example.com",
+            x_actor_delegate_timestamp=str(int(time.time())),
+            x_actor_delegate_signature="invalid",
+        )
+
+    assert error.value.status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("operation", "borrar_todo"),
+        ("case_id", "not-a-number"),
+        ("organization_id", ""),
+        ("target_uid", ""),
+        ("target_email", "not-an-email"),
+    ],
+)
+def test_rejects_tampered_delegate_affirmation_fields(monkeypatch, field, value):
+    kwargs = {
+        "operation": "assign_responsible",
+        "case_id": "42",
+        "organization_id": "org-1",
+        "target_uid": "delegate-uid-123",
+        "target_email": "delegado@example.com",
+    }
+    monkeypatch.setenv("ACTOR_SIGNING_SECRET", SECRET)
+    signed_at = str(int(time.time()))
+    # Sign the original (untampered) payload, then swap one field in the
+    # request itself — proves the signature doesn't cover a manipulated
+    # value, not just that mismatched signatures are rejected outright.
+    signature = _delegate_affirmation_signature(
+        kwargs["operation"], kwargs["case_id"], kwargs["organization_id"],
+        kwargs["target_uid"], kwargs["target_email"], signed_at, SECRET,
+    )
+    kwargs[field] = value
+
+    with pytest.raises(HTTPException) as error:
+        require_verified_delegate_affirmation(
+            x_actor_delegate_operation=kwargs["operation"],
+            x_actor_delegate_case_id=kwargs["case_id"],
+            x_actor_delegate_org_id=kwargs["organization_id"],
+            x_actor_delegate_target_uid=kwargs["target_uid"],
+            x_actor_delegate_target_email=kwargs["target_email"],
+            x_actor_delegate_timestamp=signed_at,
+            x_actor_delegate_signature=signature,
+        )
+
+    assert error.value.status_code == 401

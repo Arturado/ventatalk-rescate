@@ -11,7 +11,13 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from database import Base, get_db
-from dependencies import ActorOrgContext, require_verified_case_organization_actor, verify_api_key
+from dependencies import (
+    ActorOrgContext,
+    DelegateAffirmation,
+    require_verified_case_organization_actor,
+    require_verified_delegate_affirmation,
+    verify_api_key,
+)
 import models
 from routers.casos_ayuda_v2 import router
 from routers.casos_ayuda_publicos import router as public_router
@@ -881,3 +887,92 @@ def test_public_manifest_uses_only_latest_approved_public_document_under_current
     }]
     assert preview.json()["documentos"] == expected_manifest
     assert detail.json()["documentos"] == expected_manifest
+
+
+def _delegate_affirmation(**overrides):
+    fields = dict(
+        operation="assign_responsible",
+        case_id=0,
+        organization_id="org-1",
+        target_uid="delegate-uid-123",
+        target_email="delegado@example.com",
+    )
+    fields.update(overrides)
+    return DelegateAffirmation(**fields)
+
+
+def test_responsables_list_endpoint_returns_active_responsibles_for_actor_organization():
+    case_id = create_case(organization_id="org-1", suffix="r1", private_marker="encrypted")
+
+    response = client.get(f"/api/v2/casos-ayuda/{case_id}/responsables")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_responsables_assign_endpoint_persists_delegate_and_lists_it():
+    case_id = create_case(organization_id="org-1", suffix="r2", private_marker="encrypted")
+    app.dependency_overrides[require_verified_delegate_affirmation] = lambda: _delegate_affirmation(
+        case_id=case_id,
+    )
+    try:
+        response = client.post(
+            f"/api/v2/casos-ayuda/{case_id}/responsables",
+            json={"target_uid": "delegate-uid-123", "target_email": "delegado@example.com"},
+        )
+    finally:
+        del app.dependency_overrides[require_verified_delegate_affirmation]
+
+    assert response.status_code == 201
+    assert response.json()["usuario_id"] == "delegado@example.com"
+    assert response.json()["rol"] == "delegado"
+    assert response.json()["estado"] == "activo"
+
+    listed = client.get(f"/api/v2/casos-ayuda/{case_id}/responsables")
+    assert [item["usuario_id"] for item in listed.json()] == ["delegado@example.com"]
+
+
+def test_responsables_assign_endpoint_rejects_mismatched_affirmation():
+    case_id = create_case(organization_id="org-1", suffix="r3", private_marker="encrypted")
+    app.dependency_overrides[require_verified_delegate_affirmation] = lambda: _delegate_affirmation(
+        case_id=case_id,
+        target_email="alguien-mas@example.com",
+    )
+    try:
+        response = client.post(
+            f"/api/v2/casos-ayuda/{case_id}/responsables",
+            json={"target_uid": "delegate-uid-123", "target_email": "delegado@example.com"},
+        )
+    finally:
+        del app.dependency_overrides[require_verified_delegate_affirmation]
+
+    assert response.status_code == 401
+
+
+def test_responsables_revoke_endpoint_deactivates_responsible():
+    case_id = create_case(organization_id="org-1", suffix="r4", private_marker="encrypted")
+    app.dependency_overrides[require_verified_delegate_affirmation] = lambda: _delegate_affirmation(
+        case_id=case_id,
+    )
+    try:
+        assigned = client.post(
+            f"/api/v2/casos-ayuda/{case_id}/responsables",
+            json={"target_uid": "delegate-uid-123", "target_email": "delegado@example.com"},
+        )
+        responsible_id = assigned.json()["id"]
+
+        app.dependency_overrides[require_verified_delegate_affirmation] = lambda: _delegate_affirmation(
+            operation="revoke_responsible",
+            case_id=case_id,
+        )
+        revoked = client.post(
+            f"/api/v2/casos-ayuda/{case_id}/responsables/{responsible_id}/revocar",
+        )
+    finally:
+        del app.dependency_overrides[require_verified_delegate_affirmation]
+
+    assert revoked.status_code == 200
+    assert revoked.json()["estado"] == "removido"
+
+    listed = client.get(f"/api/v2/casos-ayuda/{case_id}/responsables")
+    assert listed.json() == []

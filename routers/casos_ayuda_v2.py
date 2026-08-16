@@ -12,7 +12,9 @@ import models
 from database import get_db
 from dependencies import (
     ActorOrgContext,
+    DelegateAffirmation,
     require_verified_case_organization_actor,
+    require_verified_delegate_affirmation,
     verify_api_key,
 )
 from services.help_cases import (
@@ -46,6 +48,14 @@ from services.help_beneficiaries import (
     find_cedula_matches,
 )
 from services.help_case_drafts import DraftIdempotencyConflictError, create_help_case_draft
+from services.help_case_responsibles import (
+    DelegateAffirmationMismatchError,
+    DuplicateResponsibleError,
+    ResponsibleNotFoundError,
+    assign_case_responsible,
+    list_case_responsibles,
+    revoke_case_responsible,
+)
 from services.help_identity import HelpIdentityError, normalize_venezuelan_identity
 from services.help_crypto import HelpDataCipher, HelpDataCryptoError
 from services.help_files import (
@@ -1036,6 +1046,101 @@ def publish_organization_help_case(
     except CaseStateError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/{case_id}/responsables", response_model=List[schemas.CasoAyudaResponsableResponse])
+def list_organization_help_case_responsibles(
+    case_id: int,
+    incluir_removidos: bool = Query(False),
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        responsibles = list_case_responsibles(
+            db, case_id=case_id, actor=actor, include_removed=incluir_removidos,
+        )
+        db.commit()
+        return responsibles
+    except CaseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except OrganizationAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
+@router.post("/{case_id}/responsables", response_model=schemas.CasoAyudaResponsableResponse, status_code=201)
+def assign_organization_help_case_responsible(
+    case_id: int,
+    payload: schemas.AsignarResponsableCasoAyudaRequest,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+    affirmation: DelegateAffirmation = Depends(require_verified_delegate_affirmation),
+):
+    try:
+        responsible = assign_case_responsible(
+            db,
+            case_id=case_id,
+            actor=actor,
+            affirmation=affirmation,
+            target_uid=payload.target_uid,
+            target_email=payload.target_email,
+        )
+        db.commit()
+        db.refresh(responsible)
+        return responsible
+    except CaseNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except OrganizationAccessError as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except DelegateAffirmationMismatchError as exc:
+        db.rollback()
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except DuplicateResponsibleError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except HelpCaseDomainError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{case_id}/responsables/{responsible_id}/revocar",
+    response_model=schemas.CasoAyudaResponsableResponse,
+)
+def revoke_organization_help_case_responsible(
+    case_id: int,
+    responsible_id: int,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+    affirmation: DelegateAffirmation = Depends(require_verified_delegate_affirmation),
+):
+    try:
+        responsible = revoke_case_responsible(
+            db,
+            case_id=case_id,
+            responsible_id=responsible_id,
+            actor=actor,
+            affirmation=affirmation,
+        )
+        db.commit()
+        db.refresh(responsible)
+        return responsible
+    except (CaseNotFoundError, ResponsibleNotFoundError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except OrganizationAccessError as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except DelegateAffirmationMismatchError as exc:
+        db.rollback()
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except HelpCaseDomainError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post(

@@ -14,6 +14,7 @@ from services.help_cases import (
     configure_help_case_publication,
 )
 from services.help_crypto import HelpDataCipher
+from services.help_case_responsibles import seed_default_responsible
 from services.help_idempotency import hash_idempotency_payload
 
 
@@ -141,6 +142,8 @@ def create_help_case_draft(
     )
     db.add(case)
     db.flush()
+
+    seed_default_responsible(db, case=case, actor=actor)
 
     configure_help_case_publication(
         db,

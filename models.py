@@ -958,3 +958,48 @@ class OperacionIdempotenteAyuda(Base):
     response_body = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class CasoAyudaResponsable(Base):
+    __tablename__ = "casos_ayuda_responsables"
+    __table_args__ = (
+        CheckConstraint("rol IN ('registrador', 'delegado')", name="ck_casos_ayuda_responsable_rol"),
+        CheckConstraint("estado IN ('activo', 'removido')", name="ck_casos_ayuda_responsable_estado"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    caso_id = Column(Integer, ForeignKey("casos_ayuda_v2.id", ondelete="RESTRICT"), nullable=False, index=True)
+    organizacion_id = Column(String(100), nullable=False, index=True)
+    usuario_id = Column(String(200), nullable=False, index=True)
+    rol = Column(String(20), nullable=False, default="delegado", server_default="delegado")
+    estado = Column(String(20), nullable=False, default="activo", server_default="activo")
+    asignado_por_id = Column(String(200), nullable=True)
+    asignado_en = Column(DateTime(timezone=True), server_default=func.now())
+    removido_por_id = Column(String(200), nullable=True)
+    removido_en = Column(DateTime(timezone=True), nullable=True)
+
+
+class OfertaAyudaDirecta(Base):
+    __tablename__ = "ofertas_ayuda"
+    __table_args__ = (
+        CheckConstraint("tipo IN ('directa', 'empleo')", name="ck_ofertas_ayuda_tipo"),
+        CheckConstraint(
+            "estado IN ('pendiente', 'contactada', 'completada', 'rechazada', 'cancelada')",
+            name="ck_ofertas_ayuda_estado",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    caso_id = Column(Integer, ForeignKey("casos_ayuda_v2.id", ondelete="RESTRICT"), nullable=False, index=True)
+    organizacion_id = Column(String(100), nullable=False, index=True)
+    tipo = Column(String(20), nullable=False, default="directa", server_default="directa")
+    actor_donante_uid = Column(String(200), nullable=False)
+    actor_donante_email = Column(String(320), nullable=False)
+    contacto_cifrado = Column(Text, nullable=False)
+    payload_cifrado = Column(Text, nullable=False)
+    payload_version = Column(Integer, nullable=True)
+    estado = Column(String(20), nullable=False, default="pendiente", server_default="pendiente")
+    gestionada_por = Column(String(200), nullable=True)
+    gestionada_en = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

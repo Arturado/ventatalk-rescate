@@ -691,6 +691,40 @@ class CasoAyudaV2DetalleResponse(CasoAyudaV2ResumenResponse):
     documentos: List[DocumentoCasoAyudaResumenResponse] = []
 
 
+class CasoAyudaResponsableResponse(BaseModel):
+    id: int
+    caso_id: int
+    organizacion_id: str
+    usuario_id: str
+    rol: str
+    estado: str
+    asignado_por_id: Optional[str] = None
+    asignado_en: datetime
+    removido_por_id: Optional[str] = None
+    removido_en: Optional[datetime] = None
+
+    @field_serializer('asignado_en', 'removido_en')
+    def serialize_dt(self, value: Optional[datetime]) -> Optional[str]:
+        if value and value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(VE_TZ).isoformat() if value else None
+
+    model_config = {"from_attributes": True}
+
+
+class AsignarResponsableCasoAyudaRequest(BaseModel):
+    target_uid: str = Field(min_length=1, max_length=128)
+    target_email: str = Field(min_length=3, max_length=320)
+
+    @field_validator("target_email")
+    @classmethod
+    def normalize_target_email(cls, value):
+        normalized = value.strip().lower()
+        if "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
+            raise ValueError("target_email invalido")
+        return normalized
+
+
 class BeneficiarioAyudaVerificacionRequest(BaseModel):
     is_minor: bool = False
     representative_name: Optional[str] = Field(default=None, min_length=2, max_length=500)
