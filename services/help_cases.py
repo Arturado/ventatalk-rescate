@@ -969,6 +969,8 @@ def build_public_help_case_response(db: Session, *, case, publication):
         "descripcion_publica": publication.descripcion_publica,
         "categoria": case.categoria,
         "localidad_general": publication.localidad_general,
+        "acepta_ayuda_monetaria": case.acepta_ayuda_monetaria,
+        "acepta_ayuda_directa": case.acepta_ayuda_directa,
         "meta_monto": case.meta_monto,
         "meta_moneda": case.meta_moneda,
         "monto_confirmado": case.monto_confirmado,

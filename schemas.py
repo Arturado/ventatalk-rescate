@@ -777,6 +777,8 @@ class CasoAyudaPublicoResponse(BaseModel):
     descripcion_publica: str
     categoria: str
     localidad_general: Optional[str] = None
+    acepta_ayuda_monetaria: bool
+    acepta_ayuda_directa: bool
     meta_monto: Optional[Decimal] = None
     meta_moneda: Optional[str] = None
     monto_confirmado: Decimal
