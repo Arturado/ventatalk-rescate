@@ -18,7 +18,6 @@ from services.help_cases import (
     HelpCaseDomainError,
     approve_exceptional_account,
     create_account_version,
-    create_help_case,
     register_case_document,
     register_help_case_consent,
     review_case_document,
@@ -59,19 +58,26 @@ def actor(*, organization_id="org-1", email="coordinador@example.com", role="coo
 
 
 def create_draft(db, *, suffix="1"):
-    return create_help_case(
+    summary, _created = create_help_case_draft(
         db,
         actor=actor(),
         organization_id="org-1",
         public_id=f"asset-case-{suffix}",
-        beneficiary_name_encrypted="encrypted-name",
-        beneficiary_identity_hash=(suffix * 64)[:64],
-        beneficiary_identity_encrypted="encrypted-id",
-        internal_title="Caso de activos",
-        category="medicamentos",
-        goal_amount=Decimal("100.00"),
-        goal_currency="USD",
+        payload=schemas.CasoAyudaV2DraftCreateRequest(
+            category="salud",
+            subject_type="persona",
+            aid_modes=["monetaria"],
+            beneficiary_name="Beneficiario de Prueba",
+            beneficiary_identity=f"V-{(str(suffix) * 9)[:9]}",
+            title="Caso de activos",
+            story="Historia de prueba para el caso de activos del beneficiario.",
+            goal_amount=Decimal("100.00"),
+            goal_currency="USD",
+        ),
+        idempotency_key=f"asset-case-key-{suffix}-0000001",
+        cipher=HelpDataCipher.from_environment(),
     )
+    return db.query(models.CasoAyudaV2).filter_by(id=summary["id"]).one()
 
 
 def create_non_monetary_draft(db, *, suffix="1"):

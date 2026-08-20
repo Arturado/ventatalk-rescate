@@ -19,7 +19,6 @@ from services.help_cases import (
     HelpCaseDomainError,
     configure_help_case_publication,
     OrganizationAccessError,
-    create_help_case,
     get_public_help_case,
     list_help_cases,
     list_public_help_cases,
@@ -92,19 +91,26 @@ def actor(*, organization_id="org-1", role="coordinador"):
 
 
 def create_draft(db, *, suffix="1", organization_id="org-1", actor_context=None):
-    return create_help_case(
+    summary, _created = create_help_case_draft(
         db,
         actor=actor_context or actor(organization_id=organization_id),
         organization_id=organization_id,
         public_id=f"service-case-{suffix}",
-        beneficiary_name_encrypted="encrypted-name",
-        beneficiary_identity_hash=(suffix * 64)[:64],
-        beneficiary_identity_encrypted="encrypted-id",
-        internal_title="Caso de servicio",
-        category="medicamentos",
-        goal_amount=Decimal("100.00"),
-        goal_currency="USD",
+        payload=schemas.CasoAyudaV2DraftCreateRequest(
+            category="salud",
+            subject_type="persona",
+            aid_modes=["monetaria"],
+            beneficiary_name="Beneficiario de Prueba",
+            beneficiary_identity=f"V-{(str(suffix) * 9)[:9]}",
+            title="Caso de servicio",
+            story="Historia de prueba para el caso de servicio del beneficiario.",
+            goal_amount=Decimal("100.00"),
+            goal_currency="USD",
+        ),
+        idempotency_key=f"service-case-key-{suffix}-0000001",
+        cipher=HelpDataCipher.from_environment(),
     )
+    return db.query(models.CasoAyudaV2).filter_by(id=summary["id"]).one()
 
 
 def add_complete_publication_requirements(db, case, *, account_version=1):
@@ -133,14 +139,21 @@ def add_complete_publication_requirements(db, case, *, account_version=1):
         evidencia_documento_id=evidence.id,
         registrado_por="coordinador@example.com",
     )
-    publication = models.PublicacionCasoAyuda(
-        caso_id=case.id,
-        nombre_publico="Ana",
-        titulo_publico="Ayuda para tratamiento",
-        descripcion_publica="Descripcion autorizada",
-        version=1,
-        configurado_por="coordinador@example.com",
-    )
+    publication = db.query(models.PublicacionCasoAyuda).filter_by(caso_id=case.id).one_or_none()
+    if publication is None:
+        publication = models.PublicacionCasoAyuda(
+            caso_id=case.id,
+            nombre_publico="Ana",
+            titulo_publico="Ayuda para tratamiento",
+            descripcion_publica="Descripcion autorizada",
+            version=1,
+            configurado_por="coordinador@example.com",
+        )
+        db.add(publication)
+    else:
+        publication.nombre_publico = "Ana"
+        publication.titulo_publico = "Ayuda para tratamiento"
+        publication.descripcion_publica = "Descripcion autorizada"
     account = models.CuentaCasoAyuda(
         caso_id=case.id,
         account_key="account-1",
@@ -174,7 +187,7 @@ def add_complete_publication_requirements(db, case, *, account_version=1):
         cargado_por="coordinador@example.com",
         revisado_por="coordinador@example.com",
     )
-    db.add_all([consent, publication, account, photo])
+    db.add_all([consent, account, photo])
     db.flush()
     return consent, account
 
@@ -187,8 +200,10 @@ def test_create_case_is_organization_scoped_and_audited_without_committing():
         assert case.estado == "borrador"
         assert db.query(models.BeneficiarioAyuda).count() == 1
         assert [event.accion for event in db.query(models.AuditoriaCasoAyuda).order_by(models.AuditoriaCasoAyuda.id)] == [
+            "responsable_registrador_sembrado",
+            "publicacion_configurada",
             "beneficiario_creado",
-            "caso_creado",
+            "caso_borrador_creado",
         ]
 
 
@@ -221,7 +236,6 @@ def test_readiness_reports_missing_requirements_without_changing_state():
             publish_help_case(db, case_id=case.id, actor=actor())
 
         assert set(error.value.blockers) == {
-            "publicacion_no_configurada",
             "consentimiento_vigente_faltante",
             "cuenta_aprobada_faltante",
             "foto_principal_faltante",
@@ -333,14 +347,6 @@ def test_pending_public_document_still_blocks_readiness():
 def test_case_without_primary_photo_is_blocked():
     with TestingSessionLocal() as db:
         case = create_draft(db)
-        publication = models.PublicacionCasoAyuda(
-            caso_id=case.id,
-            nombre_publico="Ana",
-            titulo_publico="Ayuda para tratamiento",
-            descripcion_publica="Descripcion autorizada",
-            version=1,
-            configurado_por="coordinador@example.com",
-        )
         consent = models.ConsentimientoCasoAyuda(
             caso_id=case.id,
             version=1,
@@ -367,7 +373,7 @@ def test_case_without_primary_photo_is_blocked():
             creado_por="coordinador@example.com",
             aprobado_por="coordinador@example.com",
         )
-        db.add_all([publication, consent, account])
+        db.add_all([consent, account])
         db.flush()
         case.estado = "pendiente_validacion"
         db.flush()
@@ -668,9 +674,9 @@ def test_publication_configuration_is_upserted_with_increasing_version():
         )
 
         assert first.id == second.id
-        assert second.version == 2
+        assert second.version == 3
         assert db.query(models.PublicacionCasoAyuda).count() == 1
-        assert db.query(models.AuditoriaCasoAyuda).filter_by(accion="publicacion_configurada").count() == 2
+        assert db.query(models.AuditoriaCasoAyuda).filter_by(accion="publicacion_configurada").count() == 3
 
 
 def test_publication_defaults_public_name_to_public_title_when_omitted():
@@ -712,12 +718,14 @@ def test_admin_can_update_published_public_information_with_history(role):
             within_current_consent_scope=True,
         )
 
-        assert updated.version == 2
+        assert updated.version == 3
         assert updated.activa is True
         versions = db.query(models.PublicacionCasoAyudaVersion).order_by(
             models.PublicacionCasoAyudaVersion.version
         ).all()
-        assert [version.titulo_publico for version in versions] == ["Titulo inicial", "Titulo actualizado"]
+        assert [version.titulo_publico for version in versions] == [
+            "Caso de servicio", "Titulo inicial", "Titulo actualizado",
+        ]
 
 
 def test_coordinator_cannot_update_public_information_after_publication():

@@ -25,7 +25,6 @@ from services.help_cases import (
     CaseStateError,
     HelpCaseDomainError,
     OrganizationAccessError,
-    create_help_case,
     get_help_case_detail,
     get_help_case_preview,
     list_help_cases,
@@ -55,6 +54,13 @@ from services.help_case_responsibles import (
     assign_case_responsible,
     list_case_responsibles,
     revoke_case_responsible,
+)
+from services.help_offers import (
+    HelpOfferDomainError,
+    OfferNotFoundError,
+    OfferStateError,
+    list_case_offers,
+    transition_offer,
 )
 from services.help_identity import HelpIdentityError, normalize_venezuelan_identity
 from services.help_crypto import HelpDataCipher, HelpDataCryptoError
@@ -480,52 +486,6 @@ def list_organization_help_cases(
     except OrganizationAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except HelpCaseDomainError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post("", response_model=schemas.CasoAyudaV2ResumenResponse, status_code=201)
-def create_organization_help_case(
-    payload: schemas.CasoAyudaV2CreateRequest,
-    db: Session = Depends(get_db),
-    _api_actor: str = Depends(verify_api_key),
-    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
-):
-    organization_id = str(payload.organizacion_id or actor.organizacion_id or "").strip()
-    try:
-        cipher = HelpDataCipher.from_environment()
-        case = create_help_case(
-            db,
-            actor=actor,
-            organization_id=organization_id,
-            public_id=f"ayuda-{uuid4().hex}",
-            beneficiary_name_encrypted=cipher.encrypt(
-                payload.beneficiary_name,
-                field="beneficiary.name",
-            ),
-            beneficiary_identity_hash=cipher.identity_hash(payload.beneficiary_identity),
-            beneficiary_identity_encrypted=cipher.encrypt(
-                payload.beneficiary_identity,
-                field="beneficiary.identity",
-            ),
-            internal_title=payload.internal_title,
-            category=payload.category,
-            goal_amount=payload.goal_amount,
-            goal_currency=payload.goal_currency,
-        )
-        db.commit()
-        db.refresh(case)
-        return case
-    except OrganizationAccessError as exc:
-        db.rollback()
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    except HelpDataCryptoError as exc:
-        db.rollback()
-        raise HTTPException(status_code=503, detail="El cifrado de datos no esta configurado") from exc
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="El caso o beneficiario ya existe") from exc
-    except HelpCaseDomainError as exc:
-        db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -1139,6 +1099,62 @@ def revoke_organization_help_case_responsible(
         db.rollback()
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except HelpCaseDomainError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/{case_id}/ofertas", response_model=List[schemas.OfertaAyudaDirectaOrganizacionResponse])
+def list_organization_help_case_offers(
+    case_id: int,
+    estado: Optional[Literal["pendiente", "contactada", "completada", "rechazada", "cancelada"]] = Query(default=None),
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        offers = list_case_offers(db, case_id=case_id, actor=actor, status=estado)
+        db.commit()
+        return offers
+    except CaseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except OrganizationAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{case_id}/ofertas/{offer_id}/{action}",
+    response_model=schemas.OfertaAyudaDirectaOrganizacionResponse,
+)
+def transition_organization_help_case_offer(
+    case_id: int,
+    offer_id: int,
+    action: Literal["contactar", "completar", "rechazar", "cancelar"],
+    payload: schemas.TransicionOfertaAyudaRequest,
+    db: Session = Depends(get_db),
+    _api_actor: str = Depends(verify_api_key),
+    actor: ActorOrgContext = Depends(require_verified_case_organization_actor),
+):
+    try:
+        offer = transition_offer(
+            db,
+            case_id=case_id,
+            offer_id=offer_id,
+            actor=actor,
+            action=action,
+            reason_code=payload.reason_code,
+        )
+        db.commit()
+        return offer
+    except (CaseNotFoundError, OfferNotFoundError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except OrganizationAccessError as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except OfferStateError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except HelpOfferDomainError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

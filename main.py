@@ -26,6 +26,7 @@ from routers.albergues import router as albergues_router
 from routers.casos_ayuda_publicos import router as casos_ayuda_publicos_router
 from routers.casos_ayuda_v2 import router as casos_ayuda_v2_router
 from routers.casos_ayuda_donantes import router as casos_ayuda_donantes_router
+from routers.casos_ayuda_ofertas import router as casos_ayuda_ofertas_router
 from routers.casos_ayuda_accesos import router as casos_ayuda_accesos_router
 from sqlalchemy import text as sql_text
 from sqlalchemy import inspect
@@ -476,6 +477,7 @@ app.include_router(albergues_router)
 app.include_router(casos_ayuda_v2_router)
 app.include_router(casos_ayuda_publicos_router)
 app.include_router(casos_ayuda_donantes_router)
+app.include_router(casos_ayuda_ofertas_router)
 app.include_router(casos_ayuda_accesos_router)
 app.include_router(admin_router)
 app.include_router(observability_router)

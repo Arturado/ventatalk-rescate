@@ -13,9 +13,10 @@ from sqlalchemy.pool import StaticPool
 from database import Base, get_db
 from dependencies import ActorOrgContext, require_verified_case_organization_actor, verify_api_key
 import models
+import schemas
 from routers.casos_ayuda_publicos import router as public_router
 from routers.casos_ayuda_v2 import router as management_router
-from services.help_cases import create_help_case
+from services.help_case_drafts import create_help_case_draft
 from services.help_crypto import HelpDataCipher
 
 
@@ -76,29 +77,32 @@ def create_managed_case(*, suffix="1", state="borrador", visible=True):
         cipher = HelpDataCipher.from_environment()
         identity_number = int(hashlib.sha256(str(suffix).encode()).hexdigest()[:8], 16) % 900_000_000 + 100_000_000
         canonical_identity = f"V-{identity_number}"
-        case = create_help_case(
+        summary, _created = create_help_case_draft(
             db,
             actor=actor(),
             organization_id="org-1",
             public_id=f"document-case-{suffix}",
-            beneficiary_name_encrypted=cipher.encrypt("Nombre privado", field="beneficiary.name"),
-            beneficiary_identity_hash=cipher.identity_hash(canonical_identity),
-            beneficiary_identity_encrypted=cipher.encrypt(canonical_identity, field="beneficiary.identity"),
-            internal_title="Caso de documentos",
-            category="medicamentos",
-            goal_amount=Decimal("100.00"),
-            goal_currency="USD",
+            payload=schemas.CasoAyudaV2DraftCreateRequest(
+                category="salud",
+                subject_type="persona",
+                aid_modes=["monetaria"],
+                beneficiary_name="Nombre privado",
+                beneficiary_identity=canonical_identity,
+                title="Caso de documentos",
+                story="Historia de prueba para el caso de documentos.",
+                goal_amount=Decimal("100.00"),
+                goal_currency="USD",
+            ),
+            idempotency_key=f"document-case-key-{suffix}-0000001",
+            cipher=cipher,
         )
+        case = db.query(models.CasoAyudaV2).filter_by(id=summary["id"]).one()
         case.estado = state
-        db.add(models.PublicacionCasoAyuda(
-            caso_id=case.id,
-            nombre_publico="Ana",
-            titulo_publico="Ayuda medica",
-            descripcion_publica="Descripcion publica autorizada",
-            version=1,
-            activa=visible,
-            configurado_por="uploader@example.com",
-        ))
+        publication = db.query(models.PublicacionCasoAyuda).filter_by(caso_id=case.id).one()
+        publication.nombre_publico = "Ana"
+        publication.titulo_publico = "Ayuda medica"
+        publication.descripcion_publica = "Descripcion publica autorizada"
+        publication.activa = visible
         db.add(models.ConsentimientoCasoAyuda(
             caso_id=case.id,
             version=1,

@@ -399,16 +399,6 @@ class CasoAyudaV2ResumenResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class CasoAyudaV2CreateRequest(BaseModel):
-    organizacion_id: Optional[str] = None
-    beneficiary_name: str = Field(min_length=2, max_length=500)
-    beneficiary_identity: str = Field(min_length=4, max_length=30)
-    internal_title: str = Field(min_length=3, max_length=250)
-    category: str = Field(min_length=2, max_length=80)
-    goal_amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
-    goal_currency: Literal["VES", "USD", "EUR"]
-
-
 class CasoAyudaV2UpdateRequest(BaseModel):
     internal_title: Optional[str] = Field(default=None, min_length=3, max_length=250)
     category: Optional[str] = Field(default=None, min_length=2, max_length=80)
@@ -874,6 +864,34 @@ class AyudaMonetariaDonanteResponse(BaseModel):
 
 class AyudaMonetariaDonanteResumenResponse(AyudaMonetariaDonanteResponse):
     public_title: str
+
+
+class OfertaAyudaDirectaCreateRequest(BaseModel):
+    description: str = Field(min_length=10, max_length=2000)
+    contact_details: str = Field(min_length=5, max_length=500)
+
+
+class OfertaAyudaDirectaDonanteResponse(BaseModel):
+    id: int
+    case_public_id: str
+    status: str
+    created_at: datetime
+
+
+class OfertaAyudaDirectaOrganizacionResponse(BaseModel):
+    id: int
+    caso_id: int
+    tipo: str
+    estado: str
+    description: str
+    actor_donante_email: str
+    gestionada_por: Optional[str] = None
+    gestionada_en: Optional[datetime] = None
+    created_at: datetime
+
+
+class TransicionOfertaAyudaRequest(BaseModel):
+    reason_code: Optional[str] = Field(default=None, max_length=100)
 
 
 class AyudaMonetariaOrganizacionResumenResponse(BaseModel):
