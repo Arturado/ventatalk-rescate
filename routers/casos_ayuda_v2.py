@@ -3,7 +3,8 @@ from uuid import uuid4
 import json
 import hashlib
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Response
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -95,6 +96,13 @@ from services.help_receipts import (
 
 
 router = APIRouter(prefix="/api/v2/casos-ayuda", tags=["casos-ayuda-v2"])
+
+
+def parse_help_case_document_payload(payload: dict = Body(...)):
+    try:
+        return schemas.DocumentoCasoAyudaCreateRequest.model_validate(payload)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail="Documento invalido") from exc
 
 
 @router.get("/{case_id}/ayudas/{aid_id}/comprobantes/{receipt_id}/descargar")
@@ -612,7 +620,7 @@ def get_organization_help_case(
 )
 def upload_organization_help_case_document(
     case_id: int,
-    payload: schemas.DocumentoCasoAyudaCreateRequest,
+    payload: schemas.DocumentoCasoAyudaCreateRequest = Depends(parse_help_case_document_payload),
     db: Session = Depends(get_db),
     _api_actor: str = Depends(verify_api_key),
     actor: ActorOrgContext = Depends(require_verified_case_organization_actor),

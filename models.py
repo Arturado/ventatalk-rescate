@@ -984,7 +984,10 @@ class OfertaAyudaDirecta(Base):
     __table_args__ = (
         CheckConstraint("tipo IN ('directa', 'empleo')", name="ck_ofertas_ayuda_tipo"),
         CheckConstraint(
-            "estado IN ('pendiente', 'contactada', 'completada', 'rechazada', 'cancelada')",
+            "(tipo = 'directa' AND estado IN "
+            "('pendiente', 'contactada', 'completada', 'rechazada', 'cancelada')) OR "
+            "(tipo = 'empleo' AND estado IN "
+            "('pendiente_respuesta', 'aceptada', 'rechazada', 'vencida', 'cancelada'))",
             name="ck_ofertas_ayuda_estado",
         ),
     )

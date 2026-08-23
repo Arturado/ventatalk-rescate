@@ -148,6 +148,7 @@ def test_red_gallery_photo_contract_accepts_stable_public_image_keys(payload):
         {"document_key": "foto-galeria-sin-prefijo"},
         {"classification": "privado"},
         {"content_type": "application/pdf", "file_name": "galeria.pdf"},
+        {"content_type": "image/png", "file_name": "galeria.jpg"},
     ],
 )
 def test_red_gallery_photo_contract_rejects_invalid_key_privacy_or_mime(override):

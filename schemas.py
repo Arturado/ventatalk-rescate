@@ -1,4 +1,5 @@
-from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_serializer, model_validator
+import re
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from typing import List, Literal, Optional
@@ -749,6 +750,28 @@ class DocumentoCasoAyudaCreateRequest(BaseModel):
     content_type: Literal["application/pdf", "image/jpeg", "image/png"]
     content_base64: str = Field(min_length=8, max_length=7_100_000)
 
+    @model_validator(mode="after")
+    def validate_public_photo_contract(self):
+        if self.document_type not in {"foto_principal", "foto_galeria"}:
+            return self
+        if self.classification != "publico":
+            raise ValueError("Las fotografias deben ser publicas")
+        if self.content_type not in {"image/jpeg", "image/png"}:
+            raise ValueError("Las fotografias solo admiten JPEG o PNG")
+        lower_name = self.file_name.lower()
+        valid_extension = (
+            self.content_type == "image/jpeg" and lower_name.endswith((".jpg", ".jpeg"))
+        ) or (self.content_type == "image/png" and lower_name.endswith(".png"))
+        if not valid_extension:
+            raise ValueError("La extension no corresponde con el MIME de la fotografia")
+        if self.document_type == "foto_principal" and self.document_key != "foto_principal":
+            raise ValueError("La foto principal requiere su clave estable")
+        if self.document_type == "foto_galeria" and not re.fullmatch(
+            r"foto_galeria:[a-z0-9][a-z0-9-]{0,63}", self.document_key,
+        ):
+            raise ValueError("La foto de galeria requiere una clave estable")
+        return self
+
 
 class DocumentoCasoAyudaReviewRequest(BaseModel):
     approve: bool
@@ -779,14 +802,27 @@ class CasoAyudaPublicoResponse(BaseModel):
     localidad_general: Optional[str] = None
     acepta_ayuda_monetaria: bool
     acepta_ayuda_directa: bool
+    modalidades: List[HelpCaseAidMode] = Field(default_factory=list)
     meta_monto: Optional[Decimal] = None
     meta_moneda: Optional[str] = None
-    monto_confirmado: Decimal
-    ayudas_confirmadas: int
+    monto_confirmado: Optional[Decimal] = None
+    ayudas_confirmadas: Optional[int] = None
     estado: str
-    prioridad_especial: bool
     publicado_at: Optional[datetime] = None
-    documentos: List[dict] = []
+    documentos: List[dict] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def omit_employment_financial_fields(self, handler):
+        serialized = handler(self)
+        if self.categoria == "empleo":
+            for field in (
+                "meta_monto",
+                "meta_moneda",
+                "monto_confirmado",
+                "ayudas_confirmadas",
+            ):
+                serialized.pop(field, None)
+        return serialized
 
 
 class EquivalenciasCasoPublicoResponse(BaseModel):
@@ -877,6 +913,36 @@ class OfertaAyudaDirectaDonanteResponse(BaseModel):
     id: int
     case_public_id: str
     status: str
+    created_at: datetime
+
+
+class OfertaLaboralCreateRequest(BaseModel):
+    tipo_trabajo: str = Field(min_length=2, max_length=120)
+    descripcion: str = Field(min_length=10, max_length=2000)
+    remuneracion_estimada: str = Field(min_length=2, max_length=250)
+    telefono: str = Field(min_length=5, max_length=80)
+    correo: str = Field(min_length=5, max_length=320)
+
+    model_config = {"extra": "forbid", "str_strip_whitespace": True}
+
+    @field_validator("correo")
+    @classmethod
+    def normalize_labor_email(cls, value):
+        normalized = value.lower()
+        if (
+            normalized.count("@") != 1
+            or "." not in normalized.rsplit("@", 1)[-1]
+            or any(character.isspace() for character in normalized)
+        ):
+            raise ValueError("El correo no es valido")
+        return normalized
+
+
+class OfertaLaboralDonanteResponse(BaseModel):
+    id: int
+    case_public_id: str
+    tipo: Literal["empleo"]
+    status: Literal["pendiente_respuesta"]
     created_at: datetime
 
 

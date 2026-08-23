@@ -18,6 +18,7 @@ from services.help_cases import (
     HelpCaseDomainError,
     approve_exceptional_account,
     create_account_version,
+    list_current_public_case_documents,
     register_case_document,
     register_help_case_consent,
     review_case_document,
@@ -179,6 +180,116 @@ def test_document_registration_preserves_versions_and_private_paths():
 
         assert (first.version, second.version) == (1, 2)
         assert db.query(models.DocumentoCasoAyuda).count() == 2
+
+
+def test_gallery_registration_and_public_projection_enforce_contract_and_order():
+    with TestingSessionLocal() as db:
+        case = create_draft(db, suffix="8")
+        consent = add_consent(db, case)
+        common = {
+            "case_id": case.id,
+            "actor": actor(),
+            "classification": "publico",
+            "content_type": "image/jpeg",
+            "size_bytes": 100,
+            "checksum_sha256": "a" * 64,
+        }
+        gallery_z = register_case_document(
+            db,
+            **common,
+            document_key="foto_galeria:zeta",
+            document_type="foto_galeria",
+            storage_path="public/cases/gallery-z.jpg",
+        )
+        cover = register_case_document(
+            db,
+            **common,
+            document_key="foto_principal",
+            document_type="foto_principal",
+            storage_path="public/cases/gallery-cover.jpg",
+        )
+        gallery_a = register_case_document(
+            db,
+            **common,
+            document_key="foto_galeria:alfa",
+            document_type="foto_galeria",
+            storage_path="public/cases/gallery-a.jpg",
+        )
+        gallery_a_v2 = register_case_document(
+            db,
+            **{**common, "checksum_sha256": "b" * 64},
+            document_key="foto_galeria:alfa",
+            document_type="foto_galeria",
+            storage_path="public/cases/gallery-a-v2.jpg",
+        )
+        assert all(item.consentimiento_version == consent.version for item in (cover, gallery_a, gallery_z))
+        assert gallery_a_v2.version == 2
+
+        db.add_all([
+            models.DocumentoCasoAyuda(
+                caso_id=case.id,
+                document_key="foto_galeria:privada",
+                version=1,
+                tipo="foto_galeria",
+                clasificacion="privado",
+                estado_revision="aprobado",
+                storage_path="private/cases/gallery-private.jpg",
+                content_type="image/jpeg",
+                size_bytes=100,
+                checksum_sha256="c" * 64,
+                consentimiento_version=consent.version,
+                cargado_por=actor().email,
+            ),
+            models.DocumentoCasoAyuda(
+                caso_id=case.id,
+                document_key="foto_galeria:rechazada",
+                version=1,
+                tipo="foto_galeria",
+                clasificacion="publico",
+                estado_revision="rechazado",
+                storage_path="public/cases/gallery-rejected.jpg",
+                content_type="image/jpeg",
+                size_bytes=100,
+                checksum_sha256="d" * 64,
+                consentimiento_version=consent.version,
+                cargado_por=actor().email,
+            ),
+            models.DocumentoCasoAyuda(
+                caso_id=case.id,
+                document_key="foto_galeria:consentimiento-anterior",
+                version=1,
+                tipo="foto_galeria",
+                clasificacion="publico",
+                estado_revision="aprobado",
+                storage_path="public/cases/gallery-old-consent.jpg",
+                content_type="image/jpeg",
+                size_bytes=100,
+                checksum_sha256="e" * 64,
+                consentimiento_version=consent.version + 1,
+                cargado_por=actor().email,
+            ),
+        ])
+        db.flush()
+
+        projected = list_current_public_case_documents(db, case_id=case.id)
+        assert [item.id for item in projected] == [cover.id, gallery_a_v2.id, gallery_z.id]
+
+        for override in (
+            {"document_key": "foto_galeria:INVALIDA"},
+            {"classification": "privado", "storage_path": "private/cases/gallery.jpg"},
+            {"content_type": "application/pdf"},
+        ):
+            with pytest.raises(HelpCaseDomainError):
+                register_case_document(
+                    db,
+                    **{
+                        **common,
+                        "document_key": "foto_galeria:valida",
+                        "document_type": "foto_galeria",
+                        "storage_path": "public/cases/gallery.jpg",
+                        **override,
+                    },
+                )
 
 
 def test_public_document_without_consent_uploads_with_null_consent_version():

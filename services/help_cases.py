@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
@@ -612,6 +613,17 @@ def register_case_document(
     checksum_sha256 = _require_text(checksum_sha256, "checksum_sha256")
     if classification not in {"publico", "privado"}:
         raise HelpCaseDomainError("classification no soportada")
+    if document_type in {"foto_principal", "foto_galeria"}:
+        if classification != "publico":
+            raise HelpCaseDomainError("Las fotografias deben ser publicas")
+        if content_type not in {"image/jpeg", "image/png"}:
+            raise HelpCaseDomainError("Las fotografias solo admiten JPEG o PNG")
+        if document_type == "foto_principal" and document_key != "foto_principal":
+            raise HelpCaseDomainError("La foto principal requiere su clave estable")
+        if document_type == "foto_galeria" and not re.fullmatch(
+            r"foto_galeria:[a-z0-9][a-z0-9-]{0,63}", document_key,
+        ):
+            raise HelpCaseDomainError("La foto de galeria requiere una clave estable")
     expected_prefix = "public/" if classification == "publico" else "private/"
     if not storage_path.startswith(expected_prefix):
         raise HelpCaseDomainError("La ruta no corresponde con la clasificacion del documento")
@@ -961,6 +973,15 @@ def get_help_case_preview(db: Session, *, case_id: int, actor: ActorOrgContext):
 
 def build_public_help_case_response(db: Session, *, case, publication):
     current_public_documents = list_current_public_case_documents(db, case_id=case.id)
+    employment = case.categoria == "empleo"
+    modalidades = []
+    if employment:
+        modalidades.append("oferta_laboral")
+    else:
+        if case.acepta_ayuda_monetaria and case.meta_monto and case.meta_moneda:
+            modalidades.append("monetaria")
+        if case.acepta_ayuda_directa:
+            modalidades.append("directa")
     return {
         "id": case.id,
         "public_id": case.public_id,
@@ -971,18 +992,30 @@ def build_public_help_case_response(db: Session, *, case, publication):
         "localidad_general": publication.localidad_general,
         "acepta_ayuda_monetaria": case.acepta_ayuda_monetaria,
         "acepta_ayuda_directa": case.acepta_ayuda_directa,
-        "meta_monto": case.meta_monto,
-        "meta_moneda": case.meta_moneda,
-        "monto_confirmado": case.monto_confirmado,
-        "ayudas_confirmadas": case.ayudas_confirmadas,
+        "modalidades": modalidades,
+        "meta_monto": None if employment else case.meta_monto,
+        "meta_moneda": None if employment else case.meta_moneda,
+        "monto_confirmado": None if employment else case.monto_confirmado,
+        "ayudas_confirmadas": None if employment else case.ayudas_confirmadas,
         "estado": case.estado,
-        "prioridad_especial": case.prioridad_especial,
         "publicado_at": case.publicado_at,
         "documentos": [
             {"id": document.id, "tipo": document.tipo, "content_type": document.content_type}
-            for document in current_public_documents
+            for document in order_public_case_documents(current_public_documents)
         ],
     }
+
+
+def order_public_case_documents(documents):
+    def value(document, field, default=None):
+        return document.get(field, default) if isinstance(document, dict) else getattr(document, field, default)
+
+    def order_key(document):
+        document_type = value(document, "tipo", "")
+        group = 0 if document_type == "foto_principal" else 1 if document_type == "foto_galeria" else 2
+        return (group, value(document, "document_key", ""), value(document, "id", 0))
+
+    return sorted(documents, key=order_key)
 
 
 def list_current_public_case_documents(db: Session, *, case_id: int):
@@ -998,14 +1031,14 @@ def list_current_public_case_documents(db: Session, *, case_id: int):
         .order_by(models.DocumentoCasoAyuda.document_key, models.DocumentoCasoAyuda.version.desc())
         .all()
     )
-    return [
+    return order_public_case_documents([
         document
         for document in _latest_by_key(documents, "document_key")
         if consent is not None
         and document.clasificacion == "publico"
         and document.estado_revision == "aprobado"
         and document.consentimiento_version == consent.version
-    ]
+    ])
 
 
 def get_current_public_case_document(db: Session, *, case_id: int, document_id: int):

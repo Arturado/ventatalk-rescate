@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import models
@@ -14,6 +15,7 @@ from services.help_idempotency import hash_idempotency_payload
 
 
 IDEMPOTENT_OFFER_OPERATION = "create_help_offer"
+IDEMPOTENT_LABOR_OFFER_OPERATION = "create_labor_offer"
 OFFER_PAYLOAD_VERSION = 1
 OFFER_STATES = {"pendiente", "contactada", "completada", "rechazada", "cancelada"}
 OFFER_TRANSITIONS = {
@@ -42,6 +44,26 @@ class OfferStateError(HelpOfferDomainError):
 
 class OfferIdempotencyConflictError(HelpOfferDomainError):
     pass
+
+
+def _labor_idempotency_operation(db, *, actor_id, idempotency_key):
+    return db.query(models.OperacionIdempotenteAyuda).filter_by(
+        actor_id=actor_id,
+        operacion=IDEMPOTENT_LABOR_OFFER_OPERATION,
+        idempotency_key=idempotency_key,
+    ).one_or_none()
+
+
+def _replay_labor_idempotency_operation(operation, request_hash):
+    if operation.request_hash != request_hash:
+        raise OfferIdempotencyConflictError(
+            "La Idempotency-Key ya se uso con un payload distinto"
+        )
+    if operation.estado == "completed" and operation.response_body:
+        return json.loads(operation.response_body), False
+    raise OfferIdempotencyConflictError(
+        "La solicitud con esta Idempotency-Key todavia esta en proceso"
+    )
 
 
 def _offer_donor_response(offer, case_public_id):
@@ -155,6 +177,129 @@ def create_direct_offer(
     ))
 
     response = _offer_donor_response(offer, case.public_id)
+    operation.estado = "completed"
+    operation.response_status = 201
+    operation.response_body = json.dumps(response, ensure_ascii=False, separators=(",", ":"))
+    operation.completed_at = datetime.now(timezone.utc)
+    db.flush()
+    return response, True
+
+
+def create_labor_offer(
+    db: Session,
+    *,
+    actor: ActorOrgContext,
+    public_id: str,
+    tipo_trabajo: str,
+    descripcion: str,
+    remuneracion_estimada: str,
+    telefono: str,
+    correo: str,
+    idempotency_key: str,
+    cipher: HelpDataCipher,
+):
+    _require_donor_identity(actor)
+    canonical_payload = {
+        "public_id": public_id,
+        "tipo_trabajo": str(tipo_trabajo).strip(),
+        "descripcion": str(descripcion).strip(),
+        "remuneracion_estimada": str(remuneracion_estimada).strip(),
+        "telefono": str(telefono).strip(),
+        "correo": str(correo).strip().lower(),
+    }
+    if any(not value for value in canonical_payload.values()):
+        raise HelpOfferDomainError("La oferta laboral contiene campos vacios")
+    request_hash = hash_idempotency_payload(canonical_payload)
+    existing = _labor_idempotency_operation(
+        db, actor_id=actor.uid, idempotency_key=idempotency_key,
+    )
+    if existing is not None:
+        return _replay_labor_idempotency_operation(existing, request_hash)
+
+    case = db.query(models.CasoAyudaV2).filter(
+        models.CasoAyudaV2.public_id == public_id,
+        models.CasoAyudaV2.categoria == "empleo",
+        models.CasoAyudaV2.estado == "publicado",
+        models.CasoAyudaV2.organizacion_id.in_(enabled_help_v2_organization_ids()),
+    ).with_for_update().one_or_none()
+    if case is None:
+        raise OfferAccessError("Caso laboral publicado no encontrado")
+
+    operation = models.OperacionIdempotenteAyuda(
+        actor_id=actor.uid,
+        organizacion_id=case.organizacion_id,
+        operacion=IDEMPOTENT_LABOR_OFFER_OPERATION,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+        estado="processing",
+    )
+    try:
+        # The unique constraint is the final concurrency barrier. Keeping the
+        # insert inside a savepoint lets the caller transaction remain usable
+        # when another request wins after our initial read.
+        with db.begin_nested():
+            db.add(operation)
+            db.flush()
+    except IntegrityError:
+        winner = _labor_idempotency_operation(
+            db, actor_id=actor.uid, idempotency_key=idempotency_key,
+        )
+        if winner is None:
+            raise OfferIdempotencyConflictError(
+                "No fue posible resolver la solicitud idempotente"
+            )
+        return _replay_labor_idempotency_operation(winner, request_hash)
+
+    offer = models.OfertaAyudaDirecta(
+        caso_id=case.id,
+        organizacion_id=case.organizacion_id,
+        tipo="empleo",
+        actor_donante_uid=actor.uid,
+        actor_donante_email=actor.email,
+        contacto_cifrado=cipher.encrypt(
+            json.dumps(
+                {"telefono": canonical_payload["telefono"], "correo": canonical_payload["correo"]},
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            field="labor_offer.contact",
+        ),
+        payload_cifrado=cipher.encrypt(
+            json.dumps(
+                {
+                    "tipo_trabajo": canonical_payload["tipo_trabajo"],
+                    "descripcion": canonical_payload["descripcion"],
+                    "remuneracion_estimada": canonical_payload["remuneracion_estimada"],
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            field="labor_offer.payload",
+        ),
+        payload_version=OFFER_PAYLOAD_VERSION,
+        estado="pendiente_respuesta",
+    )
+    db.add(offer)
+    db.flush()
+
+    db.add(models.AuditoriaCasoAyuda(
+        event_id=str(uuid4()),
+        organizacion_id=case.organizacion_id,
+        caso_id=case.id,
+        accion="oferta_laboral_creada",
+        actor_id=actor.uid,
+        actor_tipo="donante",
+        entidad_tipo="oferta",
+        entidad_id=str(offer.id),
+        metadata_json=json.dumps({"tipo": "empleo"}, separators=(",", ":")),
+    ))
+    response = {
+        "id": offer.id,
+        "case_public_id": case.public_id,
+        "tipo": "empleo",
+        "status": "pendiente_respuesta",
+        "created_at": offer.created_at.isoformat(),
+    }
     operation.estado = "completed"
     operation.response_status = 201
     operation.response_body = json.dumps(response, ensure_ascii=False, separators=(",", ":"))

@@ -19,6 +19,7 @@ from services.help_offers import (
     OfferNotFoundError,
     OfferStateError,
     create_direct_offer,
+    create_labor_offer,
     list_case_offers,
     transition_offer,
 )
@@ -205,6 +206,97 @@ def test_create_direct_offer_succeeds_for_published_case_accepting_directa():
         assert offer.actor_donante_email == "donante@example.com"
         assert "colchones" not in offer.payload_cifrado
         assert "412-1234567" not in offer.contacto_cifrado
+    finally:
+        db.close()
+
+
+def labor_payload():
+    return {
+        "tipo_trabajo": "Contrato por proyecto",
+        "descripcion": "Diseno de materiales informativos accesibles.",
+        "remuneracion_estimada": "USD 450 por proyecto",
+        "telefono": "+58 412-0000000",
+        "correo": "oferta@example.test",
+    }
+
+
+def test_create_labor_offer_is_separate_private_and_idempotent():
+    db = TestingSessionLocal()
+    try:
+        case = create_employment_case(db)
+        publish_case(db, case, signer_type="beneficiario")
+        kwargs = {
+            "actor": donor(),
+            "public_id": case.public_id,
+            "idempotency_key": "labor-offer-key-0000001",
+            "cipher": HelpDataCipher.from_environment(),
+            **labor_payload(),
+        }
+
+        first, first_created = create_labor_offer(db, **kwargs)
+        second, second_created = create_labor_offer(db, **kwargs)
+
+        assert first_created is True
+        assert second_created is False
+        assert first == second
+        assert first["tipo"] == "empleo"
+        assert first["status"] == "pendiente_respuesta"
+        assert not set(labor_payload()).intersection(first)
+        offer = db.query(models.OfertaAyudaDirecta).one()
+        assert offer.tipo == "empleo"
+        assert offer.estado == "pendiente_respuesta"
+        assert labor_payload()["telefono"] not in offer.contacto_cifrado
+        assert labor_payload()["descripcion"] not in offer.payload_cifrado
+        audit = db.query(models.AuditoriaCasoAyuda).filter_by(accion="oferta_laboral_creada").one()
+        assert audit.metadata_json == '{"tipo":"empleo"}'
+    finally:
+        db.close()
+
+
+def test_create_labor_offer_conflicts_on_same_key_with_different_payload():
+    db = TestingSessionLocal()
+    try:
+        case = create_employment_case(db)
+        publish_case(db, case, signer_type="beneficiario")
+        kwargs = {
+            "actor": donor(),
+            "public_id": case.public_id,
+            "idempotency_key": "labor-conflict-key-0000001",
+            "cipher": HelpDataCipher.from_environment(),
+            **labor_payload(),
+        }
+        create_labor_offer(db, **kwargs)
+
+        with pytest.raises(OfferIdempotencyConflictError):
+            create_labor_offer(db, **{**kwargs, "descripcion": "Otra descripcion laboral valida."})
+        assert db.query(models.OfertaAyudaDirecta).count() == 1
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize("case_kind", ["directa", "empleo_pausado"])
+def test_create_labor_offer_rejects_non_labor_or_non_actionable_case(case_kind):
+    db = TestingSessionLocal()
+    try:
+        if case_kind == "directa":
+            case = create_campaign_case(db)
+        else:
+            case = create_employment_case(db)
+        publish_case(db, case, signer_type="beneficiario" if case_kind == "empleo_pausado" else "representante")
+        if case_kind == "empleo_pausado":
+            case.estado = "pausado"
+            db.flush()
+
+        with pytest.raises(OfferAccessError):
+            create_labor_offer(
+                db,
+                actor=donor(),
+                public_id=case.public_id,
+                idempotency_key=f"labor-rejected-{case_kind}-0000001",
+                cipher=HelpDataCipher.from_environment(),
+                **labor_payload(),
+            )
+        assert db.query(models.OfertaAyudaDirecta).count() == 0
     finally:
         db.close()
 
