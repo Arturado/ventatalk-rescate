@@ -1,0 +1,29 @@
+{
+  "employment_public_case": {
+    "id": 501,
+    "public_id": "spec005-empleo-publico",
+    "nombre_publico": "Persona con experiencia en oficios",
+    "titulo_publico": "Busca una oportunidad laboral estable",
+    "descripcion_publica": "Cuenta con experiencia práctica y disponibilidad para trabajar.",
+    "categoria": "empleo",
+    "localidad_general": "Municipio de prueba",
+    "acepta_ayuda_monetaria": false,
+    "acepta_ayuda_directa": false,
+    "estado": "publicado",
+    "documentos": [{"id": 901, "tipo": "foto_principal", "content_type": "image/jpeg"}]
+  },
+  "labor_offer": {
+    "tipo_trabajo": "Contrato por proyecto",
+    "descripcion": "Diseño de materiales informativos accesibles.",
+    "remuneracion_estimada": "USD 450 por proyecto",
+    "telefono": "+58 412-0000000",
+    "correo": "oferta@example.test"
+  },
+  "labor_offer_response": {
+    "id": 701,
+    "case_public_id": "spec005-empleo-publico",
+    "tipo": "empleo",
+    "status": "pendiente_respuesta",
+    "created_at": "2026-08-22T12:00:00Z"
+  }
+}
