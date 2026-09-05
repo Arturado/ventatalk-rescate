@@ -28,6 +28,7 @@ from routers.casos_ayuda_v2 import router as casos_ayuda_v2_router
 from routers.casos_ayuda_donantes import router as casos_ayuda_donantes_router
 from routers.casos_ayuda_ofertas import router as casos_ayuda_ofertas_router
 from routers.casos_ayuda_accesos import router as casos_ayuda_accesos_router
+from routers.casos_ayuda_laboral import LaborNoStoreMiddleware, router as casos_ayuda_laboral_router
 from sqlalchemy import text as sql_text
 from sqlalchemy import inspect
 from services.shelter_centers import DEFAULT_ORGANIZACION_ID
@@ -390,6 +391,7 @@ app = FastAPI(
     openapi_url=None,
     lifespan=lifespan,
 )
+app.add_middleware(LaborNoStoreMiddleware)
 
 # Docs protegidos por API key en /cowboy-bebop
 @app.get("/cowboy-bebop", include_in_schema=False)
@@ -479,6 +481,7 @@ app.include_router(casos_ayuda_publicos_router)
 app.include_router(casos_ayuda_donantes_router)
 app.include_router(casos_ayuda_ofertas_router)
 app.include_router(casos_ayuda_accesos_router)
+app.include_router(casos_ayuda_laboral_router)
 app.include_router(admin_router)
 app.include_router(observability_router)
 

@@ -2,6 +2,7 @@
 
 import base64
 import hashlib
+import hmac
 import json
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -162,6 +163,22 @@ def _session_by_token(db, session_token, *, allow_revoked=False):
     return session
 
 
+def validate_labor_session_csrf(db, *, session_token, csrf_token):
+    session = _session_by_token(db, session_token)
+    if not csrf_token or not hmac.compare_digest(session.csrf_hash, _hash(csrf_token)):
+        raise LaborAccessError("labor_csrf_invalid")
+    return session
+
+
+def close_labor_session(db, *, session_token, csrf_token, now=None):
+    session = validate_labor_session_csrf(
+        db, session_token=session_token, csrf_token=csrf_token,
+    )
+    session.revoked_at = _now(now)
+    db.flush()
+    return {"status": "closed"}
+
+
 def get_labor_offer_context(db, *, session_token, now=None):
     moment = _now(now)
     session = _session_by_token(db, session_token)
@@ -192,6 +209,18 @@ def list_labor_offers_for_moderation(db, *, actor):
                actor_id=actor.uid,
                actor_type="admin" if actor.role == "admin" else actor.role)
     return rows
+
+
+def get_donor_labor_offer_status(db, *, offer_id, actor):
+    if actor.role != "donor" or not actor.uid:
+        raise LaborAccessError("labor_offer_forbidden")
+    offer = db.query(models.OfertaAyudaDirecta).filter_by(
+        id=offer_id, tipo="empleo"
+    ).one_or_none()
+    if offer is None or offer.actor_donante_uid != actor.uid:
+        raise LaborAccessError("labor_offer_forbidden")
+    return {"offer_id": offer.id, "state": offer.estado,
+            "created_at": offer.created_at, "expires_at": offer.expires_at}
 
 
 def _idempotency(db, *, actor_id, operation, key, request, offer_id):
