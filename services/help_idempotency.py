@@ -7,7 +7,10 @@ from fastapi import HTTPException
 
 
 IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{16,128}$")
-IDEMPOTENT_OPERATIONS = {"report_help", "confirm_help", "create_help_offer"}
+IDEMPOTENT_OPERATIONS = {
+    "report_help", "confirm_help", "create_help_offer", "create_labor_offer",
+    "labor_decision", "labor_cancel", "labor_expire",
+}
 
 
 def normalize_idempotency_key(value: Optional[str]) -> str:
