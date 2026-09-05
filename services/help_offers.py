@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from sqlalchemy.exc import IntegrityError
@@ -83,7 +83,10 @@ def _offer_detail(offer, cipher):
         "tipo": offer.tipo,
         "estado": offer.estado,
         "description": payload.get("description"),
-        "actor_donante_email": offer.actor_donante_email,
+        "actor_donante_email": cipher.decrypt(
+            offer.actor_donante_email_cifrado,
+            field="offer.actor_email",
+        ),
         "gestionada_por": offer.gestionada_por,
         "gestionada_en": offer.gestionada_en,
         "created_at": offer.created_at,
@@ -152,7 +155,7 @@ def create_direct_offer(
         organizacion_id=case.organizacion_id,
         tipo="directa",
         actor_donante_uid=actor.uid,
-        actor_donante_email=actor.email,
+        actor_donante_email_cifrado=cipher.encrypt(actor.email, field="offer.actor_email"),
         contacto_cifrado=cipher.encrypt(contact_details, field="offer.contact"),
         payload_cifrado=cipher.encrypt(
             json.dumps({"description": description}, sort_keys=True, separators=(",", ":")),
@@ -255,7 +258,7 @@ def create_labor_offer(
         organizacion_id=case.organizacion_id,
         tipo="empleo",
         actor_donante_uid=actor.uid,
-        actor_donante_email=actor.email,
+        actor_donante_email_cifrado=cipher.encrypt(actor.email, field="offer.actor_email"),
         contacto_cifrado=cipher.encrypt(
             json.dumps(
                 {"telefono": canonical_payload["telefono"], "correo": canonical_payload["correo"]},
@@ -278,6 +281,7 @@ def create_labor_offer(
         ),
         payload_version=OFFER_PAYLOAD_VERSION,
         estado="pendiente_respuesta",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
     )
     db.add(offer)
     db.flush()

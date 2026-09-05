@@ -203,7 +203,10 @@ def test_create_direct_offer_succeeds_for_published_case_accepting_directa():
         offer = db.query(models.OfertaAyudaDirecta).one()
         assert offer.tipo == "directa"
         assert offer.actor_donante_uid == "donor-uid-1"
-        assert offer.actor_donante_email == "donante@example.com"
+        assert HelpDataCipher.from_environment().decrypt(
+            offer.actor_donante_email_cifrado,
+            field="offer.actor_email",
+        ) == "donante@example.com"
         assert "colchones" not in offer.payload_cifrado
         assert "412-1234567" not in offer.contacto_cifrado
     finally:

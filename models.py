@@ -13,6 +13,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     event,
+    text,
 )
 from sqlalchemy.sql import func
 from database import Base
@@ -837,7 +838,8 @@ class AuditoriaCasoAyuda(Base):
     __tablename__ = "casos_ayuda_auditoria"
     __table_args__ = (
         CheckConstraint(
-            "actor_tipo IN ('donante', 'responsable_temporal', 'coordinador', 'admin', 'super_admin', 'sistema')",
+            "actor_tipo IN ('donante', 'beneficiario', 'representante', 'responsable_temporal', "
+            "'coordinador', 'admin', 'super_admin', 'sistema')",
             name="ck_casos_ayuda_auditoria_actor_tipo",
         ),
     )
@@ -867,7 +869,9 @@ class NotificacionCasoAyuda(Base):
     __table_args__ = (
         CheckConstraint(
             "evento_tipo IN ('ayuda_reportada', 'ayuda_confirmada', 'problema_reportado', "
-            "'revision_resuelta', 'meta_alcanzada', 'acceso_temporal', 'account_changed')",
+            "'revision_resuelta', 'meta_alcanzada', 'acceso_temporal', 'account_changed', "
+            "'oferta_laboral_aceptada', 'oferta_laboral_rechazada', "
+            "'oferta_laboral_cancelada', 'oferta_laboral_vencida')",
             name="ck_casos_ayuda_notificacion_evento",
         ),
         CheckConstraint(
@@ -884,9 +888,18 @@ class NotificacionCasoAyuda(Base):
             name="ck_casos_ayuda_notificacion_email_hash",
         ),
         CheckConstraint(
+            "(evento_tipo LIKE 'oferta_laboral_%' AND destinatario_email_hash IS NULL) OR "
+            "(evento_tipo NOT LIKE 'oferta_laboral_%' AND length(destinatario_email_hash) = 64)",
+            name="ck_casos_ayuda_notificacion_email_laboral",
+        ),
+        CheckConstraint(
             "estado <> 'enviada' OR (proveedor IS NOT NULL AND proveedor_referencia IS NOT NULL "
             "AND enviada_at IS NOT NULL)",
             name="ck_casos_ayuda_notificacion_enviada",
+        ),
+        Index(
+            "ix_casos_ayuda_notificaciones_oferta_estado",
+            "oferta_id", "estado", "proximo_intento_at",
         ),
     )
 
@@ -896,7 +909,7 @@ class NotificacionCasoAyuda(Base):
     organizacion_id = Column(String(100), nullable=True, index=True)
     caso_id = Column(Integer, ForeignKey("casos_ayuda_v2.id", ondelete="RESTRICT"), nullable=True, index=True)
     destinatario_tipo = Column(String(30), nullable=False)
-    destinatario_email_hash = Column(String(64), nullable=False, index=True)
+    destinatario_email_hash = Column(String(64), nullable=True, index=True)
     destinatario_email_cifrado = Column(Text, nullable=False)
     template_key = Column(String(100), nullable=False)
     payload_json = Column(Text, nullable=False)
@@ -911,6 +924,7 @@ class NotificacionCasoAyuda(Base):
     retencion_redactada_at = Column(DateTime(timezone=True), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    oferta_id = Column(Integer, ForeignKey("ofertas_ayuda.id", ondelete="RESTRICT"), nullable=True)
 
 
 class RetencionLegalAyuda(Base):
@@ -958,6 +972,15 @@ class OperacionIdempotenteAyuda(Base):
     response_body = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
+    oferta_id = Column(Integer, ForeignKey("ofertas_ayuda.id", ondelete="RESTRICT"), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "actor_id", "operacion", "idempotency_key",
+            name="uq_casos_ayuda_idempotencia_scope",
+        ),
+        Index("ix_casos_ayuda_idempotencia_oferta_operacion", "oferta_id", "operacion"),
+    )
 
 
 class CasoAyudaResponsable(Base):
@@ -990,6 +1013,21 @@ class OfertaAyudaDirecta(Base):
             "('pendiente_respuesta', 'aceptada', 'rechazada', 'vencida', 'cancelada'))",
             name="ck_ofertas_ayuda_estado",
         ),
+        CheckConstraint("lock_version >= 0", name="ck_ofertas_ayuda_lock_version"),
+        CheckConstraint(
+            "tipo <> 'empleo' OR (expires_at IS NOT NULL AND created_at < expires_at)",
+            name="ck_ofertas_ayuda_empleo_expiracion",
+        ),
+        CheckConstraint(
+            "tipo <> 'empleo' OR ((estado = 'pendiente_respuesta' AND terminal_at IS NULL) OR "
+            "(estado IN ('aceptada', 'rechazada', 'vencida', 'cancelada') AND terminal_at IS NOT NULL))",
+            name="ck_ofertas_ayuda_empleo_terminal_at",
+        ),
+        Index(
+            "ix_ofertas_ayuda_empleo_vencimiento", "expires_at", "id",
+            postgresql_where=text("tipo='empleo' AND estado='pendiente_respuesta'"),
+        ),
+        Index("ix_ofertas_ayuda_actor_donante_uid", "actor_donante_uid", text("created_at DESC")),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -997,7 +1035,7 @@ class OfertaAyudaDirecta(Base):
     organizacion_id = Column(String(100), nullable=False, index=True)
     tipo = Column(String(20), nullable=False, default="directa", server_default="directa")
     actor_donante_uid = Column(String(200), nullable=False)
-    actor_donante_email = Column(String(320), nullable=False)
+    actor_donante_email_cifrado = Column(Text, nullable=False)
     contacto_cifrado = Column(Text, nullable=False)
     payload_cifrado = Column(Text, nullable=False)
     payload_version = Column(Integer, nullable=True)
@@ -1006,3 +1044,114 @@ class OfertaAyudaDirecta(Base):
     gestionada_en = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    lock_version = Column(Integer, nullable=False, default=0, server_default="0")
+    terminal_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class DesafioAccesoOfertaLaboral(Base):
+    __tablename__ = "ofertas_ayuda_desafios_acceso"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_ofertas_ayuda_desafios_token_hash"),
+        CheckConstraint("sujeto_tipo IN ('beneficiario', 'representante')", name="ck_ofertas_ayuda_desafios_sujeto"),
+        CheckConstraint("length(token_hash) = 64", name="ck_ofertas_ayuda_desafios_hash"),
+        CheckConstraint("expires_at > created_at", name="ck_ofertas_ayuda_desafios_ventana"),
+        CheckConstraint("last_redeemed_at IS NULL OR last_redeemed_at >= created_at", name="ck_ofertas_ayuda_desafios_canje"),
+        CheckConstraint("redeem_count >= 0 AND rate_window_count >= 0", name="ck_ofertas_ayuda_desafios_contadores"),
+        Index("ix_ofertas_ayuda_desafios_oferta_estado", "oferta_id", "revoked_at", "expires_at"),
+        Index("ix_ofertas_ayuda_desafios_sujeto", "sujeto_uid", "expires_at"),
+        Index("ix_ofertas_ayuda_desafios_expiracion", "expires_at", postgresql_where=text("revoked_at IS NULL")),
+        Index("ix_ofertas_ayuda_desafios_rate_limit", "token_hash", "rate_window_started_at"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    oferta_id = Column(Integer, ForeignKey("ofertas_ayuda.id", ondelete="RESTRICT"), nullable=False)
+    caso_id = Column(Integer, ForeignKey("casos_ayuda_v2.id", ondelete="RESTRICT"), nullable=False)
+    beneficiario_id = Column(Integer, ForeignKey("beneficiarios_ayuda.id", ondelete="RESTRICT"), nullable=False)
+    sujeto_tipo = Column(String(20), nullable=False)
+    sujeto_uid = Column(String(200), nullable=False)
+    token_hash = Column(String(64), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    last_redeemed_at = Column(DateTime(timezone=True), nullable=True)
+    redeem_count = Column(Integer, nullable=False, default=0, server_default="0")
+    rate_window_started_at = Column(DateTime(timezone=True), nullable=True)
+    rate_window_count = Column(Integer, nullable=False, default=0, server_default="0")
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class SesionOfertaLaboral(Base):
+    __tablename__ = "ofertas_ayuda_sesiones"
+    __table_args__ = (
+        UniqueConstraint("sesion_hash", name="uq_ofertas_ayuda_sesiones_hash"),
+        UniqueConstraint("csrf_hash", name="uq_ofertas_ayuda_sesiones_csrf_hash"),
+        CheckConstraint("sujeto_tipo IN ('beneficiario', 'representante')", name="ck_ofertas_ayuda_sesiones_sujeto"),
+        CheckConstraint("length(client_context_hash) = 64 AND length(sesion_hash) = 64 AND length(csrf_hash) = 64", name="ck_ofertas_ayuda_sesiones_hashes"),
+        CheckConstraint("expires_at > created_at", name="ck_ofertas_ayuda_sesiones_24h"),
+        CheckConstraint("revoked_at IS NULL OR revoked_at >= created_at", name="ck_ofertas_ayuda_sesiones_revocacion"),
+        Index("ix_ofertas_ayuda_sesiones_oferta_activa", "oferta_id", "expires_at", postgresql_where=text("revoked_at IS NULL")),
+        Index("ix_ofertas_ayuda_sesiones_sujeto", "sujeto_uid", "expires_at"),
+        Index("ix_ofertas_ayuda_sesiones_caso", "caso_id"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    desafio_id = Column(Integer, ForeignKey("ofertas_ayuda_desafios_acceso.id", ondelete="RESTRICT"), nullable=False)
+    oferta_id = Column(Integer, ForeignKey("ofertas_ayuda.id", ondelete="RESTRICT"), nullable=False)
+    caso_id = Column(Integer, ForeignKey("casos_ayuda_v2.id", ondelete="RESTRICT"), nullable=False)
+    beneficiario_id = Column(Integer, ForeignKey("beneficiarios_ayuda.id", ondelete="RESTRICT"), nullable=False)
+    sujeto_tipo = Column(String(20), nullable=False)
+    sujeto_uid = Column(String(200), nullable=False)
+    client_context_hash = Column(String(64), nullable=False)
+    sesion_hash = Column(String(64), nullable=False)
+    csrf_hash = Column(String(64), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class TransicionTerminalOfertaLaboral(Base):
+    __tablename__ = "ofertas_ayuda_transiciones_terminales"
+    __table_args__ = (
+        UniqueConstraint("oferta_id", name="uq_ofertas_ayuda_transiciones_oferta"),
+        UniqueConstraint("idempotencia_id", name="uq_ofertas_ayuda_transiciones_idempotencia"),
+        CheckConstraint("estado_terminal IN ('aceptada', 'rechazada', 'vencida', 'cancelada')", name="ck_ofertas_ayuda_transiciones_estado"),
+        CheckConstraint("actor_tipo IN ('beneficiario', 'representante', 'donante', 'coordinador', 'admin_organizacion', 'super_admin', 'worker')", name="ck_ofertas_ayuda_transiciones_actor"),
+        CheckConstraint("(actor_tipo = 'worker' AND actor_uid IS NULL) OR (actor_tipo <> 'worker' AND actor_uid IS NOT NULL)", name="ck_ofertas_ayuda_transiciones_autoridad"),
+        CheckConstraint("estado_terminal <> 'cancelada' OR razon_codigo IS NOT NULL", name="ck_ofertas_ayuda_transiciones_razon"),
+        Index("ix_ofertas_ayuda_transiciones_caso", "caso_id", text("created_at DESC")),
+        Index("ix_ofertas_ayuda_transiciones_actor", "actor_uid", text("created_at DESC")),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    oferta_id = Column(Integer, ForeignKey("ofertas_ayuda.id", ondelete="RESTRICT"), nullable=False)
+    caso_id = Column(Integer, ForeignKey("casos_ayuda_v2.id", ondelete="RESTRICT"), nullable=False)
+    estado_terminal = Column(String(20), nullable=False)
+    actor_tipo = Column(String(30), nullable=False)
+    actor_uid = Column(String(200), nullable=True)
+    razon_codigo = Column(String(40), nullable=True)
+    sesion_id = Column(Integer, ForeignKey("ofertas_ayuda_sesiones.id", ondelete="RESTRICT"), nullable=True)
+    idempotencia_id = Column(Integer, ForeignKey("casos_ayuda_idempotencia.id", ondelete="RESTRICT"), nullable=False)
+    oferta_version_anterior = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class LiberacionContactoOfertaLaboral(Base):
+    __tablename__ = "ofertas_ayuda_liberaciones_contacto"
+    __table_args__ = (
+        UniqueConstraint("oferta_id", name="uq_ofertas_ayuda_liberaciones_oferta"),
+        UniqueConstraint("transicion_id", name="uq_ofertas_ayuda_liberaciones_transicion"),
+        CheckConstraint("autorizado_tipo IN ('beneficiario', 'representante')", name="ck_ofertas_ayuda_liberaciones_sujeto"),
+        Index("ix_ofertas_ayuda_liberaciones_sesion", "sesion_id"),
+        Index("ix_ofertas_ayuda_liberaciones_actor", "autorizado_uid", text("created_at DESC")),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    oferta_id = Column(Integer, ForeignKey("ofertas_ayuda.id", ondelete="RESTRICT"), nullable=False)
+    caso_id = Column(Integer, ForeignKey("casos_ayuda_v2.id", ondelete="RESTRICT"), nullable=False)
+    transicion_id = Column(Integer, ForeignKey("ofertas_ayuda_transiciones_terminales.id", ondelete="RESTRICT"), nullable=False)
+    sesion_id = Column(Integer, ForeignKey("ofertas_ayuda_sesiones.id", ondelete="RESTRICT"), nullable=False)
+    autorizado_uid = Column(String(200), nullable=False)
+    autorizado_tipo = Column(String(20), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+@event.listens_for(LiberacionContactoOfertaLaboral, "before_update")
+@event.listens_for(LiberacionContactoOfertaLaboral, "before_delete")
+def _prevent_labor_contact_ledger_mutation(*_):
+    raise ValueError("El ledger de liberacion laboral es inmutable")

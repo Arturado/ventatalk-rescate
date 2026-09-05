@@ -51,6 +51,10 @@ def engine():
 
 def _install_legacy_constraint(engine):
     with engine.begin() as connection:
+        connection.execute(text(
+            "ALTER TABLE ofertas_ayuda DROP CONSTRAINT IF EXISTS "
+            "ck_ofertas_ayuda_empleo_terminal_at"
+        ))
         connection.execute(text(f"ALTER TABLE ofertas_ayuda DROP CONSTRAINT {CONSTRAINT_NAME}"))
         connection.execute(text(
             f"ALTER TABLE ofertas_ayuda ADD CONSTRAINT {CONSTRAINT_NAME} CHECK ({LEGACY_CONDITION})"
@@ -80,10 +84,13 @@ def _insert_offer(engine, case_id, *, suffix, offer_type, state):
     with engine.begin() as connection:
         return connection.execute(text(
             "INSERT INTO ofertas_ayuda "
-            "(caso_id, organizacion_id, tipo, actor_donante_uid, actor_donante_email, "
-            "contacto_cifrado, payload_cifrado, payload_version, estado) "
-            "VALUES (:case_id, 'org-test', :offer_type, :uid, 'donor@example.test', "
-            "'encrypted-contact', 'encrypted-payload', 1, :state) RETURNING id"
+            "(caso_id, organizacion_id, tipo, actor_donante_uid, actor_donante_email_cifrado, "
+            "contacto_cifrado, payload_cifrado, payload_version, estado, expires_at, terminal_at) "
+            "VALUES (:case_id, 'org-test', :offer_type, :uid, 'encrypted-email', "
+            "'encrypted-contact', 'encrypted-payload', 1, :state, "
+            "CASE WHEN :offer_type='empleo' THEN now() + INTERVAL '7 days' ELSE NULL END, "
+            "CASE WHEN :offer_type='empleo' AND :state <> 'pendiente_respuesta' THEN now() ELSE NULL END) "
+            "RETURNING id"
         ), {
             "case_id": case_id,
             "offer_type": offer_type,
@@ -332,9 +339,9 @@ def test_cli_process_dry_run_and_double_apply_are_private_and_idempotent(engine)
     with engine.begin() as connection:
         connection.execute(text(
             "INSERT INTO ofertas_ayuda "
-            "(caso_id, organizacion_id, tipo, actor_donante_uid, actor_donante_email, "
+                "(caso_id, organizacion_id, tipo, actor_donante_uid, actor_donante_email_cifrado, "
             "contacto_cifrado, payload_cifrado, payload_version, estado) "
-            "VALUES (:case_id, 'org-test', 'directa', 'privacy-user', 'privacy@example.test', "
+                "VALUES (:case_id, 'org-test', 'directa', 'privacy-user', 'encrypted-email', "
             ":contact, :payload, 1, 'pendiente')"
         ), {"case_id": case_id, "contact": contact_sentinel, "payload": payload_sentinel})
     parsed_url = urlsplit(TEST_DATABASE_URL)

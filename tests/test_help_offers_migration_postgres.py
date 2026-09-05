@@ -25,6 +25,21 @@ _NEW_TABLES = ["casos_ayuda_responsables", "ofertas_ayuda"]
 
 def _simulate_pre_offers_schema(engine):
     with engine.begin() as connection:
+        for table_name in (
+            "ofertas_ayuda_liberaciones_contacto",
+            "ofertas_ayuda_transiciones_terminales",
+            "ofertas_ayuda_sesiones",
+            "ofertas_ayuda_desafios_acceso",
+        ):
+            connection.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+        connection.execute(text(
+            "ALTER TABLE casos_ayuda_idempotencia DROP CONSTRAINT IF EXISTS "
+            "casos_ayuda_idempotencia_oferta_id_fkey"
+        ))
+        connection.execute(text(
+            "ALTER TABLE casos_ayuda_notificaciones DROP CONSTRAINT IF EXISTS "
+            "casos_ayuda_notificaciones_oferta_id_fkey"
+        ))
         for table_name in _NEW_TABLES:
             connection.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
 
