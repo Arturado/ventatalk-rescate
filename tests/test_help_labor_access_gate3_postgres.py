@@ -19,12 +19,108 @@ from services.help_labor_access import (
     LaborAccessError,
     cancel_labor_offer,
     expire_labor_offer,
+    expire_due_labor_offers,
     get_labor_offer_context,
     issue_labor_access_link,
     list_labor_offers_for_moderation,
     redeem_labor_access_link,
+    rotate_labor_session_csrf,
+    validate_labor_session_csrf,
+    pending_labor_notification_recipients,
+    enqueue_labor_new_offer_notification,
     decide_labor_offer,
 )
+
+
+def test_gate7_csrf_rotation_invalidates_previous_without_extending_session(prepared):
+    _issue(prepared)
+    redeemed = _redeem(prepared)
+    sessions, _, _, _ = prepared
+    with sessions() as db:
+        rotated = rotate_labor_session_csrf(db, session_token=redeemed["session_token"])
+        expires = rotated["expires_at"]
+        db.commit()
+    assert rotated["csrf_token"] != redeemed["csrf_token"]
+    assert expires == redeemed["expires_at"]
+    with sessions() as db:
+        with pytest.raises(LaborAccessError):
+            validate_labor_session_csrf(db, session_token=redeemed["session_token"], csrf_token=redeemed["csrf_token"])
+
+
+def test_gate7_expiry_worker_empty_then_exactly_once(prepared):
+    sessions, offer_id, _, _ = prepared
+    now = datetime.now(timezone.utc) + timedelta(days=8)
+    with sessions() as db:
+        first = expire_due_labor_offers(db, worker_authorized=True, now=now)
+        db.commit()
+        second = expire_due_labor_offers(db, worker_authorized=True, now=now)
+        db.commit()
+        assert first == {"selected": 1, "expired": 1}
+        assert second == {"selected": 0, "expired": 0}
+        assert db.get(models.OfertaAyudaDirecta, offer_id).estado == "vencida"
+        assert db.query(models.TransicionTerminalOfertaLaboral).count() == 1
+        assert db.query(models.NotificacionCasoAyuda).count() == 1
+
+
+def test_gate7_new_offer_recipient_comes_from_live_challenge_and_email_is_encrypted(prepared):
+    issued = _issue(prepared, token="delivery-token-not-persisted")
+    sessions, offer_id, _, _ = prepared
+    with sessions() as db:
+        pending = pending_labor_notification_recipients(db)
+        assert pending == [{"challenge_id": issued["challenge_id"], "offer_id": offer_id,
+                            "case_id": issued["case_id"], "recipient_uid": "beneficiary-uid",
+                            "recipient_type": "beneficiario"}]
+        with pytest.raises(LaborAccessError) as mismatch:
+            enqueue_labor_new_offer_notification(db, challenge_id=issued["challenge_id"],
+                recipient_uid="different-uid", recipient_email="hidden@example.test")
+        assert mismatch.value.code == "recipient_not_authorized"
+        first = enqueue_labor_new_offer_notification(db, challenge_id=issued["challenge_id"],
+            recipient_uid=pending[0]["recipient_uid"], recipient_email="verified@example.test")
+        second = enqueue_labor_new_offer_notification(db, challenge_id=issued["challenge_id"],
+            recipient_uid=pending[0]["recipient_uid"], recipient_email="verified@example.test")
+        db.commit()
+        assert first["event_id"] == second["event_id"]
+        row = db.get(models.NotificacionCasoAyuda, first["event_id"])
+        persisted = " ".join(str(value) for value in vars(row).values())
+        assert "verified@example.test" not in persisted
+        assert "delivery-token-not-persisted" not in persisted
+        assert "beneficiary-uid" not in persisted
+    class ExistingResendTransport:
+        name = "resend"
+        configured = True
+        def __init__(self): self.contexts = []
+        def send(self, notification, *, delivery_context=None):
+            self.contexts.append(delivery_context)
+            return "resend-delivery-reference"
+    provider = ExistingResendTransport()
+    from services.help_notifications import process_notification_batch
+    with sessions() as db:
+        result = process_notification_batch(db, provider=provider)
+        assert result == {"claimed": 1, "sent": 1, "failed": 0}
+        assert provider.contexts[0]["challenge_token"]
+        persisted = " ".join(str(value) for value in vars(db.query(models.NotificacionCasoAyuda).one()).values())
+        assert provider.contexts[0]["challenge_token"] not in persisted
+
+
+def test_gate7_beneficiary_and_explicit_representative_are_separate_and_deduplicated(prepared):
+    _issue(prepared, token="beneficiary-delivery")
+    sessions, offer_id, _, _ = prepared
+    with sessions() as db:
+        representative = issue_labor_access_link(db, offer_id=offer_id,
+            subject_type="representante", subject_uid="representative-uid",
+            issuer=coordinator(), token="representative-delivery")
+        db.commit()
+    with sessions() as db:
+        pending = pending_labor_notification_recipients(db)
+        assert {(item["recipient_type"], item["recipient_uid"]) for item in pending} == {
+            ("beneficiario", "beneficiary-uid"), ("representante", "representative-uid")}
+        for item in pending:
+            enqueue_labor_new_offer_notification(db, challenge_id=item["challenge_id"],
+                recipient_uid=item["recipient_uid"], recipient_email=f"{item['recipient_type']}@example.test")
+        db.commit()
+        assert db.query(models.NotificacionCasoAyuda).count() == 2
+        assert pending_labor_notification_recipients(db) == []
+        assert representative["recipient_uid"] == "representative-uid"
 
 
 TEST_DATABASE_URL = __import__("os").getenv("HELP_CONCURRENCY_TEST_DATABASE_URL")

@@ -14,9 +14,19 @@ from services.help_labor_access import (
     get_labor_offer_context,
     issue_labor_access_link,
     list_labor_offers_for_moderation,
+    pending_labor_notification_recipients,
+    enqueue_labor_new_offer_notification,
+    record_labor_recipient_failure,
     redeem_labor_access_link,
+    rotate_labor_session_csrf,
     validate_labor_session_csrf,
 )
+
+LABOR_ALLOWED_ORIGINS = frozenset({
+    "https://venezuelarescate.com", "https://www.venezuelarescate.com",
+    "https://sos-ve-20fa3.web.app", "https://sos-ve-20fa3.firebaseapp.com",
+    "http://localhost:5173", "http://127.0.0.1:5173",
+})
 
 
 class NoStoreLaborRoute(APIRoute):
@@ -68,6 +78,18 @@ def _closed(payload, fields):
         raise LaborAccessError("labor_payload_invalid")
 
 
+def _trusted_origin(request):
+    origin = request.headers.get("origin", "").rstrip("/")
+    referer = request.headers.get("referer", "")
+    if origin not in LABOR_ALLOWED_ORIGINS or (referer and not referer.startswith(f"{origin}/")):
+        raise LaborAccessError("labor_csrf_forbidden")
+
+
+def _notification_worker(actor):
+    if actor.role != "super_admin" or actor.uid != "labor-notification-worker":
+        raise LaborAccessError("recipient_not_authorized")
+
+
 @router.post("/{offer_id}/enlaces", status_code=201)
 def issue_link(offer_id: int, response: Response, payload: dict = Body(...),
                db: Session = Depends(get_db), _api=Depends(verify_api_key),
@@ -107,6 +129,20 @@ def labor_context(response: Response, x_labor_session: str = Header(default=""),
     _secure(response)
     try:
         return get_labor_offer_context(db, session_token=x_labor_session)
+    except LaborAccessError as exc:
+        db.rollback(); _error(exc)
+
+
+@router.post("/acceso/csrf")
+def rotate_csrf(request: Request, response: Response,
+                x_labor_session: str = Header(default=""),
+                db: Session = Depends(get_db), _api=Depends(verify_api_key)):
+    _secure(response)
+    try:
+        _trusted_origin(request)
+        result = rotate_labor_session_csrf(db, session_token=x_labor_session)
+        db.commit()
+        return result
     except LaborAccessError as exc:
         db.rollback(); _error(exc)
 
@@ -182,6 +218,53 @@ def cancel_offer(offer_id: int, response: Response, payload: dict = Body(...),
             db, offer_id=offer_id, actor=actor, reason=payload.get("reason"),
             idempotency_key=payload.get("idempotency_key"),
         )
+        db.commit()
+        return result
+    except LaborAccessError as exc:
+        db.rollback(); _error(exc)
+
+
+@router.get("/interno/notificaciones/pendientes")
+def pending_notifications(response: Response, db: Session = Depends(get_db),
+                          _api=Depends(verify_api_key),
+                          actor: ActorOrgContext = Depends(require_verified_actor_org)):
+    _secure(response)
+    try:
+        _notification_worker(actor)
+        return pending_labor_notification_recipients(db)
+    except LaborAccessError as exc:
+        _error(exc)
+
+
+@router.post("/interno/notificaciones/{challenge_id}")
+def create_notification(challenge_id: int, response: Response, payload: dict = Body(...),
+                        db: Session = Depends(get_db), _api=Depends(verify_api_key),
+                        actor: ActorOrgContext = Depends(require_verified_actor_org)):
+    _secure(response)
+    try:
+        _notification_worker(actor)
+        _closed(payload, {"recipient_uid", "recipient_email"})
+        result = enqueue_labor_new_offer_notification(
+            db, challenge_id=challenge_id,
+            recipient_uid=payload.get("recipient_uid"),
+            recipient_email=payload.get("recipient_email"),
+        )
+        db.commit()
+        return result
+    except LaborAccessError as exc:
+        db.rollback(); _error(exc)
+
+
+@router.post("/interno/notificaciones/{challenge_id}/fallo")
+def recipient_failure(challenge_id: int, response: Response, payload: dict = Body(...),
+                      db: Session = Depends(get_db), _api=Depends(verify_api_key),
+                      actor: ActorOrgContext = Depends(require_verified_actor_org)):
+    _secure(response)
+    try:
+        _notification_worker(actor)
+        _closed(payload, {"recipient_uid", "code"})
+        result = record_labor_recipient_failure(db, challenge_id=challenge_id,
+            recipient_uid=payload.get("recipient_uid"), code=payload.get("code"))
         db.commit()
         return result
     except LaborAccessError as exc:

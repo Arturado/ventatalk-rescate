@@ -1,6 +1,8 @@
 import json
 import os
 import re
+import secrets
+import hashlib
 from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -48,6 +50,11 @@ TEMPLATE_PAYLOAD_FIELDS = {
     "goal-reached-v1": frozenset({"case_public_id"}),
     "account-changed-v1": frozenset({"case_public_id", "account_version"}),
     "temporary-access-v1": frozenset({"challenge_token"}),
+    "labor-offer-access-v1": frozenset({"challenge_id", "offer_id"}),
+    "labor-offer-aceptada-v1": frozenset({"offer_id", "state"}),
+    "labor-offer-rechazada-v1": frozenset({"offer_id", "state"}),
+    "labor-offer-vencida-v1": frozenset({"offer_id", "state"}),
+    "labor-offer-cancelada-v1": frozenset({"offer_id", "state", "public_reason"}),
 }
 TEMPLATE_EVENT_TYPES = {
     "aid-reported-v1": "ayuda_reportada",
@@ -57,6 +64,11 @@ TEMPLATE_EVENT_TYPES = {
     "goal-reached-v1": "meta_alcanzada",
     "account-changed-v1": "account_changed",
     "temporary-access-v1": "acceso_temporal",
+    "labor-offer-access-v1": "acceso_temporal",
+    "labor-offer-aceptada-v1": "oferta_laboral_aceptada",
+    "labor-offer-rechazada-v1": "oferta_laboral_rechazada",
+    "labor-offer-vencida-v1": "oferta_laboral_vencida",
+    "labor-offer-cancelada-v1": "oferta_laboral_cancelada",
 }
 
 TEMPLATE_CONTENT = {
@@ -84,6 +96,10 @@ TEMPLATE_CONTENT = {
         "Cuenta actualizada",
         "La cuenta version {account_version} del caso {case_public_id} fue registrada. Ingresa a la plataforma para revisarla.",
     ),
+    "labor-offer-aceptada-v1": ("Oferta laboral aceptada", "La persona autorizada acepto la oferta y podra iniciar el contacto."),
+    "labor-offer-rechazada-v1": ("Oferta laboral rechazada", "La oferta laboral fue rechazada."),
+    "labor-offer-vencida-v1": ("Oferta laboral vencida", "La oferta laboral vencio sin una decision."),
+    "labor-offer-cancelada-v1": ("Oferta laboral cancelada", "La oferta laboral fue cancelada: {public_reason}."),
 }
 
 
@@ -244,7 +260,7 @@ class ResendProvider:
             raise ProviderConfigurationError("Resend no esta configurado")
         return token, normalize_notification_email(from_email)
 
-    def send(self, notification):
+    def send(self, notification, *, delivery_context=None):
         token, from_email = self._configuration()
         cipher = HelpDataCipher.from_environment()
         recipient = cipher.decrypt(
@@ -256,13 +272,17 @@ class ResendProvider:
             field="notification.payload",
         ))
         _validated_payload(notification.template_key, payload)
-        if notification.template_key == "temporary-access-v1":
+        if notification.template_key in {"temporary-access-v1", "labor-offer-access-v1"}:
             frontend_base = str(os.getenv("HELP_FRONTEND_BASE_URL") or "").strip().rstrip("/")
             if not frontend_base:
                 raise ProviderConfigurationError("HELP_FRONTEND_BASE_URL no esta configurado")
             subject = "Acceso temporal"
-            link = f"{frontend_base}/revisar-ayuda?token={quote(payload['challenge_token'], safe='')}"
-            text_body = f"Usa este enlace temporal para revisar tus ayudas: {link}"
+            token = payload.get("challenge_token") or (delivery_context or {}).get("challenge_token")
+            route = "revisar-ayuda" if notification.template_key == "temporary-access-v1" else "acceso-oferta-laboral"
+            subject = "Acceso a oferta laboral" if notification.template_key == "labor-offer-access-v1" else "Acceso temporal"
+            link = f"{frontend_base}/{route}?token={quote(token, safe='')}"
+            text_body = (f"Usa este enlace para revisar la oferta laboral: {link}" if route == "acceso-oferta-laboral"
+                         else f"Usa este enlace temporal para revisar tus ayudas: {link}")
         else:
             subject, body_template = TEMPLATE_CONTENT[notification.template_key]
             text_body = body_template.format(**payload)
@@ -344,7 +364,21 @@ def process_notification_batch(db, *, provider=None, limit=25, now=None):
         notification = db.get(models.NotificacionCasoAyuda, claimed_notification.id)
         notification.intentos += 1
         try:
-            reference = provider.send(notification)
+            delivery_context = None
+            if notification.template_key == "labor-offer-access-v1":
+                payload = json.loads(HelpDataCipher.from_environment().decrypt(
+                    notification.payload_json, field="notification.payload"
+                ))
+                challenge = db.get(models.DesafioAccesoOfertaLaboral, payload["challenge_id"])
+                offer = db.get(models.OfertaAyudaDirecta, payload["offer_id"])
+                if (challenge is None or offer is None or challenge.revoked_at is not None
+                        or now >= challenge.expires_at or offer.estado != "pendiente_respuesta"):
+                    raise NotificationProviderError("Destinatario no autorizado", code="recipient_not_authorized")
+                raw_token = secrets.token_urlsafe(32)
+                challenge.token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+                delivery_context = {"challenge_token": raw_token}
+            reference = (provider.send(notification, delivery_context=delivery_context)
+                         if delivery_context else provider.send(notification))
         except ProviderConfigurationError:
             db.rollback()
             claimed_ids = [item.id for item in claimed]
@@ -358,10 +392,11 @@ def process_notification_batch(db, *, provider=None, limit=25, now=None):
             db.commit()
             raise
         except NotificationProviderError as exc:
-            notification.estado = "fallida"
+            terminal_recipient = exc.code in {"recipient_not_found", "recipient_email_missing", "recipient_email_unverified", "recipient_not_authorized"}
+            notification.estado = "cancelada" if terminal_recipient else "fallida"
             notification.ultimo_error_codigo = exc.code
             notification.procesando_desde = None
-            if notification.intentos < MAX_NOTIFICATION_ATTEMPTS:
+            if not terminal_recipient and notification.intentos < MAX_NOTIFICATION_ATTEMPTS:
                 delay = min(60 * (2 ** (notification.intentos - 1)), MAX_NOTIFICATION_BACKOFF_SECONDS)
                 notification.proximo_intento_at = now + timedelta(seconds=delay)
             else:

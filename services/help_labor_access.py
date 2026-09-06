@@ -101,8 +101,77 @@ def issue_labor_access_link(db, *, offer_id, subject_type, subject_uid, issuer, 
     db.flush()
     _audit(db, offer=offer, action="enlace_laboral_emitido", actor_id=issuer.uid,
            actor_type="super_admin" if issuer.role == "super_admin" else issuer.role)
-    return {"offer_id": offer.id, "link_token": raw_token,
+    return {"offer_id": offer.id, "case_id": offer.caso_id,
+            "recipient_uid": challenge.sujeto_uid, "recipient_type": challenge.sujeto_tipo,
+            "challenge_id": challenge.id, "link_token": raw_token,
             "expires_at": challenge.expires_at, "cache_control": "no-store"}
+
+
+def pending_labor_notification_recipients(db, *, limit=25, now=None):
+    moment = _now(now)
+    rows = db.query(models.DesafioAccesoOfertaLaboral, models.OfertaAyudaDirecta).join(
+        models.OfertaAyudaDirecta, models.OfertaAyudaDirecta.id == models.DesafioAccesoOfertaLaboral.oferta_id
+    ).filter(
+        models.DesafioAccesoOfertaLaboral.revoked_at.is_(None),
+        models.DesafioAccesoOfertaLaboral.expires_at > moment,
+        models.OfertaAyudaDirecta.estado == "pendiente_respuesta",
+        models.OfertaAyudaDirecta.expires_at > moment,
+    ).order_by(models.DesafioAccesoOfertaLaboral.id).limit(limit).all()
+    result = []
+    for challenge, offer in rows:
+        key = f"labor-offer:{offer.id}:new:{challenge.sujeto_tipo}:{_hash(challenge.sujeto_uid)}"
+        if not db.query(models.NotificacionCasoAyuda).filter_by(deduplication_key=key).first():
+            result.append({"challenge_id": challenge.id, "offer_id": offer.id,
+                           "case_id": offer.caso_id, "recipient_uid": challenge.sujeto_uid,
+                           "recipient_type": challenge.sujeto_tipo})
+    return result
+
+
+def enqueue_labor_new_offer_notification(db, *, challenge_id, recipient_uid,
+                                         recipient_email, now=None):
+    from services.help_notifications import normalize_notification_email
+    recipient_email = normalize_notification_email(recipient_email)
+    moment = _now(now)
+    challenge = db.query(models.DesafioAccesoOfertaLaboral).filter_by(id=challenge_id).with_for_update().one_or_none()
+    if challenge is None or challenge.sujeto_uid != recipient_uid or challenge.revoked_at is not None or moment >= challenge.expires_at:
+        raise LaborAccessError("recipient_not_authorized")
+    offer = _locked_offer(db, challenge.oferta_id)
+    if offer.caso_id != challenge.caso_id or offer.estado != "pendiente_respuesta" or moment >= offer.expires_at:
+        raise LaborAccessError("recipient_not_authorized")
+    key = f"labor-offer:{offer.id}:new:{challenge.sujeto_tipo}:{_hash(recipient_uid)}"
+    existing = db.query(models.NotificacionCasoAyuda).filter_by(deduplication_key=key).one_or_none()
+    if existing:
+        return {"event_id": existing.id, "status": "existing"}
+    cipher = HelpDataCipher.from_environment()
+    row = models.NotificacionCasoAyuda(
+        deduplication_key=key, evento_tipo="acceso_temporal",
+        organizacion_id=offer.organizacion_id, caso_id=offer.caso_id, oferta_id=offer.id,
+        destinatario_tipo="beneficiario" if challenge.sujeto_tipo == "beneficiario" else "responsable",
+        destinatario_email_hash=cipher.blind_index(recipient_email, purpose="notification-email"),
+        destinatario_email_cifrado=cipher.encrypt(recipient_email, field="notification.recipient_email"),
+        template_key="labor-offer-access-v1",
+        payload_json=cipher.encrypt(json.dumps({"challenge_id": challenge.id, "offer_id": offer.id},
+            separators=(",", ":"), sort_keys=True), field="notification.payload"),
+    )
+    db.add(row); db.flush()
+    return {"event_id": row.id, "status": "created"}
+
+
+def record_labor_recipient_failure(db, *, challenge_id, recipient_uid, code, now=None):
+    allowed = {"recipient_not_found", "recipient_email_missing", "recipient_email_unverified",
+               "recipient_not_authorized", "recipient_lookup_unavailable"}
+    if code not in allowed:
+        raise LaborAccessError("labor_payload_invalid")
+    challenge = db.query(models.DesafioAccesoOfertaLaboral).filter_by(id=challenge_id).with_for_update().one_or_none()
+    if challenge is None or challenge.sujeto_uid != recipient_uid:
+        raise LaborAccessError("recipient_not_authorized")
+    if code != "recipient_lookup_unavailable":
+        challenge.revoked_at = _now(now)
+    offer = db.get(models.OfertaAyudaDirecta, challenge.oferta_id)
+    _audit(db, offer=offer, action="notificacion_laboral_destinatario_no_elegible",
+           actor_id="labor-notification-worker", actor_type="sistema", reason=code)
+    db.flush()
+    return {"status": "retry" if code == "recipient_lookup_unavailable" else "closed", "code": code}
 
 
 def redeem_labor_access_link(db, *, token, client_context, now=None):
@@ -170,6 +239,29 @@ def validate_labor_session_csrf(db, *, session_token, csrf_token):
     return session
 
 
+def rotate_labor_session_csrf(db, *, session_token, now=None):
+    moment = _now(now)
+    session = db.query(models.SesionOfertaLaboral).filter_by(
+        sesion_hash=_hash(session_token)
+    ).with_for_update().one_or_none()
+    if session is None or session.revoked_at is not None or moment >= session.expires_at:
+        raise LaborAccessError("labor_session_unavailable")
+    offer = _locked_offer(db, session.oferta_id)
+    if offer.estado != "pendiente_respuesta" or moment >= offer.expires_at:
+        raise LaborAccessError("labor_session_unavailable")
+    challenge = db.query(models.DesafioAccesoOfertaLaboral).filter_by(id=session.desafio_id).with_for_update().one()
+    if challenge.rate_window_started_at is None or moment >= challenge.rate_window_started_at + RATE_WINDOW:
+        challenge.rate_window_started_at, challenge.rate_window_count = moment, 0
+    if challenge.rate_window_count >= RATE_LIMIT:
+        raise LaborAccessError("labor_access_rate_limited")
+    challenge.rate_window_count += 1
+    token = secrets.token_urlsafe(32)
+    session.csrf_hash = _hash(token)
+    db.flush()
+    return {"csrf_token": token, "expires_at": session.expires_at,
+            "cache_control": "no-store"}
+
+
 def close_labor_session(db, *, session_token, csrf_token, now=None):
     session = validate_labor_session_csrf(
         db, session_token=session_token, csrf_token=csrf_token,
@@ -219,8 +311,14 @@ def get_donor_labor_offer_status(db, *, offer_id, actor):
     ).one_or_none()
     if offer is None or offer.actor_donante_uid != actor.uid:
         raise LaborAccessError("labor_offer_forbidden")
-    return {"offer_id": offer.id, "state": offer.estado,
-            "created_at": offer.created_at, "expires_at": offer.expires_at}
+    response = {"offer_id": offer.id, "state": offer.estado,
+                "created_at": offer.created_at, "expires_at": offer.expires_at,
+                "terminal_at": offer.terminal_at}
+    if offer.estado == "cancelada":
+        transition = db.query(models.TransicionTerminalOfertaLaboral).filter_by(oferta_id=offer.id).one_or_none()
+        if transition and transition.actor_tipo != "donante" and transition.razon_codigo in MODERATION_REASONS:
+            response["public_reason"] = transition.razon_codigo
+    return response
 
 
 def _idempotency(db, *, actor_id, operation, key, request, offer_id):
@@ -244,20 +342,23 @@ def _idempotency(db, *, actor_id, operation, key, request, offer_id):
     return record, None
 
 
-def _outbox(db, *, offer, state, cipher):
+def _outbox(db, *, offer, state, cipher, reason=None, actor_type=None):
     key = f"labor-offer:{offer.id}:{state}:donante"
     existing = db.query(models.NotificacionCasoAyuda).filter_by(
         deduplication_key=key
     ).one_or_none()
     if existing:
         return existing
+    payload = {"offer_id": offer.id, "state": state}
+    if state == "cancelada":
+        payload["public_reason"] = reason if actor_type != "donante" else "cancelada_por_donante"
     row = models.NotificacionCasoAyuda(
         deduplication_key=key, evento_tipo=f"oferta_laboral_{state}",
         organizacion_id=offer.organizacion_id, caso_id=offer.caso_id, oferta_id=offer.id,
         destinatario_tipo="donante", destinatario_email_hash=None,
         destinatario_email_cifrado=offer.actor_donante_email_cifrado,
         template_key=f"labor-offer-{state}-v1",
-        payload_json=cipher.encrypt(json.dumps({"offer_id": offer.id, "state": state},
+        payload_json=cipher.encrypt(json.dumps(payload,
             separators=(",", ":"), sort_keys=True), field="notification.payload"),
     )
     db.add(row)
@@ -300,7 +401,7 @@ def _complete_terminal(db, *, offer, state, actor_type, actor_uid, reason, sessi
             autorizado_tipo=session.sujeto_tipo,
         ))
     _revoke_access(db, offer.id, moment)
-    _outbox(db, offer=offer, state=state, cipher=cipher)
+    _outbox(db, offer=offer, state=state, cipher=cipher, reason=reason, actor_type=actor_type)
     audit_type = {"donante": "donante", "worker": "sistema",
                   "admin_organizacion": "admin"}.get(actor_type, actor_type)
     _audit(db, offer=offer, action=f"oferta_laboral_{state}",
@@ -397,3 +498,25 @@ def expire_labor_offer(db, *, offer_id, worker_authorized, now=None):
     operation.completed_at = moment
     db.flush()
     return response
+
+
+def expire_due_labor_offers(db, *, worker_authorized, now=None, limit=100):
+    if not worker_authorized:
+        raise LaborAccessError("labor_expire_forbidden")
+    moment = _now(now)
+    query = db.query(models.OfertaAyudaDirecta.id).filter(
+        models.OfertaAyudaDirecta.tipo == "empleo",
+        models.OfertaAyudaDirecta.estado == "pendiente_respuesta",
+        models.OfertaAyudaDirecta.expires_at <= moment,
+    ).order_by(models.OfertaAyudaDirecta.expires_at, models.OfertaAyudaDirecta.id).limit(limit)
+    if db.bind.dialect.name == "postgresql":
+        query = query.with_for_update(skip_locked=True)
+    ids = [row[0] for row in query.all()]
+    expired = []
+    for offer_id in ids:
+        try:
+            expired.append(expire_labor_offer(db, offer_id=offer_id, worker_authorized=True, now=moment))
+        except LaborAccessError as exc:
+            if exc.code not in {"terminal_conflict", "idempotency_in_progress"}:
+                raise
+    return {"selected": len(ids), "expired": len(expired)}

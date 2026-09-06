@@ -49,6 +49,26 @@ def test_outbox_schema_supports_donor_address_account_change_and_processing_leas
         db.commit()
 
 
+def test_labor_notification_templates_are_closed_and_exclude_free_text_and_pii():
+    from services.help_notifications import TEMPLATE_CONTENT, _validated_payload
+
+    matrix = {
+        "labor-offer-aceptada-v1": {"offer_id": 1, "state": "aceptada"},
+        "labor-offer-rechazada-v1": {"offer_id": 1, "state": "rechazada"},
+        "labor-offer-vencida-v1": {"offer_id": 1, "state": "vencida"},
+        "labor-offer-cancelada-v1": {"offer_id": 1, "state": "cancelada", "public_reason": "riesgo_privacidad"},
+    }
+    for template, payload in matrix.items():
+        serialized = _validated_payload(template, payload)
+        rendered = TEMPLATE_CONTENT[template][1].format(**payload)
+        assert "descripcion" not in serialized.lower()
+        assert "telefono" not in serialized.lower()
+        assert "correo" not in serialized.lower()
+        assert "@" not in rendered
+    with pytest.raises(Exception):
+        _validated_payload("labor-offer-aceptada-v1", {"offer_id": 1, "state": "aceptada", "description": "PII"})
+
+
 def test_enqueue_encrypts_allowlisted_data_deduplicates_and_rolls_back():
     from services.help_notifications import enqueue_notification
 

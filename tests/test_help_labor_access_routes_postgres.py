@@ -82,6 +82,17 @@ def test_http_reusable_link_context_csrf_terminal_and_no_store(client):
     assert first.json()["session_id"] == second.json()["session_id"]
     assert first.json()["expires_at"] == second.json()["expires_at"]
     session = first.json()["session_token"]; csrf = first.json()["csrf_token"]
+    denied_rotation = http.post("/api/v2/ofertas-laborales/acceso/csrf", headers={
+        "x-labor-session": session, "origin": "https://attacker.example",
+    })
+    assert denied_rotation.status_code == 403
+    rotation = http.post("/api/v2/ofertas-laborales/acceso/csrf", headers={
+        "x-labor-session": session, "origin": "http://localhost:5173",
+        "referer": "http://localhost:5173/acceso-oferta-laboral",
+    })
+    assert rotation.status_code == 200
+    rotated_csrf = rotation.json()["csrf_token"]
+    assert rotated_csrf != csrf and "session_token" not in rotation.json()
     context = http.get("/api/v2/ofertas-laborales/acceso/contexto", headers={"x-labor-session": session})
     assert context.status_code == 200
     assert "telefono" not in context.text and "correo" not in context.text
@@ -90,10 +101,10 @@ def test_http_reusable_link_context_csrf_terminal_and_no_store(client):
     })
     assert missing.status_code == 403
     accepted = http.post("/api/v2/ofertas-laborales/acceso/decision", headers={
-        "x-labor-session": session, "x-labor-csrf": csrf,
+        "x-labor-session": session, "x-labor-csrf": rotated_csrf,
     }, json={"decision": "aceptada", "idempotency_key": "http-accept-valid-csrf"})
     assert accepted.status_code == 200 and accepted.json()["contact"]
-    for response in (issued, first, second, context, missing, accepted):
+    for response in (issued, first, second, rotation, context, missing, accepted):
         assert response.headers["cache-control"] == "no-store"
 
 
@@ -139,7 +150,7 @@ def test_http_donor_status_and_cancellation_are_owner_scoped(client):
     assert http.get(f"/api/v2/ofertas-laborales/{offer_id}/estado").status_code == 403
     actor_box["actor"] = ActorOrgContext("", "donor", "donor@example.test", uid="donor-http")
     status = http.get(f"/api/v2/ofertas-laborales/{offer_id}/estado")
-    assert status.status_code == 200 and set(status.json()) <= {"offer_id", "state", "created_at", "expires_at"}
+    assert status.status_code == 200 and set(status.json()) <= {"offer_id", "state", "created_at", "expires_at", "terminal_at", "public_reason"}
     cancelled = http.post(f"/api/v2/ofertas-laborales/{offer_id}/cancelar", json={
         "reason": "donor_voluntaria", "idempotency_key": "http-donor-cancel-001",
     })
